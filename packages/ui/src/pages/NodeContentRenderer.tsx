@@ -121,13 +121,15 @@ function CodigoCard({ codigo }: { codigo: NonNullable<NodoLesson['contenido']>['
 
 function SVGCard({ svg }: { svg: NonNullable<NodoLesson['contenido']>['svg'] }) {
   if (!svg) return null
-  // Sanitización básica — en producción usar DOMPurify
-  const safe = svg.svgString.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/on\w+="[^"]*"/gi, '')
+  const dataUrl = `data:image/svg+xml;base64,${btoa(svg.svgString)}`
   return (
-    <div
-      className="rounded-lg overflow-hidden border border-gray-700 bg-gray-900 flex items-center justify-center p-2 max-h-72"
-      dangerouslySetInnerHTML={{ __html: safe }}
-    />
+    <div className="rounded-lg overflow-hidden border border-gray-700 bg-gray-900 flex items-center justify-center p-2 max-h-72">
+      <img
+        src={dataUrl}
+        alt="SVG Diagram"
+        className="w-full h-full object-contain"
+      />
+    </div>
   )
 }
 
@@ -193,7 +195,6 @@ function AnimatedCard({ explicacion }: { explicacion: NonNullable<NodoLesson['co
 
 function ImageCard({ imagen }: { imagen: NonNullable<NodoLesson['contenido']>['imagen'] }) {
   if (!imagen) return null
-  const svgSafe = imagen.svg_fallback?.replace(/<script[\s\S]*?<\/script>/gi, '') ?? ''
   return (
     <div className="space-y-2">
       {imagen.url ? (
@@ -202,11 +203,14 @@ function ImageCard({ imagen }: { imagen: NonNullable<NodoLesson['contenido']>['i
           alt={imagen.alt_text}
           className="rounded-lg w-full object-contain max-h-60 border border-gray-700"
         />
-      ) : svgSafe ? (
-        <div
-          className="rounded-lg overflow-hidden border border-gray-700 flex items-center justify-center"
-          dangerouslySetInnerHTML={{ __html: svgSafe }}
-        />
+      ) : imagen.svg_fallback ? (
+        <div className="rounded-lg overflow-hidden border border-gray-700 flex items-center justify-center">
+          <img
+            src={`data:image/svg+xml;base64,${btoa(imagen.svg_fallback)}`}
+            alt={imagen.alt_text}
+            className="w-full h-full object-contain"
+          />
+        </div>
       ) : (
         <div className="rounded-lg bg-gray-800 border border-gray-700 h-40 flex items-center justify-center text-gray-500 text-sm">
           {imagen.alt_text}

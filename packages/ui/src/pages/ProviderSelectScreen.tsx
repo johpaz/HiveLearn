@@ -142,8 +142,8 @@ export function ProviderSelectScreen() {
 
           {/* Provider Selection */}
           <div>
-            <label className="block text-xs text-gray-400 mb-2">Proveedor de IA</label>
-            <div className="grid grid-cols-1 gap-2 max-h-40 sm:max-h-48 overflow-y-auto">
+            <label htmlFor="provider-ia-select" className="block text-xs text-gray-400 mb-2">Proveedor de IA</label>
+            <div id="provider-ia-select" className="grid grid-cols-1 gap-2 max-h-40 sm:max-h-48 overflow-y-auto">
               {providers.map(provider => (
                 <button
                   key={provider.id}
@@ -166,13 +166,13 @@ export function ProviderSelectScreen() {
           {/* Model Selection */}
           {selectedProviderId && (
             <div>
-              <label className="block text-xs text-gray-400 mb-2">Modelo</label>
+              <label htmlFor="model-selector" className="block text-xs text-gray-400 mb-2">Modelo</label>
               {availableModels.length === 0 ? (
                 <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 text-xs sm:text-sm text-gray-400">
                   No hay modelos disponibles para este proveedor
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 sm:max-h-48 overflow-y-auto">
+                <div id="model-selector" className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 sm:max-h-48 overflow-y-auto">
                   {availableModels.map(model => (
                     <button
                       key={model.id}

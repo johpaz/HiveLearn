@@ -20,7 +20,7 @@ export function GamificationHUD({ tema }: { tema: string }) {
         <div className="flex items-center gap-0.5">
           {Array.from({ length: 3 }).map((_, i) => (
             <span
-              key={i}
+              key={`life-${i}`}
               className={`text-lg transition-all duration-300 ${i < vidas ? 'opacity-100' : 'opacity-20 grayscale'}`}
             >
               ❤️

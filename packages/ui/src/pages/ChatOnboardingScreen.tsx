@@ -384,7 +384,7 @@ export function ChatOnboardingScreen() {
           )}
 
           {messages.map((msg, i) => (
-            <div key={i} className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'justify-start'}`}>
+            <div key={`${msg.role}-${i}`} className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'justify-start'}`}>
               {msg.role === 'agent' && (
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 bg-gradient-to-br shadow-sm ${theme.avatarBg}`}>
                   🐝
@@ -410,7 +410,7 @@ export function ChatOnboardingScreen() {
               <div className="bg-background rounded-2xl rounded-tl-none border border-border px-4 py-3 shadow-sm">
                 <span className="flex gap-1.5 items-center h-5">
                   {[0, 150, 300].map((delay, i) => (
-                    <span key={i} className={`w-1.5 h-1.5 ${theme.dotColor} rounded-full animate-bounce`} style={{ animationDelay: `${delay}ms` }} />
+                    <span key={`delay-${delay}`} className={`w-1.5 h-1.5 ${theme.dotColor} rounded-full animate-bounce`} style={{ animationDelay: `${delay}ms` }} />
                   ))}
                 </span>
               </div>
@@ -496,7 +496,7 @@ export function ChatOnboardingScreen() {
             <div className="mt-6 bg-hive-purple/5 border border-hive-purple/20 rounded-2xl px-6 py-6 animate-pulse shadow-sm">
               <div className="flex justify-center gap-1.5 mb-4">
                 {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="w-1 h-8 bg-hive-purple/40 rounded-full" />
+                  <div key={`bar-${i}`} className="w-1 h-8 bg-hive-purple/40 rounded-full" />
                 ))}
               </div>
               <p className="text-[10px] text-hive-purple font-black uppercase tracking-[0.2em] text-center">Enjambre Hive Activado</p>

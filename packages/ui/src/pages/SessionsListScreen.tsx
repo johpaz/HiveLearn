@@ -86,8 +86,8 @@ function ModelConfigPopover({ onClose }: { onClose: () => void }) {
           <>
             {/* Provider */}
             <div>
-              <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-2">Proveedor</label>
-              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+              <label htmlFor="provider-select" className="block text-[10px] text-gray-500 uppercase tracking-widest mb-2">Proveedor</label>
+              <div id="provider-select" className="space-y-1.5 max-h-32 overflow-y-auto">
                 {providers.map(p => (
                   <button
                     key={p.id}
@@ -106,11 +106,11 @@ function ModelConfigPopover({ onClose }: { onClose: () => void }) {
             {/* Model */}
             {localProvider && (
               <div>
-                <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-2">Modelo</label>
+                <label htmlFor="model-select" className="block text-[10px] text-gray-500 uppercase tracking-widest mb-2">Modelo</label>
                 {availableModels.length === 0 ? (
                   <p className="text-xs text-gray-600 px-1">No hay modelos activos para este proveedor</p>
                 ) : (
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  <div id="model-select" className="space-y-1.5 max-h-40 overflow-y-auto">
                     {availableModels.map(m => (
                       <button
                         key={m.id}

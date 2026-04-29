@@ -417,7 +417,7 @@ export function HiveLearnSessionsPage() {
           {/* Content */}
           {isLoading ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
+              {[...Array(6)].map((_, i) => <SkeletonCard key={`skeleton-${i}`} />)}
             </div>
           ) : filteredSessions.length === 0 && sessions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center border border-border rounded-3xl bg-secondary/20 shadow-sm relative overflow-hidden">

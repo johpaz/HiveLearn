@@ -618,7 +618,7 @@ export function LoadingScreen() {
         <div className="absolute inset-0">
           {[...Array(50)].map((_, i) => (
             <div
-              key={i}
+              key={`star-${i}`}
               className="absolute rounded-full animate-pulse"
               style={{
                 width: `${1 + (i % 3) * 0.8}px`,

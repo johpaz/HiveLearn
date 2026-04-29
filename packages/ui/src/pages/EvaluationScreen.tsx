@@ -68,7 +68,7 @@ export function EvaluationScreen() {
             <div className="space-y-3">
               {pregunta.opciones.map((op, i) => (
                 <button
-                  key={i}
+                  key={op}
                   onClick={() => handleResponder(i)}
                   className="w-full text-left rounded-xl border border-border bg-secondary/30 px-5 py-4 text-sm text-foreground font-medium hover:border-hive-amber hover:bg-hive-amber/5 hover:translate-x-1 transition-all duration-300 flex items-center group"
                 >

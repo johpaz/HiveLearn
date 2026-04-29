@@ -152,8 +152,8 @@ export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProp
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, index) => (
-              <Card key={index} className="group border-border bg-card/50 backdrop-blur-sm hover:border-hive-amber/30 hover:shadow-honey transition-all duration-300">
+            {features.map((feature) => (
+              <Card key={feature.title} className="group border-border bg-card/50 backdrop-blur-sm hover:border-hive-amber/30 hover:shadow-honey transition-all duration-300">
 
                 <CardContent>
                   <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{feature.icon}</div>
@@ -184,8 +184,8 @@ export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProp
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            {steps.map((step, index) => (
-              <div key={index} className="relative group">
+            {steps.map((step) => (
+              <div key={step.number} className="relative group">
                 <div className="text-6xl font-bold text-hive-amber/10 mb-4 group-hover:text-hive-amber/20 transition-colors">
                   {step.number}
                 </div>

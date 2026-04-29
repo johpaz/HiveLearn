@@ -159,8 +159,8 @@ export function HowToUsePage({ onBack, onStart }: HowToUsePageProps) {
                     { icon: '📝', name: 'Eval', desc: 'Examen final' },
                     { icon: '🧠', name: 'Feedback', desc: 'Mejora continua' },
                     { icon: '🐝', name: 'Coord', desc: 'Orquestador' },
-                  ].map((agent, i) => (
-                    <div key={i} className="flex items-center gap-3 p-4 rounded-xl bg-secondary/10 border border-border hover:border-hive-amber/30 transition-all group">
+                  ].map((agent) => (
+                    <div key={agent.name} className="flex items-center gap-3 p-4 rounded-xl bg-secondary/10 border border-border hover:border-hive-amber/30 transition-all group">
                       <span className="text-2xl grayscale group-hover:grayscale-0 transition-all">{agent.icon}</span>
                       <div className="min-w-0">
                         <div className="font-black text-foreground text-[10px] uppercase tracking-widest truncate">{agent.name}</div>
@@ -256,8 +256,8 @@ export function HowToUsePage({ onBack, onStart }: HowToUsePageProps) {
                   </div>
                 ),
               },
-            ].map((section, i) => (
-              <Card key={i} className="border-border shadow-honey bg-background/80 backdrop-blur-xl group hover:shadow-lg transition-all">
+            ].map((section) => (
+              <Card key={section.step} className="border-border shadow-honey bg-background/80 backdrop-blur-xl group hover:shadow-lg transition-all">
                 <CardContent className="pt-8">
                   <div className="flex items-start gap-8">
                     <div className="text-6xl font-black text-hive-amber/10 group-hover:text-hive-amber/20 transition-colors select-none">
@@ -286,8 +286,8 @@ export function HowToUsePage({ onBack, onStart }: HowToUsePageProps) {
 
         {activeSection === 'faq' && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {faqs.map((faq, i) => (
-              <Card key={i} className="border-border shadow-sm hover:shadow-honey transition-all bg-background/80 backdrop-blur-xl">
+            {faqs.map((faq) => (
+              <Card key={faq.question} className="border-border shadow-sm hover:shadow-honey transition-all bg-background/80 backdrop-blur-xl">
                 <CardContent className="pt-6">
                   <h3 className="text-lg font-black text-foreground mb-3 flex items-center gap-3">
                     <span className="text-hive-amber">❓</span>

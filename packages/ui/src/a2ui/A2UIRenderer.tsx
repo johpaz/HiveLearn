@@ -290,10 +290,10 @@ function TextComp({ props, resolveValue, style }: WithProps) {
   function parseMarkdown(t: string): React.ReactNode {
     const parts = t.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\n)/g)
     return parts.map((p, i) => {
-      if (p.startsWith('**') && p.endsWith('**')) return <strong key={i} className="font-bold text-foreground">{p.slice(2, -2)}</strong>
-      if (p.startsWith('*') && p.endsWith('*'))   return <em key={i} className="italic text-foreground/90">{p.slice(1, -1)}</em>
-      if (p.startsWith('`') && p.endsWith('`'))   return <code key={i} className="font-mono text-hive-amber bg-muted px-1 rounded text-[0.9em]">{p.slice(1, -1)}</code>
-      if (p === '\n') return <br key={i} />
+      if (p.startsWith('**') && p.endsWith('**')) return <strong key={`bold-${i}`} className="font-bold text-foreground">{p.slice(2, -2)}</strong>
+      if (p.startsWith('*') && p.endsWith('*'))   return <em key={`italic-${i}`} className="italic text-foreground/90">{p.slice(1, -1)}</em>
+      if (p.startsWith('`') && p.endsWith('`'))   return <code key={`code-${i}`} className="font-mono text-hive-amber bg-muted px-1 rounded text-[0.9em]">{p.slice(1, -1)}</code>
+      if (p === '\n') return <br key={`break-${i}`} />
       return p
     })
 
@@ -397,7 +397,7 @@ function MultipleChoiceComp({ id, props, resolveValue, selections, setSelections
 
         return (
           <button
-            key={i}
+            key={val}
             onClick={() => toggle(val)}
             disabled={hasFeedback || isSubmitting}
             className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-all flex items-center gap-2.5

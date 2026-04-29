@@ -191,11 +191,12 @@ export function HiveLearnConfigPage() {
 
               {/* Provider Selection */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground opacity-60">
+                <label htmlFor="provider-selector" className="block text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground opacity-60">
                   Proveedor
                 </label>
 
-                <ProviderSelector
+                <div id="provider-selector">
+                  <ProviderSelector
                   providers={providers}
                   selectedId={selectedProviderId}
                   onSelect={(id) => {
@@ -203,21 +204,24 @@ export function HiveLearnConfigPage() {
                     setSelectedModelId(null);
                     setSaveStatus("idle");
                   }}
-                />
+                  />
+                </div>
               </div>
 
               {/* Model Selection */}
               {selectedProviderId && (
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground opacity-60">
+                  <label htmlFor="model-selector-config" className="block text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground opacity-60">
                     Modelo
                   </label>
 
-                  <ModelSelector
+                  <div id="model-selector-config">
+                    <ModelSelector
                     models={availableModels}
                     selectedId={selectedModelId}
                     onSelect={(id) => { setSelectedModelId(id); setSaveStatus("idle"); }}
-                  />
+                    />
+                  </div>
                 </div>
               )}
 
