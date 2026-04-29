@@ -61,22 +61,26 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const nivelProgress = (stats.xpTotal % 500) / 500 * 100
 
   return (
-    <div className="min-h-screen bg-background hivelearn-gradient-bg hive-hex-pattern pt-20 pb-12 px-4">
+    <div className="min-h-screen hivelearn-gradient-bg hive-hex-pattern pt-20 pb-12 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-[10px] font-black tracking-[0.3em] text-amber-500 uppercase">Panel de Control</span>
+            </div>
+            <h1 className="text-4xl font-black tracking-tighter text-foreground uppercase">
               Dashboard
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground font-light text-sm mt-1">
               Resumen de tu actividad y progreso
             </p>
           </div>
           <Button
             variant="default"
             onClick={() => onNavigate('sessions')}
-            className="bg-hive-amber text-primary-foreground hover:bg-hive-amber/90 shadow-honey"
+            className="font-bold shadow-amber-glow active:scale-95"
+            style={{ background: 'linear-gradient(135deg, #f59e0b, #ffc174)', color: '#2a1700' }}
           >
             🚀 Nueva Sesión
           </Button>
@@ -85,60 +89,52 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Total Sesiones</p>
-                  <p className="text-3xl font-bold text-foreground">{stats.totalSesiones}</p>
-                </div>
-                <div className="text-4xl">📚</div>
+          <div className="glass-card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Total Sesiones</p>
+                <p className="text-4xl font-black text-foreground">{stats.totalSesiones}</p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="text-4xl opacity-60">📚</div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Completadas</p>
-                  <p className="text-3xl font-bold text-hive-green">{stats.sesionesCompletadas}</p>
-                </div>
-                <div className="text-4xl">✅</div>
+          <div className="glass-card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Completadas</p>
+                <p className="text-4xl font-black text-hive-green">{stats.sesionesCompletadas}</p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="text-4xl opacity-60">✅</div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">XP Total</p>
-                  <p className="text-3xl font-bold text-hive-amber">{stats.xpTotal}</p>
-                </div>
-                <div className="text-4xl">🏆</div>
+          <div className="glass-card p-6 glow-amber-active">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">XP Total</p>
+                <p className="text-4xl font-black text-amber-400">{stats.xpTotal}</p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="text-4xl opacity-60">🏆</div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Nivel</p>
-                  <p className="text-xl font-bold text-foreground">{stats.nivelActual}</p>
-                  <div className="mt-2 h-2 bg-secondary rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-hive-amber"
-                      style={{ width: `${nivelProgress}%` }}
-                    />
-                  </div>
-
+          <div className="glass-card p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Nivel</p>
+                <p className="text-xl font-black text-foreground">{stats.nivelActual}</p>
+                <div className="mt-3 h-1.5 bg-white/5 rounded-full overflow-hidden w-32">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${nivelProgress}%`, background: 'linear-gradient(90deg, #f59e0b, #ffc174)' }}
+                  />
                 </div>
-                <div className="text-4xl">⭐</div>
+
               </div>
-            </CardContent>
-          </Card>
+              <div className="text-4xl opacity-60">⭐</div>
+            </div>
+          </div>
         </div>
 
         {/* Recent Sessions */}

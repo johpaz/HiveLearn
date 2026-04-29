@@ -136,14 +136,14 @@ function WorkerGraphNode({
       role="button"
       tabIndex={0}
       className={`relative group w-full rounded-xl p-5 flex flex-col gap-4 transition-all duration-300 cursor-pointer
-        bg-background border shadow-sm
+        bg-black/40 backdrop-blur-md
         ${isThinking
-          ? `${colors.border} shadow-honey`
+          ? `border ${colors.border} ${colors.glow}`
           : isCompleted
-          ? "border-hive-green/30"
+          ? "border border-hive-green/30"
           : isFailed
-          ? "border-hive-red/30"
-          : "border-border hover:border-hive-amber/30 hover:shadow-honey"}
+          ? "border border-hive-red/30"
+          : "border border-white/[0.08] hover:border-amber-500/30 hover:translate-y-[-2px]"}
         ${isDisabled ? "opacity-50 grayscale" : ""}
       `}
       onClick={() => setConfigOpen(true)}
@@ -262,15 +262,13 @@ function CoordinatorCard({
   const [configOpen, setConfigOpen] = useState(false);
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-hive-purple/30 bg-gradient-to-br from-hive-purple/5 via-transparent to-transparent backdrop-blur-sm p-6 lg:p-8 shadow-honey">
-      {/* Decorative accents */}
-      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-hive-purple/40 to-hive-purple/60" />
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-hive-purple/60 to-transparent" />
-      <div className="absolute bottom-0 right-0 left-0 h-px bg-gradient-to-r from-transparent via-hive-purple/20 to-transparent" />
-
-
+    <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-black/40 backdrop-blur-md p-6 lg:p-8">
+      {/* Top amber gradient accent line — Stitch signature */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600" />
+      {/* Left amber accent bar */}
+      <div className="absolute top-0 left-0 w-px h-full bg-gradient-to-b from-amber-500/60 to-amber-500/10" />
       {/* Ambient glow */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-hive-purple/5 rounded-full blur-[80px] pointer-events-none" />
+      <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/5 rounded-full blur-[80px] pointer-events-none" />
 
 
       <div className="relative z-10 flex flex-col lg:flex-row lg:items-start gap-6">
@@ -453,32 +451,36 @@ export function HiveLearnSwarmPage() {
   const completedCount = Object.values(agentStates).filter(s => s.status === "completed").length;
 
   return (
-    <div className="relative z-10 space-y-6">
+    <>
+      {/* ── Ambient Glow Blobs (Obsidian Observatory) ── */}
+      <div className="ambient-blob-amber w-[500px] h-[500px] top-0 left-0 -translate-x-1/2 -translate-y-1/3 -z-10" />
+      <div className="ambient-blob-blue w-[400px] h-[400px] top-0 right-0 translate-x-1/3 -translate-y-1/3 -z-10" />
+
+      <div className="relative z-10 space-y-6">
 
       {/* ── Header ─ */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-2 w-2 rounded-full bg-hive-purple animate-pulse shadow-sm" />
-            <span className="text-[10px] font-bold tracking-[0.2em] text-hive-purple uppercase">HIVELEARN · ENJAMBRE</span>
+            <span className="text-[10px] font-black tracking-[0.3em] text-amber-500 uppercase">Internal Protocol</span>
+            <div className="h-px flex-1 bg-gradient-to-r from-amber-500/30 to-transparent" />
           </div>
-          <h2 className="text-2xl lg:text-3xl font-black tracking-tight text-foreground">
-            Enjambre{" "}
-            <span className="text-hive-purple">
-              Educativo
-            </span>
+          <h2 className="text-4xl lg:text-6xl font-black tracking-tighter leading-none uppercase">
+            Enjambre
+            <span className="bg-gradient-to-r from-amber-400 to-amber-600 bg-clip-text text-transparent"> Educativo</span>
           </h2>
+          <p className="text-muted-foreground font-light text-sm mt-2">Enjambre de {dbAgents.length || 16} agentes educativos especializados</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           <LiveBadge isConnected={isConnected} />
           <button
-            className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 border border-border transition-all group shadow-sm"
+            className="p-2 rounded-xl glass-card hover:border-amber-500/30 transition-all group shadow-sm"
             onClick={fetchAgents}
             disabled={isLoading}
             title="Refrescar"
           >
-            <RefreshCw className={`h-4 w-4 text-hive-purple/70 transition-transform duration-500 group-hover:rotate-180 ${isLoading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 text-amber-400/70 transition-transform duration-500 group-hover:rotate-180 ${isLoading ? "animate-spin" : ""}`} />
           </button>
         </div>
 
@@ -495,17 +497,19 @@ export function HiveLearnSwarmPage() {
 
       {/* ── Workers ── */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/50">
-            15 agentes workers
-          </p>
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground/40">
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-hive-purple" />
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-widest">
+              15 Agentes Workers
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest">
+            <span className="flex items-center gap-1.5 text-amber-400">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
               {activeCount} activos
             </span>
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-hive-green" />
+            <span className="flex items-center gap-1.5 text-hive-green">
+              <span className="w-2 h-2 rounded-full bg-hive-green" />
               {completedCount} completados
             </span>
           </div>
@@ -527,16 +531,17 @@ export function HiveLearnSwarmPage() {
 
       {/* ── Empty state if no agents ── */}
       {dbAgents.length === 0 && !isLoading && (
-        <div className="flex flex-col items-center justify-center py-16 text-center border border-border rounded-3xl bg-secondary/20 shadow-sm relative overflow-hidden">
+        <div className="flex flex-col items-center justify-center py-16 text-center glass-card relative overflow-hidden">
           <div className="absolute inset-0 opacity-[0.02] hive-hex-pattern pointer-events-none" />
           <div className="text-5xl mb-4 relative z-10">🔍</div>
-          <h3 className="text-lg font-bold text-foreground mb-2 relative z-10">Sin agentes configurados</h3>
+          <h3 className="text-lg font-black tracking-tight text-foreground mb-2 relative z-10 uppercase">Sin agentes configurados</h3>
           <p className="text-muted-foreground mb-6 text-sm max-w-xs relative z-10">
             Configura un modelo para el coordinador para activar el enjambre.
           </p>
           <button
             onClick={() => setCoordinatorConfigOpen(true)}
-            className="px-5 py-2.5 bg-hive-purple hover:bg-hive-purple/90 text-primary-foreground font-bold rounded-xl text-sm transition-all flex items-center gap-2 shadow-sm relative z-10"
+            className="px-5 py-2.5 font-bold rounded-xl text-sm transition-all flex items-center gap-2 shadow-sm relative z-10 glow-amber"
+            style={{ background: 'linear-gradient(135deg, #f59e0b, #ffc174)', color: '#2a1700' }}
           >
             <Settings2 className="h-4 w-4" />
             Configurar coordinador
@@ -567,6 +572,7 @@ export function HiveLearnSwarmPage() {
         onOpenChange={setCoordinatorConfigOpen}
         onSuccess={handleConfigSuccess}
       />
-    </div>
+      </div>
+    </>
   );
 }

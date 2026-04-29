@@ -184,7 +184,7 @@ export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProp
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            {steps.map((step) => (
+            {steps.map((step, index) => (
               <div key={step.number} className="relative group">
                 <div className="text-6xl font-bold text-hive-amber/10 mb-4 group-hover:text-hive-amber/20 transition-colors">
                   {step.number}

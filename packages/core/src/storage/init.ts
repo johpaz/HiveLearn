@@ -6,6 +6,7 @@
 import type { Database } from 'bun:sqlite'
 import { HIVELEARN_SCHEMA_V1, HIVELEARN_SCHEMA_V2, HIVELEARN_SCHEMA_V3, HIVELEARN_SCHEMA_V4, HIVELEARN_SCHEMA_V5 } from './hivelearn-schema'
 import { registerHiveLearnAgents } from '../agent/registry'
+import { seedAllData } from './seed'
 
 /** Añade una columna a una tabla solo si no existe (compatible con cualquier versión de SQLite) */
 function ensureColumn(db: Database, table: string, column: string, definition: string): void {
@@ -16,11 +17,44 @@ function ensureColumn(db: Database, table: string, column: string, definition: s
 }
 
 export function initHiveLearnStorage(db: Database): void {
-  (db as any).exec(HIVELEARN_SCHEMA_V1)
+  // Schema principal (providers, models)
+  db.exec('PRAGMA foreign_keys = ON')
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS providers (
+      id              TEXT PRIMARY KEY,
+      name            TEXT NOT NULL UNIQUE,
+      api_key_encrypted TEXT,
+      api_key_iv      TEXT,
+      headers_encrypted TEXT,
+      headers_iv      TEXT,
+      base_url        TEXT,
+      category        TEXT NOT NULL DEFAULT 'llm',
+      num_ctx         INTEGER,
+      num_gpu         INTEGER DEFAULT -1,
+      enabled         INTEGER NOT NULL DEFAULT 1,
+      active          INTEGER NOT NULL DEFAULT 0,
+      created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS models (
+      id              TEXT PRIMARY KEY,
+      provider_id     TEXT REFERENCES providers(id) ON DELETE CASCADE,
+      name            TEXT NOT NULL,
+      model_type      TEXT NOT NULL DEFAULT 'llm',
+      context_window  INTEGER NOT NULL DEFAULT 20000,
+      capabilities    TEXT,
+      enabled         INTEGER NOT NULL DEFAULT 1,
+      active          INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+
+  // HiveLearn schema v1+
+  db.exec(HIVELEARN_SCHEMA_V1)
 
   // V2: CREATE TABLE y CREATE INDEX (sin ALTER TABLE)
   try {
-    (db as any).exec(HIVELEARN_SCHEMA_V2)
+    db.exec(HIVELEARN_SCHEMA_V2)
   } catch (e) {
     const msg = (e as Error).message ?? ''
     if (!msg.includes('duplicate column') && !msg.includes('already exists')) throw e
@@ -32,7 +66,7 @@ export function initHiveLearnStorage(db: Database): void {
 
   // V3: tabla hl_onboarding_messages + columnas de pausa/restauración de sesión
   try {
-    (db as any).exec(HIVELEARN_SCHEMA_V3)
+    db.exec(HIVELEARN_SCHEMA_V3)
   } catch (e) {
     const msg = (e as Error).message ?? ''
     if (!msg.includes('already exists')) throw e
@@ -44,7 +78,7 @@ export function initHiveLearnStorage(db: Database): void {
 
   // V4: tabla hl_lesson_interactions (entrega dirigida por coordinador)
   try {
-    (db as any).exec(HIVELEARN_SCHEMA_V4)
+    db.exec(HIVELEARN_SCHEMA_V4)
   } catch (e) {
     const msg = (e as Error).message ?? ''
     if (!msg.includes('already exists')) throw e
@@ -52,11 +86,12 @@ export function initHiveLearnStorage(db: Database): void {
 
   // V5: tabla hl_onboarding_progress (guardado incremental del onboarding)
   try {
-    (db as any).exec(HIVELEARN_SCHEMA_V5)
+    db.exec(HIVELEARN_SCHEMA_V5)
   } catch (e) {
     const msg = (e as Error).message ?? ''
     if (!msg.includes('already exists')) throw e
   }
 
   registerHiveLearnAgents(db)
+  seedAllData()
 }

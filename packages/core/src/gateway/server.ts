@@ -148,7 +148,63 @@ export function createServer(): Server {
       }
 
       // ── API Routes ─────────────────────────────────────────────────────
-      
+
+      // GET /api/providers
+      if (url.pathname === '/api/providers' && req.method === 'GET') {
+        try {
+          const db = getDb()
+          const providers = db.query(`
+            SELECT id, name, base_url, category, enabled, active, created_at
+            FROM providers
+            ORDER BY name
+          `).all()
+          return addCorsHeaders(
+            new Response(JSON.stringify({ providers }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[providers] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // GET /api/models
+      if (url.pathname === '/api/models' && req.method === 'GET') {
+        try {
+          const db = getDb()
+          const models = db.query(`
+            SELECT id, provider_id, name, model_type, context_window, capabilities, enabled, active
+            FROM models
+            ORDER BY name
+          `).all()
+          return addCorsHeaders(
+            new Response(JSON.stringify({ models }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[models] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
       // GET /api/hivelearn/config
       if (url.pathname === '/api/hivelearn/config' && req.method === 'GET') {
         try {

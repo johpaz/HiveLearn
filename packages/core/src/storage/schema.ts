@@ -38,10 +38,6 @@ export const SCHEMA = `
     enabled         INTEGER NOT NULL DEFAULT 1,
     active          INTEGER NOT NULL DEFAULT 0
   );
-
-
-  );
-  
 `;
 
 

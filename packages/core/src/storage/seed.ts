@@ -27,6 +27,7 @@ export const SEED_DATA: SeedData = {
     { id: "elevenlabs", name: "ElevenLabs", baseUrl: "https://api.elevenlabs.io/v1" },
     { id: "qwen", name: "Qwen (Alibaba)", baseUrl: "https://dashscope.aliyuncs.com/api/v1" },
     { id: "nvidia", name: "NVIDIA NIM", baseUrl: "https://integrate.api.nvidia.com/v1" },
+    { id: "local-tts", name: "TTS Local (Piper)", baseUrl: "http://localhost:5500", category: "tts" },
   ],
 
   models: [
@@ -146,6 +147,10 @@ export const SEED_DATA: SeedData = {
     { id: "qwen3-tts-flash", providerId: "qwen", name: "Qwen TTS Flash", modelType: "tts", contextWindow: 0, capabilities: JSON.stringify(["tts", "speech"]) },
     { id: "qwen-tts", providerId: "qwen", name: "Qwen TTS", modelType: "tts", contextWindow: 0, capabilities: JSON.stringify(["tts", "speech"]) },
 
+    // ── TTS Local (Piper) — Voces offline en español ──
+    { id: "sorah", providerId: "local-tts", name: "Sorah (ES)", modelType: "tts", contextWindow: 0, capabilities: JSON.stringify(["tts", "speech", "offline", "local", "spanish"]) },
+    { id: "es_MX-cortana", providerId: "local-tts", name: "Cortana (ES-MX)", modelType: "tts", contextWindow: 0, capabilities: JSON.stringify(["tts", "speech", "offline", "local", "spanish", "mexican"]) },
+
     // ── NVIDIA NIM (fuente: build.nvidia.com — modelos con endpoint gratuito) ──
     { id: "meta/llama-3.3-70b-instruct", providerId: "nvidia", name: "Llama 3.3 70B (NVIDIA)", modelType: "llm", contextWindow: 131072, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming"]) },
     { id: "meta/llama-4-maverick-17b-128e-instruct", providerId: "nvidia", name: "Llama 4 Maverick (NVIDIA)", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
@@ -201,14 +206,21 @@ export function seedAllData(): void {
 
     // 2️⃣ Models
     let modelCount = 0;
+    let insertCount = 0;
+    const skippedModels: string[] = [];
     for (const model of SEED_DATA.models) {
-      db.query(`
+      const result = db.query(`
         INSERT OR IGNORE INTO models (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
         VALUES (?, ?, ?, ?, ?, ?, 1, 0)
       `).run(model.id, model.providerId, model.name, model.modelType, model.contextWindow || null, model.capabilities || null)
       modelCount++;
+      if (result.changes > 0) insertCount++;
+      else skippedModels.push(model.id);
     }
-    log.info(`[seed] ✅ ${modelCount} models procesados`);
+    if (skippedModels.length > 0) {
+      log.warn(`[seed] ⚠️  ${skippedModels.length} models saltados: ${skippedModels.slice(0, 20).join(', ')}${skippedModels.length > 20 ? '...' : ''}`);
+    }
+    log.info(`[seed] ✅ ${modelCount} models procesados, ${insertCount} insertados`);
 
 
   } catch (err) {

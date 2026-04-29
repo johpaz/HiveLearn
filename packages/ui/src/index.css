@@ -122,120 +122,90 @@
 
 @layer base {
   :root {
-    /* ── Hive Academy Light Palette (Golden Library) ── */
-    --background: 45 40% 99%;
-    /* #FFFEFA - Warm Cream */
-    --foreground: 215 28% 17%;
-    /* #1F2937 - Deep Slate */
+    /* ══════════════════════════════════════════
+       OBSIDIAN DARK — Stitch Design System
+       Source: hivelearn_swarm_dashboard_1 + hivelearn_dashboard
+       ══════════════════════════════════════════ */
 
-    --card: 0 0% 100%;
-    /* Pure White for cards */
-    --card-foreground: 215 28% 17%;
+    /* ── Base Surface (The Void) ── */
+    --background: 220 22% 8%;          /* #101319 */
+    --foreground: 234 20% 90%;         /* #e1e2eb — on-surface */
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 215 28% 17%;
+    /* ── Cards & Containers ── */
+    --card: 220 15% 12%;               /* #191c22 — surface-container-low */
+    --card-foreground: 234 20% 90%;
 
-    --primary: 38 92% 50%;
-    /* #F59E0B - Honey Amber */
-    --primary-foreground: 0 0% 100%;
+    --popover: 220 13% 13%;            /* #1d2026 — surface-container */
+    --popover-foreground: 234 20% 90%;
 
-    --secondary: 45 30% 96%;
-    /* Light honey wash */
-    --secondary-foreground: 38 92% 20%;
+    /* ── Primary: Amber/Gold #ffc174 ── */
+    --primary: 33 100% 73%;            /* #ffc174 */
+    --primary-foreground: 24 100% 14%; /* #472a00 — on-primary */
 
-    --muted: 45 20% 95%;
-    --muted-foreground: 215 16% 47%;
+    /* ── Secondary: surface-container ── */
+    --secondary: 220 13% 13%;          /* #1d2026 */
+    --secondary-foreground: 234 20% 90%;
 
-    --accent: 38 92% 96%;
-    /* Very light amber glow */
-    --accent-foreground: 38 92% 30%;
+    /* ── Muted ── */
+    --muted: 220 10% 17%;              /* #272a30 — surface-container-high */
+    --muted-foreground: 30 25% 72%;    /* #d8c3ad — on-surface-variant */
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    /* ── Accent: primary-container #f59e0b ── */
+    --accent: 38 92% 50%;              /* #f59e0b */
+    --accent-foreground: 24 100% 14%;
 
-    --border: 38 20% 92%;
-    /* Soft honey border */
-    --input: 38 20% 92%;
-    --ring: 38 92% 50%;
+    /* ── Destructive / Error ── */
+    --destructive: 0 69% 82%;          /* #ffb4ab — error */
+    --destructive-foreground: 0 92% 22%; /* #690005 — on-error */
 
-    --radius: 0.625rem;
-    /* Minimalist ROUND_EIGHT */
+    /* ── Border / Input ── */
+    --border: 220 8% 22%;              /* #32353b — surface-container-highest */
+    --input: 220 15% 12%;              /* #191c22 */
+    --ring: 33 100% 73%;               /* primary — amber glow on focus */
 
-    /* ── Custom Hive tokens ── */
-    --hive-glow: 38 92% 50%;
-    --hive-surface: 45 30% 98%;
-    --hive-surface-foreground: 215 28% 17%;
-    --hive-connected: 142 71% 45%;
-    --hive-disconnected: 0 72% 51%;
-    --hive-thinking: 38 92% 50%;
+    /* ── Radius: rounded-xl aesthetic ── */
+    --radius: 0.75rem;
 
-    /* ── Semantic accent colors ── */
-    --hive-blue: 217 91% 60%;
-    --hive-blue-dark: 221 83% 53%;
-    --hive-purple: 271 81% 66%;
-    --hive-purple-dark: 263 70% 50%;
-    --hive-green: 142 71% 45%;
-    --hive-emerald: 160 84% 39%;
-    --hive-red: 0 84% 60%;
-    --hive-red-dark: 0 72% 41%;
-    --hive-cyan: 187 95% 42%;
-    --hive-teal: 173 80% 40%;
-    --hive-amber: 38 92% 50%;
-    --hive-orange: 25 80% 55%;
+    /* ── Sidebar ── */
+    --sidebar-background: 220 22% 7%;  /* #0b0e14 — surface-container-lowest */
+    --sidebar-foreground: 234 20% 90%;
+    --sidebar-primary: 33 100% 73%;
+    --sidebar-primary-foreground: 24 100% 14%;
+    --sidebar-accent: 220 10% 17%;
+    --sidebar-accent-foreground: 234 20% 90%;
+    --sidebar-border: 220 8% 22%;
+    --sidebar-ring: 33 100% 73%;
 
-
-    /* Note: .dark class removed to maintain unique theme as requested */
-
-
-    /* ── Custom Hive surface tokens ── */
-    --hive-surface: 220 15% 13%;
-    --hive-surface-foreground: 40 10% 90%;
-    --hive-connected: 142 71% 45%;
+    /* ── Hive Core Tokens ── */
+    --hive-glow: 38 92% 50%;           /* #f59e0b amber glow */
+    --hive-surface: 220 22% 8%;        /* #101319 */
+    --hive-surface-foreground: 234 20% 90%;
+    --hive-connected: 142 74% 61%;     /* #51e77b — tertiary green */
     --hive-disconnected: 0 72% 41%;
     --hive-thinking: 38 92% 50%;
-    --hive-glow: 38 92% 50%;
 
-    /* ── Semantic accent colors (dark mode) ── */
-    --hive-blue: 217 91% 60%;
-    /* #3b82f6 */
-    --hive-blue-dark: 221 83% 53%;
-    /* #2563eb */
+    /* ── Semantic Accent Colors ── */
+    --hive-blue: 222 100% 84%;         /* #adc6ff — secondary */
+    --hive-blue-dark: 218 95% 44%;     /* #0566d9 — secondary-container */
     --hive-purple: 271 81% 66%;
-    /* #a855f7 */
     --hive-purple-dark: 263 70% 50%;
-    /* #9333ea */
-    --hive-green: 142 71% 45%;
-    /* #22c55e */
-    --hive-emerald: 160 84% 39%;
-    /* #10b981 */
-    --hive-red: 0 84% 60%;
-    /* #ef4444 */
+    --hive-green: 142 74% 61%;         /* #51e77b — tertiary */
+    --hive-emerald: 142 65% 55%;       /* #4ae176 */
+    --hive-red: 0 69% 82%;             /* #ffb4ab — error */
     --hive-red-dark: 0 72% 41%;
-    /* #b91c1c */
     --hive-cyan: 187 95% 42%;
-    /* #06b6d4 */
     --hive-teal: 173 80% 40%;
-    /* #14b8a6 */
-    --hive-amber: 38 92% 50%;
-    /* #f59e0b */
+    --hive-amber: 38 92% 50%;          /* #f59e0b */
     --hive-orange: 25 80% 55%;
-    /* #e07a2f */
 
-    /* ── Surface & glass tokens ── */
+    /* ── Glass / Border Tokens ── */
     --hive-glass: 0 0% 100% / 0.03;
-    /* default glass transparency */
     --hive-glass-strong: 0 0% 100% / 0.05;
-    /* more opaque glass for inputs */
     --hive-border-subtle: 0 0% 100% / 0.05;
-    /* subtle dividers */
     --hive-border-base: 0 0% 100% / 0.10;
-    /* standard borders */
     --hive-border-strong: 0 0% 100% / 0.20;
-    /* active/focus borders */
     --hive-text-muted: 40 10% 90% / 0.40;
-    /* muted text */
     --hive-text-placeholder: 0 0% 100% / 0.20;
-    /* placeholder text */
   }
 }
 
@@ -255,6 +225,10 @@
 
   body {
     @apply bg-background text-foreground antialiased selection:bg-hive-amber/30 selection:text-hive-amber;
+    /* Obsidian dot-grid texture from Stitch designs */
+    background-color: hsl(220 22% 8%);
+    background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0);
+    background-size: 24px 24px;
   }
 
   /* Custom scrollbar */
@@ -377,7 +351,11 @@
 
   /* ─── Cards ─── */
   .hive-card {
-    @apply relative overflow-hidden rounded-xl border border-white/10 bg-black/20 backdrop-blur-md transition-all duration-300;
+    /* Obsidian glassmorphism card — "The No-Line Rule" compliant */
+    background: rgba(0, 0, 0, 0.40);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    @apply relative overflow-hidden rounded-xl border border-white/[0.08] transition-all duration-300;
   }
 
   .hive-card--active {
@@ -578,21 +556,25 @@
   }
 
   .hive-btn--primary {
-    @apply px-6 py-2.5 text-sm font-bold text-white shadow-btn-primary hover:shadow-btn-primary-hover;
-    background: hsl(var(--hive-blue-dark));
+    @apply px-6 py-2.5 text-sm font-bold shadow-btn-primary hover:shadow-btn-primary-hover hover:brightness-110 active:scale-95;
+    background: linear-gradient(135deg, hsl(var(--hive-amber)), hsl(var(--primary)));
+    color: hsl(24 100% 14%);
   }
 
   .hive-btn--primary:hover {
-    background: hsl(var(--hive-blue));
+    box-shadow: 0 0 24px hsl(var(--hive-amber) / 0.4);
   }
 
   .hive-btn--form-submit {
-    @apply flex-[2] text-white font-bold transition-all h-12 shadow-btn-submit active:scale-95;
-    background: hsl(var(--hive-blue-dark));
+    @apply flex-[2] font-bold transition-all h-12 active:scale-95;
+    background: linear-gradient(135deg, hsl(var(--hive-amber)), hsl(var(--primary)));
+    color: hsl(24 100% 14%);
+    box-shadow: 0 0 20px hsl(var(--hive-amber) / 0.3);
   }
 
   .hive-btn--form-submit:hover {
-    background: hsl(var(--hive-blue));
+    box-shadow: 0 0 32px hsl(var(--hive-amber) / 0.5);
+    filter: brightness(1.08);
   }
 
   .hive-btn--form-cancel {
@@ -1022,10 +1004,54 @@
   @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 relative z-10;
 }
 
+/* Obsidian ambient gradient overlays (Aether Swarm design) */
 .hivelearn-gradient-bg {
   background:
-    radial-gradient(ellipse at top left, hsla(38, 92%, 50%, 0.08), transparent 60%),
-    radial-gradient(ellipse at bottom right, hsla(38, 92%, 50%, 0.05), transparent 60%);
+    radial-gradient(ellipse at top left, hsla(33, 100%, 73%, 0.08), transparent 55%),
+    radial-gradient(ellipse at bottom right, hsla(218, 95%, 44%, 0.06), transparent 55%);
+}
+
+/* ─── Glass Card utility (Stitch: "Glass & Gradient" rule) ─── */
+.glass-card {
+  background: rgba(0, 0, 0, 0.40);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  @apply rounded-xl transition-all duration-300;
+}
+
+.glass-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+/* ─── Amber Glow (active swarm agent state) ─── */
+.glow-amber {
+  box-shadow: 0 0 40px -10px rgba(245, 158, 11, 0.35);
+}
+
+.glow-amber-active {
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.2);
+}
+
+/* ─── Dashed connector line ─── */
+.dashed-line {
+  background-image: linear-gradient(to right, rgba(255,255,255,0.12) 50%, transparent 50%);
+  background-size: 8px 1px;
+  background-repeat: repeat-x;
+}
+
+/* ─── Ambient glow blobs (Obsidian Observatory) ─── */
+.ambient-blob-amber {
+  @apply fixed rounded-full pointer-events-none;
+  background: rgba(245, 158, 11, 0.10);
+  filter: blur(120px);
+}
+
+.ambient-blob-blue {
+  @apply fixed rounded-full pointer-events-none;
+  background: rgba(5, 102, 217, 0.08);
+  filter: blur(100px);
 }
 
 .hive-hex-pattern {
