@@ -182,11 +182,9 @@ export function seedAllData(): void {
   const db = getDb()
 
   log.info("[seed] 🌱 Iniciando seed de datos predeterminados...")
-
-
+  log.info(`[seed] SEED_DATA.models.length = ${SEED_DATA.models.length}`)
 
   try {
-
     // 1️⃣ Providers
     let providerCount = 0;
     for (const provider of SEED_DATA.providers) {
@@ -206,21 +204,29 @@ export function seedAllData(): void {
 
     // 2️⃣ Models
     let modelCount = 0;
-    let insertCount = 0;
+    const insertedModels: string[] = [];
     const skippedModels: string[] = [];
     for (const model of SEED_DATA.models) {
-      const result = db.query(`
-        INSERT OR IGNORE INTO models (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
-        VALUES (?, ?, ?, ?, ?, ?, 1, 0)
-      `).run(model.id, model.providerId, model.name, model.modelType, model.contextWindow || null, model.capabilities || null)
-      modelCount++;
-      if (result.changes > 0) insertCount++;
-      else skippedModels.push(model.id);
+      try {
+        db.query(`
+          INSERT OR IGNORE INTO models (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
+          VALUES (?, ?, ?, ?, ?, ?, 1, 0)
+        `).run(model.id, model.providerId, model.name, model.modelType, model.contextWindow ?? 20000, model.capabilities ?? null)
+        modelCount++;
+        // Verificar si el modelo existe después del insert
+        const exists = db.query('SELECT 1 FROM models WHERE id = ?').get(model.id);
+        if (exists) insertedModels.push(model.id);
+        else skippedModels.push(model.id);
+      } catch (err) {
+        log.error(`[seed] ❌ Error insertando modelo ${model.id}: ${(err as Error).message}`);
+        skippedModels.push(model.id);
+        modelCount++;
+      }
     }
     if (skippedModels.length > 0) {
-      log.warn(`[seed] ⚠️  ${skippedModels.length} models saltados: ${skippedModels.slice(0, 20).join(', ')}${skippedModels.length > 20 ? '...' : ''}`);
+      log.warn(`[seed] ⚠️  ${skippedModels.length} models saltados: ${skippedModels.join(', ')}`);
     }
-    log.info(`[seed] ✅ ${modelCount} models procesados, ${insertCount} insertados`);
+    log.info(`[seed] ✅ ${modelCount} models procesados, ${insertedModels.length} insertados`);
 
 
   } catch (err) {

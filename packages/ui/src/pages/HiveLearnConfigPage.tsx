@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { apiClient } from "@/lib/api";
-import { Settings2, Brain, GitBranch, Zap, Database, Bot } from "lucide-react";
+import { Settings2, Brain, GitBranch, Zap, Database, Bot, KeyRound, Cloud, Hexagon } from "lucide-react";
 import {
   ProviderSelector,
   ModelSelector,
@@ -8,8 +8,13 @@ import {
   SwarmPipelinePreview,
   ConfigInsightCard,
   StatusMessage,
+  ApiKeyManager,
+  OllamaImporter,
+  SwarmVisualizer,
 } from "@/modules/hivelearn/config";
 import type { ProviderOption, ModelOption } from "@/modules/hivelearn/config";
+
+type ConfigTab = "swarm" | "api-keys" | "import" | "visualizar";
 
 interface HiveLearnConfig {
   configured: boolean;
@@ -21,8 +26,18 @@ interface AgentResponse {
   agents: Array<{ id: string; status: string }>;
 }
 
+interface Provider {
+  id: string;
+  name: string;
+  base_url?: string;
+  category: string;
+  enabled: number;
+  active: number;
+}
+
 export function HiveLearnConfigPage() {
-  const [providers, setProviders] = useState<ProviderOption[]>([]);
+  const [activeTab, setActiveTab] = useState<ConfigTab>("swarm");
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
@@ -44,15 +59,8 @@ export function HiveLearnConfigPage() {
           apiClient<AgentResponse>("/api/hivelearn/agents", { showError: false }),
         ]);
 
-        const activeProviders: ProviderOption[] = (providersData.providers ?? [])
-          .filter((p: any) => p.enabled || p.active)
-          .map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            active: p.active ?? false,
-            hasApiKey: !!p.config?.apiKey || p.isLocal || !!p.api_key,
-            isLocal: p.isLocal ?? false,
-          }));
+        const allProviders: Provider[] = (providersData.providers ?? [])
+          .sort((a: Provider, b: Provider) => a.name.localeCompare(b.name));
 
         const activeModels: ModelOption[] = (modelsData.models ?? [])
           .filter((m: any) => m.enabled || m.active)
@@ -65,7 +73,7 @@ export function HiveLearnConfigPage() {
             active: m.active ?? false,
           }));
 
-        setProviders(activeProviders);
+        setProviders(allProviders);
         setModels(activeModels);
         setAgentCount((agentsData.agents ?? []).length || 16);
 
@@ -82,8 +90,6 @@ export function HiveLearnConfigPage() {
     };
     load();
   }, []);
-
-  const availableModels = models.filter(m => m.provider_id === selectedProviderId);
 
   const handleSave = useCallback(async () => {
     if (!selectedProviderId || !selectedModelId) return;
@@ -162,145 +168,215 @@ export function HiveLearnConfigPage() {
           <div className="h-64 rounded-2xl animate-pulse border" style={{ background: "hsl(var(--hive-surface))", borderColor: "hsl(0 0% 100% / 0.05)" }} />
         ) : (
           <div className="space-y-8">
-            {/* Main Configuration Card — Motor de Inteligencia */}
-            <div
-              className="rounded-2xl border border-border bg-background/80 backdrop-blur-xl p-8 space-y-6 shadow-honey"
-            >
+            {/* Tabs de Navegación */}
+            <div className="flex gap-2 border-b border-border pb-px">
+              <button
+                onClick={() => setActiveTab("swarm")}
+                className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
+                  activeTab === "swarm"
+                    ? "bg-background border border-border border-b-0 text-hive-amber"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                }`}
+              >
+                <Brain className="h-4 w-4" />
+                Enjambre
+              </button>
+              <button
+                onClick={() => setActiveTab("api-keys")}
+                className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
+                  activeTab === "api-keys"
+                    ? "bg-background border border-border border-b-0 text-hive-amber"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                }`}
+              >
+                <KeyRound className="h-4 w-4" />
+                API Keys
+              </button>
+              <button
+                onClick={() => setActiveTab("import")}
+                className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
+                  activeTab === "import"
+                    ? "bg-background border border-border border-b-0 text-hive-amber"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                }`}
+              >
+                <Cloud className="h-4 w-4" />
+                Importar
+              </button>
+              <button
+                onClick={() => setActiveTab("visualizar")}
+                className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
+                  activeTab === "visualizar"
+                    ? "bg-background border border-border border-b-0 text-hive-amber"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                }`}
+              >
+                <Hexagon className="h-4 w-4" />
+                Visualizar
+              </button>
+            </div>
 
-              {/* Card Header */}
-              <div className="flex items-center gap-4">
+            {/* Contenido de las pestañas */}
+            {activeTab === "swarm" && (
+              <div className="space-y-8">
+                {/* Main Configuration Card — Motor de Inteligencia */}
                 <div
-                  className="p-3 rounded-xl border border-hive-amber/20 bg-hive-amber/10 shadow-sm"
+                  className="rounded-2xl border border-border bg-background/80 backdrop-blur-xl p-8 space-y-6 shadow-honey"
                 >
-                  <Brain className="h-5 w-5 text-hive-amber" />
+
+                  {/* Card Header */}
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="p-3 rounded-xl border border-hive-amber/20 bg-hive-amber/10 shadow-sm"
+                    >
+                      <Brain className="h-5 w-5 text-hive-amber" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-foreground">
+                        Motor de Inteligencia
+                      </h2>
+                      <p className="text-xs mt-0.5 text-muted-foreground">
+                        Configura el cerebro compartido del enjambre
+                      </p>
+                    </div>
+                  </div>
+
+
+                  {/* Divider */}
+                  <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+
+
+                  {/* Provider Selection */}
+                  <div>
+                    <label htmlFor="provider-selector" className="block text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground opacity-60">
+                      Proveedor
+                    </label>
+
+                    <div id="provider-selector">
+                      <ProviderSelector
+                      providers={providers}
+                      selectedId={selectedProviderId}
+                      onSelect={(id) => {
+                        setSelectedProviderId(id);
+                        setSelectedModelId(null);
+                        setSaveStatus("idle");
+                      }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Model Selection */}
+                  {selectedProviderId && (
+                    <div>
+                      <label htmlFor="model-selector-config" className="block text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground opacity-60">
+                        Modelo
+                      </label>
+
+                      <div id="model-selector-config">
+                        <ModelSelector
+                        models={models.filter(m => m.provider_id === selectedProviderId)}
+                        selectedId={selectedModelId}
+                        onSelect={(id) => { setSelectedModelId(id); setSaveStatus("idle"); }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Configuration Summary */}
+                  {selectedProviderId && selectedModelId && selectedProviderName && selectedModelName && (
+                    <ConfigSummary
+                      providerName={selectedProviderName}
+                      modelName={selectedModelName}
+                      agentCount={agentCount || 16}
+                    />
+                  )}
+
+                  {/* Save Button */}
+                  <button
+                    onClick={handleSave}
+                    disabled={!selectedProviderId || !selectedModelId || isSaving}
+                    className="w-full py-3.5 px-6 rounded-xl text-primary-foreground font-bold text-sm bg-hive-amber hover:bg-hive-amber/90 shadow-honey disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2.5 active:scale-[0.98]"
+                  >
+
+                    {isSaving ? (
+                      <>
+                        <Settings2 className="h-4 w-4 animate-spin" />
+                        Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <Settings2 className="h-4 w-4" />
+                        Guardar configuración
+                      </>
+                    )}
+                  </button>
+
+                  {/* Status Messages */}
+                  {saveStatus !== "idle" && (
+                    <StatusMessage
+                      type={saveStatus === "loading" ? "loading" : saveStatus === "success" ? "success" : "error"}
+                      message={
+                        saveStatus === "success"
+                          ? `Configuración guardada — los ${agentCount || 16} agentes ahora usan ${selectedProviderName} / ${selectedModelName}`
+                          : saveError ?? "Error desconocido"
+                      }
+                    />
+                  )}
                 </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">
-                    Motor de Inteligencia
-                  </h2>
-                  <p className="text-xs mt-0.5 text-muted-foreground">
-                    Configura el cerebro compartido del enjambre
+
+                {/* Swarm Pipeline Preview */}
+                <SwarmPipelinePreview agentCount={agentCount || 16} />
+
+                {/* Insight Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <ConfigInsightCard
+                    icon={GitBranch}
+                    title="DAG Scheduler"
+                    description="Orquesta los agentes en orden óptimo con grafo de dependencias."
+                    theme="blue"
+                  />
+                  <ConfigInsightCard
+                    icon={Zap}
+                    title="Paralelismo"
+                    description="8 agentes de contenido trabajan simultáneamente. Hasta 8× más rápido."
+                    theme="cyan"
+                  />
+                  <ConfigInsightCard
+                    icon={Database}
+                    title="Caché Inteligente"
+                    description="Nodos ya generados se reutilizan. Segunda lección del mismo tema: ~10s."
+                    theme="purple"
+                  />
+                </div>
+
+                {/* Timing Note */}
+                <div
+                  className="rounded-xl border border-border p-4 text-center bg-secondary/40 backdrop-blur-sm"
+                >
+                  <p className="text-[11px] font-mono tracking-wider text-muted-foreground/50">
+                    ⏱ Primera lección: ~2 min &nbsp;·&nbsp; 🐝 Con caché: ~10 seg &nbsp;·&nbsp; {agentCount || 16} agentes activos
                   </p>
                 </div>
               </div>
+            )}
 
-
-              {/* Divider */}
-              <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-
-
-              {/* Provider Selection */}
-              <div>
-                <label htmlFor="provider-selector" className="block text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground opacity-60">
-                  Proveedor
-                </label>
-
-                <div id="provider-selector">
-                  <ProviderSelector
-                  providers={providers}
-                  selectedId={selectedProviderId}
-                  onSelect={(id) => {
-                    setSelectedProviderId(id);
-                    setSelectedModelId(null);
-                    setSaveStatus("idle");
-                  }}
-                  />
-                </div>
+            {activeTab === "api-keys" && (
+              <div className="rounded-2xl border border-border bg-background/80 backdrop-blur-xl p-8 shadow-honey">
+                <ApiKeyManager providers={providers} />
               </div>
+            )}
 
-              {/* Model Selection */}
-              {selectedProviderId && (
-                <div>
-                  <label htmlFor="model-selector-config" className="block text-xs font-bold uppercase tracking-widest mb-4 text-muted-foreground opacity-60">
-                    Modelo
-                  </label>
+            {activeTab === "import" && (
+              <div className="rounded-2xl border border-border bg-background/80 backdrop-blur-xl p-8 shadow-honey">
+                <OllamaImporter />
+              </div>
+            )}
 
-                  <div id="model-selector-config">
-                    <ModelSelector
-                    models={availableModels}
-                    selectedId={selectedModelId}
-                    onSelect={(id) => { setSelectedModelId(id); setSaveStatus("idle"); }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Configuration Summary */}
-              {selectedProviderId && selectedModelId && selectedProviderName && selectedModelName && (
-                <ConfigSummary
-                  providerName={selectedProviderName}
-                  modelName={selectedModelName}
-                  agentCount={agentCount || 16}
-                />
-              )}
-
-              {/* Save Button */}
-              <button
-                onClick={handleSave}
-                disabled={!selectedProviderId || !selectedModelId || isSaving}
-                className="w-full py-3.5 px-6 rounded-xl text-primary-foreground font-bold text-sm bg-hive-amber hover:bg-hive-amber/90 shadow-honey disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2.5 active:scale-[0.98]"
-              >
-
-                {isSaving ? (
-                  <>
-                    <Settings2 className="h-4 w-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Settings2 className="h-4 w-4" />
-                    Guardar configuración
-                  </>
-                )}
-              </button>
-
-              {/* Status Messages */}
-              {saveStatus !== "idle" && (
-                <StatusMessage
-                  type={saveStatus === "loading" ? "loading" : saveStatus === "success" ? "success" : "error"}
-                  message={
-                    saveStatus === "success"
-                      ? `Configuración guardada — los ${agentCount || 16} agentes ahora usan ${selectedProviderName} / ${selectedModelName}`
-                      : saveError ?? "Error desconocido"
-                  }
-                />
-              )}
-            </div>
-
-            {/* Swarm Pipeline Preview */}
-            <SwarmPipelinePreview agentCount={agentCount || 16} />
-
-            {/* Insight Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <ConfigInsightCard
-                icon={GitBranch}
-                title="DAG Scheduler"
-                description="Orquesta los agentes en orden óptimo con grafo de dependencias."
-                theme="blue"
-              />
-              <ConfigInsightCard
-                icon={Zap}
-                title="Paralelismo"
-                description="8 agentes de contenido trabajan simultáneamente. Hasta 8× más rápido."
-                theme="cyan"
-              />
-              <ConfigInsightCard
-                icon={Database}
-                title="Caché Inteligente"
-                description="Nodos ya generados se reutilizan. Segunda lección del mismo tema: ~10s."
-                theme="purple"
-              />
-            </div>
-
-            {/* Timing Note */}
-            <div
-              className="rounded-xl border border-border p-4 text-center bg-secondary/40 backdrop-blur-sm"
-            >
-              <p className="text-[11px] font-mono tracking-wider text-muted-foreground/50">
-                ⏱ Primera lección: ~2 min &nbsp;·&nbsp; 🐝 Con caché: ~10 seg &nbsp;·&nbsp; {agentCount || 16} agentes activos
-              </p>
-            </div>
-
+            {activeTab === "visualizar" && (
+              <div className="rounded-2xl border border-border bg-background/80 backdrop-blur-xl p-8 shadow-honey">
+                <SwarmVisualizer />
+              </div>
+            )}
           </div>
         )}
       </div>

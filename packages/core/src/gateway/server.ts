@@ -6,6 +6,8 @@
 import { getDb } from '../storage/sqlite'
 import { LessonPersistence, HiveLearnSwarm, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
 import { logger } from '../utils/logger'
+import { encryptApiKey } from '../crypto/encrypt'
+import { decryptApiKey } from '../crypto/decrypt'
 import type { ServerWebSocket } from 'bun'
 import { join } from 'path'
 import { existsSync } from 'fs'
@@ -205,6 +207,144 @@ export function createServer(): Server {
         }
       }
 
+      // GET /api/providers/:id/api-key - Verificar si tiene API key
+      if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/api-key') && req.method === 'GET') {
+        try {
+          const providerId = url.pathname.split('/')[3]
+          const db = getDb()
+          const provider = db.query('SELECT api_key_encrypted FROM providers WHERE id = ?').get(providerId) as any
+          return addCorsHeaders(
+            new Response(JSON.stringify({ hasApiKey: !!provider?.api_key_encrypted }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[providers/api-key] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // POST /api/providers/:id/api-key - Guardar API key
+      if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/api-key') && req.method === 'POST') {
+        try {
+          const providerId = url.pathname.split('/')[3]
+          const body = await req.json() as { apiKey: string }
+          if (!body.apiKey) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'apiKey es requerido' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+          const db = getDb()
+          const { encrypted, iv } = encryptApiKey(body.apiKey)
+          db.query(`
+            UPDATE providers SET api_key_encrypted = ?, api_key_iv = ?, active = 1
+            WHERE id = ?
+          `).run(encrypted, iv, providerId)
+          return addCorsHeaders(
+            new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[providers/api-key] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // DELETE /api/providers/:id/api-key - Eliminar API key
+      if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/api-key') && req.method === 'DELETE') {
+        try {
+          const providerId = url.pathname.split('/')[3]
+          const db = getDb()
+          db.query(`
+            UPDATE providers SET api_key_encrypted = NULL, api_key_iv = NULL
+            WHERE id = ?
+          `).run(providerId)
+          return addCorsHeaders(
+            new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[providers/api-key] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // POST /api/providers/ollama/import - Importar modelos desde Ollama local
+      if (url.pathname === '/api/providers/ollama/import' && req.method === 'POST') {
+        try {
+          const ollamaUrl = process.env.OLLAMA_HOST || 'http://localhost:11434'
+          const res = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(5000) })
+          if (!res.ok) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'No se pudo conectar con Ollama. Asegúrate de que esté corriendo en ' + ollamaUrl }), {
+                status: 503,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+          const data = await res.json() as { models: Array<{ name: string; size: number; digest: string }> }
+          const db = getDb()
+          let imported = 0
+          for (const model of data.models || []) {
+            const modelName = model.name
+            const modelId = `ollama-${modelName.replace(/:/g, '-')}`
+            // Insertar o actualizar modelo
+            db.query(`
+              INSERT OR REPLACE INTO models (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
+              VALUES (?, 'ollama', ?, 'llm', 32000, '["chat", "local"]', 1, 0)
+            `).run(modelId, modelName)
+            imported++
+          }
+          return addCorsHeaders(
+            new Response(JSON.stringify({ ok: true, imported, models: data.models?.map(m => m.name) || [] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[ollama/import] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
       // GET /api/hivelearn/config
       if (url.pathname === '/api/hivelearn/config' && req.method === 'GET') {
         try {
@@ -385,6 +525,70 @@ export function createServer(): Server {
             }),
             req
           )
+        }
+      }
+
+      // GET /api/hivelearn/agents
+      if (url.pathname === '/api/hivelearn/agents' && req.method === 'GET') {
+        try {
+          const db = getDb()
+          const agents = db.query(`
+            SELECT id, name, description, system_prompt, role, provider_id, model_id, max_iterations, enabled, updated_at
+            FROM hl_agents
+            ORDER BY role DESC, name
+          `).all()
+          return addCorsHeaders(
+            new Response(JSON.stringify({ agents }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[hivelearn/agents] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // PUT /api/hivelearn/agents/:id - Actualizar configuración de agente
+      if (url.pathname.startsWith('/api/hivelearn/agents/') && req.method === 'PUT') {
+        try {
+          const agentId = url.pathname.split('/')[4];
+          const body = await req.json() as {
+            provider_id: string;
+            model_id: string;
+            max_iterations: number;
+            enabled: number;
+            system_prompt?: string;
+          };
+          const db = getDb();
+          db.query(`
+            UPDATE hl_agents
+            SET provider_id = ?, model_id = ?, max_iterations = ?, enabled = ?, system_prompt = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).run(body.provider_id, body.model_id, body.max_iterations, body.enabled, body.system_prompt || null, agentId);
+          return addCorsHeaders(
+            new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          );
+        } catch (e) {
+          log.error('[hivelearn/agents/:id] Error', { error: (e as Error).message });
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          );
         }
       }
 
