@@ -1,0 +1,42 @@
+{
+  "name": "@hivelearn/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "hivelearn": "./src/gateway/index.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/gateway/index.ts",
+    "./agent/*": "./src/agent/*.ts",
+    "./agents/*": "./src/agents/*.ts",
+    "./cache/*": "./src/cache/*.ts",
+    "./crypto/*": "./src/crypto/*.ts",
+    "./events/*": "./src/events/*.ts",
+    "./lesson/*": "./src/lesson/*.ts",
+    "./storage/*": "./src/storage/*.ts",
+    "./scheduler/*": "./src/agent/scheduler/*.ts",
+    "./skills/*": "./src/skills/*.ts",
+    "./swarm/*": "./src/agent/swarm/*.ts",
+    "./tools/*": "./src/tools/*.ts",
+    "./types": "./src/types/index.ts",
+    "./utils/*": "./src/utils/*.ts",
+    "./gateway/*": "./src/gateway/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun src/gateway/index.ts",
+    "dev": "NODE_ENV=development bun run --hot src/gateway/index.ts"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "latest",
+    "typescript": "6.0.3"
+  }
+}

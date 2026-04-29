@@ -1,0 +1,9 @@
+[install]
+auto-install-peers = true
+
+[run]
+# Enable faster script execution
+bun = true
+
+# Workspace configuration
+workspaces = ["packages/*"]
