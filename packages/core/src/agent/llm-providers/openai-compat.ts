@@ -14,7 +14,7 @@ export class OpenAICompatProvider implements LLMProvider {
       case "text":
         return { type: "text", text: part.text }
       case "image_url":
-        return { type: "image_url", image_url: { url: part.image_url.url } }
+        return { type: "image_url", image_url: { url: part.image_url?.url ?? '' } }
       case "image_base64":
         return { type: "image_url", image_url: { url: `data:${part.mimeType};base64,${part.base64}` } }
       case "document":
@@ -49,15 +49,15 @@ export class OpenAICompatProvider implements LLMProvider {
     // Kimi K2 and DeepSeek reasoner require reasoning_content to be round-tripped
     const needsReasoningRoundtrip = isKimi || isDeepSeek
 
-    const sanitized = sanitizeMessages(options.messages)
+    const sanitized = sanitizeMessages(options.messages ?? [])
     const rawMessages = needsReasoningRoundtrip
       ? sanitized
       : sanitized.map(({ reasoning_content: _rc, ...rest }) => rest as typeof sanitized[number])
     const messagesForProvider = rawMessages.map(m => this._convertMessage(m))
 
-    const providerPrefix = new RegExp(`^${options.provider}\\/`, "i")
+    const providerPrefix = new RegExp(`^${options.provider ?? ''}\\/`, "i")
     const body: any = {
-      model: options.model.replace(providerPrefix, ""),
+      model: (options.model ?? '').replace(providerPrefix, ""),
       messages: messagesForProvider,
       temperature: requiresTemperature1(options.provider, options.model) ? 1 : (options.temperature ?? 0.7),
     }
@@ -92,7 +92,7 @@ export class OpenAICompatProvider implements LLMProvider {
       if (profile.disableParallelToolCalls) body.parallel_tool_calls = false
     }
 
-    log.info(`[llm-client] ${options.provider}/${body.model} — ${options.messages.length} msgs, ${options.tools?.length ?? 0} tools${sendTools ? "" : " (tools suppressed)"}`)
+    log.info(`[llm-client] ${options.provider}/${body.model} — ${(options.messages ?? []).length} msgs, ${options.tools?.length ?? 0} tools${sendTools ? "" : " (tools suppressed)"}`)
 
     if (options.onToken) {
       return this._streamCall(client, body, options, toolNameMap, sendTools, profile)

@@ -44,7 +44,7 @@ import { generarEvaluacionTool } from './evaluation/generar-evaluacion.tool'
 import { calificarEvaluacionTool } from './evaluation/calificar-evaluacion.tool'
 
 function toToolDef(t: Tool): LLMToolDef {
-  return { type: 'function', function: { name: t.name, description: t.description || '', parameters: t.parameters as unknown as Record<string, unknown> } }
+  return { type: 'function', function: { name: t.name, description: t.description || '', parameters: t.parameters } }
 }
 
 export const PROFILE_TOOLS: LLMToolDef[] = [clasificarIntencionTool, buscarCurriculoExistenteTool].map(toToolDef)

@@ -11,10 +11,7 @@ import {
 } from "../adapters";
 
 const getHiveDirConst = () => getHiveDir();
-const getPidFile = () => {
-  const config = loadConfig();
-  return config.gateway?.pidFile ?? path.join(getHiveDirConst(), "gateway.pid");
-};
+const getPidFile = () => path.join(getHiveDirConst(), "gateway.pid");
 const getDbFile = () => path.join(getHiveDirConst(), "data", "hive.db");
 
 function checkBun(): { ok: boolean; version: string } {
@@ -147,7 +144,7 @@ export async function doctor(): Promise<void> {
 
   // Configuración (In-memory/Env)
   try {
-    const config = loadConfig();
+    const config = await loadConfig();
     const gateway = config.gateway;
     if (gateway) {
       checks.push({ category: "Configuración", name: "Gateway Config", status: "ok", message: "cargada" });

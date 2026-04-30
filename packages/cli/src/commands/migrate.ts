@@ -23,7 +23,7 @@ export async function migrate(): Promise<void> {
   }
 
   try {
-    const { initializeDatabase, getDb } = await import("@johpaz/hive-agents-core/storage/sqlite");
+    const { initializeDatabase, getDb } = await import("@johpaz/hivelearn-core");
 
     // 1. Inicializar BD y aplicar sync de schema
     console.log("📐 Verificando schema...");
@@ -43,7 +43,7 @@ export async function migrate(): Promise<void> {
     //    IMPORTANTE: NO llamar initHiveLearnStorage aquí — HiveLearn es opt-in.
     //    Los agentes hl_* solo se crean si el usuario los activó en setup o dashboard.
     console.log("\n🌱 Aplicando seed de datos...");
-    const { seedAllData } = await import("@johpaz/hive-agents-core/storage/seed");
+    const { seedAllData } = await import("@johpaz/hivelearn-core");
     seedAllData();
 
     // 4. Contar datos después

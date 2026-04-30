@@ -161,5 +161,6 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<string> {
 
   // Agotadas las iteraciones — último mensaje útil del historial
   const last = messages.findLast(m => m.role === 'assistant')
-  return last?.content ?? ''
+  const lastContent = last?.content ?? ''
+  return typeof lastContent === 'string' ? lastContent : lastContent.map(p => p.text ?? '').join('')
 }

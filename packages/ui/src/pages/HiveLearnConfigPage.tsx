@@ -37,7 +37,7 @@ interface Provider {
 
 export function HiveLearnConfigPage() {
   const [activeTab, setActiveTab] = useState<ConfigTab>("swarm");
-  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providers, setProviders] = useState<ProviderOption[]>([]);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
@@ -59,8 +59,15 @@ export function HiveLearnConfigPage() {
           apiClient<AgentResponse>("/api/hivelearn/agents", { showError: false }),
         ]);
 
-        const allProviders: Provider[] = (providersData.providers ?? [])
-          .sort((a: Provider, b: Provider) => a.name.localeCompare(b.name));
+        const allProviders: ProviderOption[] = (providersData.providers ?? [])
+          .sort((a: Provider, b: Provider) => a.name.localeCompare(b.name))
+          .map((p: Provider) => ({
+            id: p.id,
+            name: p.name,
+            active: p.active === 1,
+            hasApiKey: false,
+            isLocal: p.base_url?.includes('localhost') ?? false,
+          }));
 
         const activeModels: ModelOption[] = (modelsData.models ?? [])
           .filter((m: any) => m.enabled || m.active)

@@ -24,6 +24,8 @@ export type {
   EstadoNodo,
   AgentStatus,
   CoordinatorState,
+  EstiloAprendizaje,
+  NivelPrevio,
 } from './types'
 
 export type { CalificacionOutput, CalificacionInput } from './tools/evaluation/calificar-evaluacion.tool'
@@ -64,6 +66,7 @@ export { initHiveLearnStorage as initHiveLearn } from './storage/init'
 
 // ─── Database ─────────────────────────────────────────────────────────────────
 export { getDb, initializeDatabase, getDbPath } from './storage/sqlite'
+export { seedAllData } from './storage/seed'
 
 // ─── Logger ───────────────────────────────────────────────────────────────────
 export { logger, getLogger, Logger, ChildLogger } from './utils/logger'

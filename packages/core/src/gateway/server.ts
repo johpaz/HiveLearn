@@ -33,7 +33,7 @@ interface Server {
 }
 
 // CORS headers helper
-function corsHeaders(req: Request): HeadersInit {
+function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') || '*'
   return {
     'Access-Control-Allow-Origin': origin,
@@ -46,7 +46,7 @@ function corsHeaders(req: Request): HeadersInit {
 function addCorsHeaders(response: Response, req: Request): Response {
   const headers = corsHeaders(req)
   for (const [key, value] of Object.entries(headers)) {
-    response.headers.set(key, value)
+    response.headers.set(key, value as string)
   }
   return response
 }

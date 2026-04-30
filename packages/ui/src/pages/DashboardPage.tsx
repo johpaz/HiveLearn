@@ -78,7 +78,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           </div>
           <Button
             variant="default"
-            onClick={() => onNavigate('sessions')}
+            onClick={() => onNavigate('/onboarding')}
             className="font-bold shadow-amber-glow active:scale-95"
             style={{ background: 'linear-gradient(135deg, #f59e0b, #ffc174)', color: '#2a1700' }}
           >

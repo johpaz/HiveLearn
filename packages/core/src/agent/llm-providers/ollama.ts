@@ -8,7 +8,7 @@ export class OllamaProvider implements LLMProvider {
   async call(options: LLMCallOptions): Promise<LLMResponse> {
     const { Ollama } = await import("ollama")
 
-    const modelName = options.model.replace(/^ollama\//, "")
+    const modelName = (options.model ?? 'llama3').replace(/^ollama\//, "")
     const host = options.baseUrl?.trim() || process.env.OLLAMA_HOST || "http://localhost:11434"
     const isCloud = host.includes("ollama.com")
     const headers: Record<string, string> = {}
@@ -19,7 +19,7 @@ export class OllamaProvider implements LLMProvider {
       ...(Object.keys(headers).length ? { headers } : {}),
     })
 
-    const messages = sanitizeMessages(options.messages).map((m): any => {
+    const messages = sanitizeMessages(options.messages ?? []).map((m): any => {
       if (m.role === "assistant" && m.tool_calls?.length) {
         return {
           role: "assistant",

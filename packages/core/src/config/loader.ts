@@ -80,7 +80,7 @@ export async function loadConfig(): Promise<HiveLearnConfig> {
 
   if (existsSync(configPath)) {
     try {
-      const fileConfig = JSON.parse(readFileSync(configPath, 'utf-8'))
+      const fileConfig = JSON.parse(readFileSync(configPath, 'utf-8')) as Partial<HiveLearnConfig>
       cachedConfig = { ...config, ...fileConfig }
       log.debug('Config loaded from file', { path: configPath })
       return cachedConfig

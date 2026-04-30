@@ -109,7 +109,7 @@ export function validateGatewayConfig(
   const merged = { ...DEFAULT_GATEWAY_CONFIG, ...config };
   
   try {
-    return gatewayConfigSchema.parse(merged);
+    return gatewayConfigSchema.parse(merged) as GatewayConfig;
   } catch (error) {
     if (error instanceof z.ZodError) {
       const messages = error.issues.map((e) => `${e.path.join(".")}: ${e.message}`);
@@ -126,7 +126,7 @@ export function validateInstallationConfig(
   config: unknown
 ): InstallationConfig {
   try {
-    return installationConfigSchema.parse(config);
+    return installationConfigSchema.parse(config) as InstallationConfig;
   } catch (error) {
     if (error instanceof z.ZodError) {
       const messages = error.issues.map((e) => `${e.path.join(".")}: ${e.message}`);

@@ -5,10 +5,10 @@ import { KeyRound, CheckCircle2, Trash2, Save, Eye, EyeOff } from "lucide-react"
 interface Provider {
   id: string;
   name: string;
+  active: boolean | number;
+  hasApiKey?: boolean;
+  isLocal?: boolean;
   base_url?: string;
-  category: string;
-  enabled: number;
-  active: number;
 }
 
 interface ApiKeyManagerProps {

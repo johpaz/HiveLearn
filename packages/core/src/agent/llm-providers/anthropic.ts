@@ -28,7 +28,7 @@ export class AnthropicProvider implements LLMProvider {
       case "text":
         return { type: "text", text: part.text }
       case "image_url": {
-        const url = part.image_url.url
+        const url = part.image_url?.url ?? ''
         if (url.startsWith("data:")) {
           const match = url.match(/^data:([^;]+);base64,(.+)$/)
           if (match) return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } }
@@ -55,14 +55,14 @@ export class AnthropicProvider implements LLMProvider {
     const Anthropic = await import("@anthropic-ai/sdk")
     const client = new Anthropic.default({ apiKey: options.apiKey })
 
-    const systemText = options.messages
+    const systemText = (options.messages ?? [])
       .filter((m) => m.role === "system")
-      .map((m) => m.content)
+      .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
       .join("\n\n")
 
     const anthropicMessages: any[] = []
 
-    for (const msg of options.messages) {
+    for (const msg of (options.messages ?? [])) {
       if (msg.role === "system") continue
 
       if (msg.role === "tool") {
@@ -106,7 +106,7 @@ export class AnthropicProvider implements LLMProvider {
     if (tools.length) body.tools = tools
 
     // Extended thinking — only for supported models
-    const thinkingEnabled = options.thinking?.enabled && supportsThinking(options.model)
+    const thinkingEnabled = options.thinking?.enabled && supportsThinking(options.model ?? '')
     if (thinkingEnabled) {
       body.thinking = { type: "enabled", budget_tokens: options.thinking?.budget_tokens ?? 10000 }
     }
@@ -171,6 +171,8 @@ export class AnthropicProvider implements LLMProvider {
             : finalMsg.stop_reason === "max_tokens" ? "max_tokens"
               : "stop",
         usage: {
+          promptTokens: usage.input_tokens,
+          completionTokens: usage.output_tokens,
           input_tokens: usage.input_tokens,
           output_tokens: usage.output_tokens,
           thinking_tokens: (usage as any).thinking_tokens ?? 0,
@@ -204,6 +206,8 @@ export class AnthropicProvider implements LLMProvider {
           : response.stop_reason === "max_tokens" ? "max_tokens"
             : "stop",
       usage: {
+        promptTokens: response.usage.input_tokens,
+        completionTokens: response.usage.output_tokens,
         input_tokens: response.usage.input_tokens,
         output_tokens: response.usage.output_tokens,
       },

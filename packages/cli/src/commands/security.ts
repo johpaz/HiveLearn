@@ -16,7 +16,7 @@ export async function securityAudit(): Promise<void> {
   console.log("\n🔒 Hive Security Audit\n");
 
   const results: CheckResult[] = [];
-  const config = loadConfig();
+  const config = await loadConfig();
 
   // Red
   results.push({ category: "Red", name: "Gateway bind", status: "ok", message: "127.0.0.1 (loopback)" });
@@ -87,7 +87,7 @@ export async function securityAudit(): Promise<void> {
   });
 
   // MCP
-  const mcp = config.mcp as Record<string, unknown> | undefined;
+  const mcp = (config as any).mcp as Record<string, unknown> | undefined;
   const servers = (mcp as any)?.servers as Record<string, Record<string, unknown>> | undefined;
 
   if (servers && Object.keys(servers).length > 0) {

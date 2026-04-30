@@ -59,13 +59,10 @@ export const delegarEnjambreTool: Tool = {
     required: ['alumnoId', 'meta', 'perfil', 'sessionId'],
   },
 
-  execute: async (params: {
-    alumnoId: string
-    meta: string
-    perfil: PerfilAdaptacion
-    sessionId: string
-  }): Promise<{ ok: boolean; output: { success: boolean; nodesGenerated: number; message: string } | { error: string } }> => {
-    const { alumnoId, meta, perfil, sessionId } = params
+  execute: async (params: Record<string, unknown>): Promise<{ ok: boolean; output: { success: boolean; nodesGenerated: number; message: string } | { error: string } }> => {
+    const { alumnoId, meta, perfil, sessionId } = params as {
+      alumnoId: string; meta: string; perfil: PerfilAdaptacion; sessionId: string
+    }
     _lastResult = null
 
     try {

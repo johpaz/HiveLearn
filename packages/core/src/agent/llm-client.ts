@@ -6,14 +6,17 @@ import { getDb } from '../storage/sqlite'
 
 export interface LLMMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
-  content: string
+  content: string | ContentPart[]
   tool_calls?: LLMToolCall[]
   tool_call_id?: string
+  name?: string
+  reasoning_content?: string
 }
 
 export interface LLMToolCall {
   id: string
   type: 'function'
+  thought_signature?: string
   function: {
     name: string
     arguments: string
@@ -51,6 +54,8 @@ export interface LLMCallOptions {
   numGpu?: number
   messages?: LLMMessage[]
   onToken?: (token: string) => void
+  signal?: AbortSignal
+  thinking?: { enabled: boolean; budget_tokens?: number }
 }
 
 export interface LLMResponse {
@@ -62,12 +67,14 @@ export interface LLMResponse {
   tool_calls?: LLMToolCall[]
   stop_reason?: string
   reasoning_content?: string
+  thinking_content?: string
   usage?: {
     promptTokens: number
     completionTokens: number
     totalTokens?: number
     input_tokens?: number
     output_tokens?: number
+    thinking_tokens?: number
   }
 }
 
@@ -142,7 +149,7 @@ export async function callLLM(
       throw new Error(`LLM call failed: ${response.status} ${response.statusText}`)
     }
 
-    const data = await response.json()
+    const data = await response.json() as any
     return {
       content: data.message?.content || '',
       stop_reason: data.done ? 'stop' : 'length',
@@ -176,7 +183,7 @@ export async function callLLM(
     throw new Error(`LLM call failed: ${response.status} ${response.statusText} - ${errorText}`)
   }
 
-  const data = await response.json()
+  const data = await response.json() as any
 
   const toolCalls = data.choices?.[0]?.message?.tool_calls
   const parsedToolCalls = toolCalls?.map((tc: LLMToolCall) => ({

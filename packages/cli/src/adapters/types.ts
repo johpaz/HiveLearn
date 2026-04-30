@@ -167,7 +167,7 @@ export interface AdapterOptions {
  * Schema for gateway configuration validation
  */
 export const gatewayConfigSchema = z.object({
-  host: z.string().optional().default("127.0.0.1"),
+  host: z.string().default("127.0.0.1"),
   port: z.number().int().min(1).max(65535).default(8787),
   uiPort: z.number().int().min(1).max(65535).optional(),
   wsPort: z.number().int().min(1).max(65535).default(8787),

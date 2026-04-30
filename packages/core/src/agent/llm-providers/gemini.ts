@@ -11,7 +11,7 @@ export class GeminiProvider implements LLMProvider {
       case "text":
         return { text: part.text }
       case "image_url": {
-        const url = part.image_url.url
+        const url = part.image_url?.url ?? ''
         if (url.startsWith("data:")) {
           const match = url.match(/^data:([^;]+);base64,(.+)$/)
           if (match) return { inlineData: { mimeType: match[1], data: match[2] } }
@@ -42,7 +42,7 @@ export class GeminiProvider implements LLMProvider {
 
     const ai = new GoogleGenAI(clientOpts)
 
-    const cleanMessages = sanitizeMessages(options.messages)
+    const cleanMessages = sanitizeMessages(options.messages ?? [])
 
     // Build toolCallId → name map for converting tool results
     const toolNameMap = new Map<string, string>()
@@ -172,6 +172,8 @@ export class GeminiProvider implements LLMProvider {
         content: "[Response blocked by Gemini safety filters]",
         stop_reason: "stop",
         usage: response.usageMetadata ? {
+          promptTokens: response.usageMetadata.promptTokenCount ?? 0,
+          completionTokens: 0,
           input_tokens: response.usageMetadata.promptTokenCount ?? 0,
           output_tokens: 0,
         } : undefined,
@@ -206,6 +208,8 @@ export class GeminiProvider implements LLMProvider {
       tool_calls: tool_calls.length ? tool_calls : undefined,
       stop_reason,
       usage: usageMeta ? {
+        promptTokens: usageMeta.promptTokenCount ?? 0,
+        completionTokens: usageMeta.candidatesTokenCount ?? 0,
         input_tokens: usageMeta.promptTokenCount ?? 0,
         output_tokens: usageMeta.candidatesTokenCount ?? 0,
         thinking_tokens: (usageMeta as any).thoughtsTokenCount ?? 0,
