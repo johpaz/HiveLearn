@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   RefreshCw, Settings2, Crown, Shield, Bot, Terminal,
-  Wifi, WifiOff, Zap,
+  Wifi, WifiOff, Zap, Eye, Grid3X3,
 } from "lucide-react";
 import { useHiveLearnLive, type AgentLiveStatus } from "@/hooks/useHiveLearnLive";
 import { AgentConfigDialog } from "@/modules/hivelearn/AgentConfigDialog";
 import { apiClient } from "@/lib/api";
+import { LaboratoryWorld } from "@/pixi/LaboratoryWorld";
+import type { AgentStatus } from "@/pixi/constants";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface HLAgent {
@@ -388,8 +390,24 @@ export function HiveLearnSwarmPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [agentStates, setAgentStates] = useState<Record<string, AgentState>>({});
+  const [viewMode, setViewMode] = useState<'world' | 'grid'>('world');
+  const [isMuted, setIsMuted] = useState(false);
 
   const { isConnected, isGenerating, agentStatuses, currentAgentId } = useHiveLearnLive();
+
+  // Convert agentStatuses to AgentStatus type for PixiSwarmWorld
+  const pixiAgentStatuses: Record<string, AgentStatus> = {}
+  for (const [agentId, status] of Object.entries(agentStatuses)) {
+    if (status === 'running') pixiAgentStatuses[agentId] = 'running'
+    else if (status === 'completed') pixiAgentStatuses[agentId] = 'completed'
+    else if (status === 'failed') pixiAgentStatuses[agentId] = 'failed'
+    else pixiAgentStatuses[agentId] = 'idle'
+  }
+
+  // Calculate progress based on completed agents
+  const totalAgents = Object.keys(AGENT_META).length
+  const completedAgents = Object.values(agentStatuses).filter(s => s === 'completed').length
+  const progress = isGenerating ? (completedAgents / totalAgents) * 100 : 0
 
   const fetchAgents = async () => {
     setIsLoading(true);
@@ -469,11 +487,40 @@ export function HiveLearnSwarmPage() {
             Enjambre
             <span className="bg-gradient-to-r from-amber-400 to-amber-600 bg-clip-text text-transparent"> Educativo</span>
           </h2>
-          <p className="text-muted-foreground font-light text-sm mt-2">Enjambre de {dbAgents.length || 16} agentes educativos especializados</p>
+          <p className="text-muted-foreground font-light text-sm mt-2">Enjambre de {dbAgents.length || 17} agentes educativos especializados</p>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
           <LiveBadge isConnected={isConnected} />
+          
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-secondary/50 p-1">
+            <button
+              onClick={() => setViewMode('world')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
+                viewMode === 'world'
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Vista Mundo PixiJS"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Mundo
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Vista Grid"
+            >
+              <Grid3X3 className="h-3.5 w-3.5" />
+              Grid
+            </button>
+          </div>
+          
           <button
             className="p-2 rounded-xl glass-card hover:border-amber-500/30 transition-all group shadow-sm"
             onClick={fetchAgents}
@@ -486,6 +533,23 @@ export function HiveLearnSwarmPage() {
 
       </div>
 
+      {/* ── PixiJS Laboratory World View ── */}
+      {viewMode === 'world' && (
+        <div className="rounded-2xl border border-border/50 overflow-hidden glass-card">
+          <LaboratoryWorld
+            agentStatuses={pixiAgentStatuses}
+            currentAgentId={currentAgentId}
+            progress={progress}
+            mensaje={isGenerating ? 'Generando lección...' : 'Listo'}
+            soundEnabled={!isMuted}
+            volume={0.3}
+          />
+        </div>
+      )}
+
+      {/* ── Coordinator & Workers Grid View ── */}
+      {viewMode === 'grid' && (
+        <>
       {/* ── Coordinator (prominent, first) ── */}
       <CoordinatorCard
         coordinator={coordinator}
@@ -573,6 +637,8 @@ export function HiveLearnSwarmPage() {
         onSuccess={handleConfigSuccess}
       />
       </div>
+        </>
+      )}
     </>
   );
 }

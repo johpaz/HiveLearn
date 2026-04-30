@@ -82,16 +82,14 @@ export class LessonPersistence {
   saveStudentProfile(profile: StudentProfile): void {
     this.db.query(`
       INSERT OR REPLACE INTO hl_student_profiles
-        (alumno_id, nombre, edad, rango_edad, tiempo_sesion, nivel_previo, estilo, sesiones_total, xp_acumulado, nivel_actual, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT sesiones_total FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT xp_acumulado FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT nivel_actual FROM hl_student_profiles WHERE alumno_id = ?), 'Aprendiz'), CURRENT_TIMESTAMP)
+        (alumno_id, apodo, avatar, edad, estado, sesiones_total, xp_acumulado, created_at, ultimo_acceso, updated_at)
+      VALUES (?, ?, ?, ?, ?, COALESCE((SELECT sesiones_total FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT xp_acumulado FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT created_at FROM hl_student_profiles WHERE alumno_id = ?), CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run(
       profile.alumnoId,
-      profile.nombre,
+      profile.apodo,
+      profile.avatar,
       profile.edad,
-      profile.rangoEdad,
-      profile.tiempoSesion,
-      profile.nivelPrevio,
-      profile.estilo,
+      profile.estado,
       profile.alumnoId,
       profile.alumnoId,
       profile.alumnoId,
@@ -103,15 +101,14 @@ export class LessonPersistence {
     if (!row) return null
     return {
       alumnoId: row.alumno_id,
-      nombre: row.nombre,
+      apodo: row.apodo,
+      avatar: row.avatar,
       edad: row.edad,
-      rangoEdad: row.rango_edad,
-      tiempoSesion: row.tiempo_sesion,
-      nivelPrevio: row.nivel_previo,
-      estilo: row.estilo,
+      estado: row.estado,
       sesionesTotal: row.sesiones_total,
       xpAcumulado: row.xp_acumulado,
-      nivelActual: row.nivel_actual,
+      creadoEn: row.created_at,
+      ultimoAcceso: row.ultimo_acceso,
     }
   }
 
@@ -398,15 +395,14 @@ export class LessonPersistence {
       alumnoId = `alumno_${fieldValue.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}_${Date.now()}`
       this.saveStudentProfile({
         alumnoId,
-        nombre: fieldValue,
+        apodo: fieldValue,
+        avatar: 'tigre_azul',
         edad: 0,
-        rangoEdad: 'adulto',
-        tiempoSesion: 30,
-        nivelPrevio: 'principiante',
-        estilo: 'balanceado',
+        estado: 'onboarding',
         sesionesTotal: 0,
         xpAcumulado: 0,
-        nivelActual: 'Aprendiz',
+        creadoEn: new Date().toISOString(),
+        ultimoAcceso: new Date().toISOString(),
       })
     } else {
       // Obtener alumno_id de la sesión más reciente
@@ -540,13 +536,10 @@ export class LessonPersistence {
     const perfil = perfilFinal as any
     this.db.query(`
       UPDATE hl_student_profiles
-      SET edad = ?, rango_edad = ?, nivel_previo = ?, estilo = ?, updated_at = ?
+      SET edad = ?, updated_at = ?
       WHERE alumno_id = ?
     `).run(
       perfil.edad || 18,
-      perfil.rangoEdad || 'adulto',
-      perfil.nivelPrevio || 'principiante',
-      perfil.estilo || 'balanceado',
       now,
       alumnoId,
     )

@@ -18,13 +18,11 @@ export type {
   PreguntaEvaluacion,
   GamificacionOutput,
   Logro,
-  RangoEdad,
   TipoPedagogico,
   TipoVisual,
   EstadoNodo,
   AgentStatus,
   CoordinatorState,
-  EstiloAprendizaje,
   NivelPrevio,
 } from './types'
 
@@ -50,6 +48,15 @@ export { calificarEvaluacionTool, calificarRespuestaTool } from './tools/evaluat
 export { AGENT_IDS, updateHiveLearnAgentsProviderModel } from './agent/registry'
 export { AGENT_PROMPTS } from './agent/prompts'
 export { runHiveLearnAgent } from './agent/runner'
+
+// ─── Secrets (API Key Management) ─────────────────────────────────────────────
+export {
+  storeProviderApiKey,
+  getProviderApiKey,
+  hasProviderApiKey,
+  deleteProviderApiKey,
+  listProvidersWithKeys,
+} from './secrets/provider-secrets'
 export { runHiveLearnConversation } from './agent/conversation'
 export type { ConversationResult } from './agent/conversation'
 

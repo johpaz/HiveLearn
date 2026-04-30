@@ -104,7 +104,6 @@ function buildMicroEvalComponents(nodo: NodoLesson): { components: CompDef[]; ch
       { key: 'nodoId',    value: { literalString: nodo.id } },
       { key: 'concepto',  value: { literalString: nodo.concepto } },
       { key: 'tipoPedagogico', value: { literalString: nodo.tipoPedagogico } },
-      { key: 'rangoEdad', value: { literalString: nodo.rangoEdad } },
     ]))
     children.push('me-submit')
   } else {
@@ -117,7 +116,6 @@ function buildMicroEvalComponents(nodo: NodoLesson): { components: CompDef[]; ch
       { key: 'nodoId',    value: { literalString: nodo.id } },
       { key: 'concepto',  value: { literalString: nodo.concepto } },
       { key: 'tipoPedagogico', value: { literalString: nodo.tipoPedagogico } },
-      { key: 'rangoEdad', value: { literalString: nodo.rangoEdad } },
     ]))
     children.push('me-submit')
   }
@@ -166,7 +164,6 @@ export function nodeToA2UI(nodo: NodoLesson): A2UIMessage[] {
         { key: 'nodoId',         value: { literalString: nodo.id } },
         { key: 'concepto',       value: { literalString: nodo.concepto } },
         { key: 'tipoPedagogico', value: { literalString: nodo.tipoPedagogico } },
-        { key: 'rangoEdad',      value: { literalString: nodo.rangoEdad } },
       ]),
       ...meComps,
     ]
@@ -193,7 +190,6 @@ export function nodeToA2UI(nodo: NodoLesson): A2UIMessage[] {
         { key: 'nodoId',         value: { literalString: nodo.id } },
         { key: 'concepto',       value: { literalString: nodo.concepto } },
         { key: 'tipoPedagogico', value: { literalString: nodo.tipoPedagogico } },
-        { key: 'rangoEdad',      value: { literalString: nodo.rangoEdad } },
       ]),
       ...meComps,
     ]

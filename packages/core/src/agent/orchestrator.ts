@@ -4,7 +4,7 @@
 import type { DAGResult } from './scheduler/dag'
 import type {
   LessonProgram, NodoLesson, NodoContenido, GamificacionOutput, EvaluacionOutput,
-  PerfilAdaptacion, RangoEdad, TipoPedagogico, TipoVisual, EstadoNodo, NivelPrevio
+  PerfilAdaptacion, TipoPedagogico, TipoVisual, EstadoNodo, NivelPrevio
 } from '../types'
 import { nodeCache } from '../cache/NodeCache'
 import { logger } from '../utils/logger'
@@ -77,8 +77,7 @@ export function buildNodosBase(structureResult: string, perfil: PerfilAdaptacion
       tipoVisual: (n.tipo_visual ?? n.tipoVisual ?? 'text_card') as TipoVisual,
       titulo: n.titulo ?? `Nodo ${idx + 1}`,
       concepto: n.concepto ?? '',
-      nivel: perfil.nivelPrevio as NivelPrevio,
-      rangoEdad: perfil.rangoEdad as RangoEdad,
+      nivel: 'principiante' as NivelPrevio,
       estado: (idx === 0 ? 'disponible' : 'bloqueado') as EstadoNodo,
       xpRecompensa: n.xp_recompensa ?? n.xpRecompensa ?? 20,
       contenido: {} as NodoContenido,
@@ -212,7 +211,6 @@ export function buildLessonProgram(opts: {
     alumnoId,
     tema: intent.tema ?? meta,
     topicSlug: intent.topicSlug ?? null,
-    rangoEdad: perfil.rangoEdad,
     nodos,
     gamificacion,
     evaluacion,

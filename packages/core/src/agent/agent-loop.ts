@@ -121,13 +121,12 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<string> {
       try {
         const validationResult = validatePedagogicalContent(parsedArgs, {
           agenteId: opts.validationContext.agenteId,
-          rangoEdad: opts.validationContext.rangoEdad || 'adulto',
           tema: opts.validationContext.tema || '',
           tipoContenido: toolCall.function.name,
         })
-        
+
         log.info(`[agent-loop] validation for ${toolCall.function.name}: approved=${validationResult.aprobado}`)
-        
+
         // Si la validación falla, registrar observaciones
         if (!validationResult.aprobado) {
           log.warn(`[agent-loop] validation failed for ${toolCall.function.name}: ${validationResult.observaciones.join(', ')}`)

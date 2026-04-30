@@ -18,7 +18,6 @@ export function useNodeInteraction() {
           tipoPedagogico: nodo.tipoPedagogico,
           concepto: nodo.concepto,
           respuesta,
-          rangoEdad: nodo.rangoEdad,
         }),
       })
 

@@ -33,16 +33,13 @@ export class HiveLearnSwarm {
 
   async run(perfil: StudentProfile, meta: string): Promise<LessonProgram> {
     const ts = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14)
-    const nombreSlug = perfil.nombre.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 20)
-    const sessionId = `${nombreSlug}_${ts}`
+    const apodoSlug = perfil.apodo.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 20)
+    const sessionId = `${apodoSlug}_${ts}`
 
     const perfilAdaptacion: PerfilAdaptacion = {
-      rangoEdad:         perfil.rangoEdad,
-      duracionSesion:    perfil.tiempoSesion,
-      nodosRecomendados: this.calcNodos(perfil),
-      estilo:            perfil.estilo,
-      nivelPrevio:       perfil.nivelPrevio,
-      tono:              this.calcTono(perfil),
+      duracionSesion:    30,
+      nodosRecomendados: 8,
+      tono:              'amigable',
     }
 
     this.emit('init', 'HiveLearnCoordinator', 3, 'Coordinador recibiendo perfil del alumno...')
@@ -67,12 +64,9 @@ export class HiveLearnSwarm {
       ``,
       `PERFIL DEL ALUMNO:`,
       `- alumnoId: "${perfil.alumnoId}"`,
-      `- nombre: ${perfil.nombre}`,
-      `- rangoEdad: ${perfilAdaptacion.rangoEdad}`,
-      `- nivelPrevio: ${perfilAdaptacion.nivelPrevio}`,
+      `- apodo: ${perfil.apodo}`,
       `- duracionSesion: ${perfilAdaptacion.duracionSesion} minutos`,
       `- nodosRecomendados: ${perfilAdaptacion.nodosRecomendados}`,
-      `- estilo: ${perfilAdaptacion.estilo}`,
       `- tono: ${perfilAdaptacion.tono}`,
       ``,
       `META DE APRENDIZAJE: "${meta}"${efectividadCtx}`,
@@ -83,7 +77,7 @@ export class HiveLearnSwarm {
       `- alumnoId: "${perfil.alumnoId}"`,
       `- meta: "${meta}"`,
       `- sessionId: "${sessionId}"`,
-      `- perfil: { rangoEdad: "${perfilAdaptacion.rangoEdad}", nivelPrevio: "${perfilAdaptacion.nivelPrevio}", duracionSesion: ${perfilAdaptacion.duracionSesion}, nodosRecomendados: ${perfilAdaptacion.nodosRecomendados}, estilo: "${perfilAdaptacion.estilo}", tono: "${perfilAdaptacion.tono}" }`,
+      `- perfil: { duracionSesion: ${perfilAdaptacion.duracionSesion}, nodosRecomendados: ${perfilAdaptacion.nodosRecomendados}, tono: "${perfilAdaptacion.tono}" }`,
     ].join('\n')
 
     this.emit('tier0', 'HiveLearnCoordinator', 8, 'Coordinador delegando a los 16 agentes especializados...')
@@ -158,7 +152,6 @@ export class HiveLearnSwarm {
 ${rawSummary ? `OUTPUTS DE AGENTES CLAVE (primeros 200 chars cada uno):\n${rawSummary}\n\n` : ''}LESSON PROGRAM:
 ${JSON.stringify({
   tema: program.tema,
-  rangoEdad: program.rangoEdad,
   nodos: program.nodos.map(n => ({
     id: n.id,
     titulo: n.titulo,
@@ -223,15 +216,5 @@ ${JSON.stringify({
     })
     log.info(`[coordinator] applied corrections to ${Object.keys(correcciones).length} node(s)`)
     return { ...program, nodos: correctedNodos }
-  }
-
-  private calcNodos(perfil: StudentProfile): number {
-    const map = { nino: 5, adolescente: 8, adulto: 10 }
-    return map[perfil.rangoEdad] ?? 8
-  }
-
-  private calcTono(perfil: StudentProfile): string {
-    const map = { nino: 'amigable', adolescente: 'motivador', adulto: 'técnico' }
-    return map[perfil.rangoEdad] ?? 'neutro'
   }
 }

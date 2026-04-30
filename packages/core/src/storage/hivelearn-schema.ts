@@ -32,16 +32,14 @@ CREATE TABLE IF NOT EXISTS hl_agents (
 CREATE TABLE IF NOT EXISTS hl_student_profiles (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   alumno_id       TEXT UNIQUE NOT NULL,
-  nombre          TEXT NOT NULL,
+  apodo           TEXT NOT NULL,
+  avatar          TEXT NOT NULL,
   edad            INTEGER NOT NULL,
-  rango_edad      TEXT NOT NULL CHECK(rango_edad IN ('nino','adolescente','adulto')),
-  tiempo_sesion   INTEGER NOT NULL CHECK(tiempo_sesion IN (15,30,45)),
-  nivel_previo    TEXT NOT NULL CHECK(nivel_previo IN ('principiante','principiante_base','intermedio')),
-  estilo          TEXT NOT NULL DEFAULT 'balanceado',
+  estado          TEXT NOT NULL DEFAULT 'onboarding' CHECK(estado IN ('onboarding','activo','inactivo')),
   sesiones_total  INTEGER DEFAULT 0,
   xp_acumulado    INTEGER DEFAULT 0,
-  nivel_actual    TEXT DEFAULT 'Aprendiz',
   created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+  ultimo_acceso   TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -135,7 +133,6 @@ CREATE TABLE IF NOT EXISTS hl_node_cache (
   agente_tipo     TEXT NOT NULL,
   concepto_slug   TEXT NOT NULL,
   nivel           TEXT NOT NULL,
-  rango_edad      TEXT NOT NULL,
   output_json     TEXT NOT NULL,
   hits            INTEGER DEFAULT 0,
   created_at      TEXT DEFAULT CURRENT_TIMESTAMP,

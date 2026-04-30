@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(bun.sh)"
+    ]
+  },
+  "$version": 3
+}

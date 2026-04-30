@@ -66,7 +66,6 @@ export function NodeContentPopover({ nodo, position, onClose, onComplete }: Prop
             nodoId: nodo.id,
             concepto: nodo.concepto,
             respuesta,
-            rangoEdad: nodo.rangoEdad,
             tipoPedagogico: nodo.tipoPedagogico,
           }),
         })

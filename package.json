@@ -27,7 +27,9 @@
     "copy:assets": "mkdir -p dist/ui && cp -r packages/ui/dist/* dist/ui/ 2>/dev/null || true",
     "start": "bun run --cwd packages/cli src/index.ts start",
     "typecheck": "bun run --filter '*' typecheck",
-    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist"
+    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist",
+    "migrate:api-keys": "bun run scripts/migrate-api-keys.ts",
+    "migrate:schema": "bun run scripts/migrate-schema.ts"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

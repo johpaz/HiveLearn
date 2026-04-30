@@ -6,8 +6,12 @@
 import { getDb } from '../storage/sqlite'
 import { LessonPersistence, HiveLearnSwarm, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
 import { logger } from '../utils/logger'
-import { encryptApiKey } from '../crypto/encrypt'
-import { decryptApiKey } from '../crypto/decrypt'
+import {
+  storeProviderApiKey,
+  getProviderApiKey,
+  hasProviderApiKey,
+  deleteProviderApiKey
+} from '../secrets/provider-secrets'
 import type { ServerWebSocket } from 'bun'
 import { join } from 'path'
 import { existsSync } from 'fs'
@@ -238,10 +242,9 @@ export function createServer(): Server {
       if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/api-key') && req.method === 'GET') {
         try {
           const providerId = url.pathname.split('/')[3]
-          const db = getDb()
-          const provider = db.query('SELECT api_key_encrypted FROM providers WHERE id = ?').get(providerId) as any
+          const hasKey = await hasProviderApiKey(providerId)
           return addCorsHeaders(
-            new Response(JSON.stringify({ hasApiKey: !!provider?.api_key_encrypted }), {
+            new Response(JSON.stringify({ hasApiKey: hasKey }), {
               status: 200,
               headers: { 'Content-Type': 'application/json' },
             }),
@@ -273,12 +276,7 @@ export function createServer(): Server {
               req
             )
           }
-          const db = getDb()
-          const { encrypted, iv } = encryptApiKey(body.apiKey)
-          db.query(`
-            UPDATE providers SET api_key_encrypted = ?, api_key_iv = ?, active = 1
-            WHERE id = ?
-          `).run(encrypted, iv, providerId)
+          await storeProviderApiKey(providerId, body.apiKey)
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true }), {
               status: 200,
@@ -302,11 +300,7 @@ export function createServer(): Server {
       if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/api-key') && req.method === 'DELETE') {
         try {
           const providerId = url.pathname.split('/')[3]
-          const db = getDb()
-          db.query(`
-            UPDATE providers SET api_key_encrypted = NULL, api_key_iv = NULL
-            WHERE id = ?
-          `).run(providerId)
+          await deleteProviderApiKey(providerId)
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true }), {
               status: 200,

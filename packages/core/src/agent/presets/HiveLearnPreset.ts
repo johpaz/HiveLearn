@@ -9,7 +9,7 @@
 import { TaskGraph } from '../../agent/scheduler/dag'
 import type { TaskNodeConfig } from '../../agent/scheduler/dag'
 import { AGENT_IDS } from '../../agent/registry'
-import type { PerfilAdaptacion, NodoLesson, RangoEdad } from '../../types'
+import type { PerfilAdaptacion, NodoLesson } from '../../types'
 
 export interface HiveLearnDAGInput {
   alumnoId: string
@@ -25,7 +25,7 @@ export interface HiveLearnDAGInput {
  * Esta función genera el grafo base (Tier 0 + Tier 2).
  */
 export function buildBaseDAG(input: HiveLearnDAGInput): TaskGraph {
-  const ctxBase = `Alumno: ${input.alumnoId}. Rango edad: ${input.perfil.rangoEdad}. Nivel: ${input.perfil.nivelPrevio}. Tono: ${input.perfil.tono}. Tiempo sesión: ${input.perfil.duracionSesion} min.`
+  const ctxBase = `Alumno: ${input.alumnoId}. Tono: ${input.perfil.tono}. Duración sesión: ${input.perfil.duracionSesion} min.`
 
   const nodes: TaskNodeConfig[] = [
     {
@@ -42,7 +42,7 @@ export function buildBaseDAG(input: HiveLearnDAGInput): TaskGraph {
       id: 'intent',
       agentId: AGENT_IDS.intent,
       name: 'IntentAgent',
-      taskDescription: `${ctxBase}\nMeta del alumno: "${input.meta}"\nExtrae tema, nivel detectado, topic_slug, tono y confianza. Responde SOLO con JSON.`,
+      taskDescription: `${ctxBase}\nMeta del alumno: "${input.meta}"\nExtrae tema, tono y confianza. Responde SOLO con JSON.`,
       deps: ['profile'],
       timeout: 60_000,
       maxRetries: 2,
@@ -76,7 +76,7 @@ export function buildContentNodes(
   const tierOneNodes: TaskNodeConfig[] = []
 
   for (const nodo of nodos) {
-    const ctx = `${ctxBase}\nNodo: "${nodo.titulo}". Concepto: "${nodo.concepto}". Nivel: ${nodo.nivel}. Rango edad: ${nodo.rangoEdad}.`
+    const ctx = `${ctxBase}\nNodo: "${nodo.titulo}". Concepto: "${nodo.concepto}". Nivel: ${nodo.nivel}.`
 
     // Agente de contenido pedagógico según tipo
     const contentAgentMap: Record<string, string> = {
@@ -137,7 +137,7 @@ export function buildContentNodes(
  * Los content tasks no tienen deps en 'structure' porque Phase 1 ya lo resolvió.
  */
 export function buildFullDAG(input: HiveLearnDAGInput, nodos: NodoLesson[]): TaskGraph {
-  const ctxBase = `Alumno: ${input.alumnoId}. Rango edad: ${input.perfil.rangoEdad}. Nivel: ${input.perfil.nivelPrevio}. Tono: ${input.perfil.tono}.`
+  const ctxBase = `Alumno: ${input.alumnoId}. Tono: ${input.perfil.tono}.`
   const contentNodes = buildContentNodes(nodos, ctxBase)
   const contentIds = contentNodes.map(n => n.id)
 
@@ -146,7 +146,7 @@ export function buildFullDAG(input: HiveLearnDAGInput, nodos: NodoLesson[]): Tas
       id: 'gamification',
       agentId: AGENT_IDS.gamification,
       name: 'GamificationAgent',
-      taskDescription: `${ctxBase} Rango edad: ${input.perfil.rangoEdad}. Genera XP, logros y celebración.`,
+      taskDescription: `${ctxBase} Genera XP, logros y celebración.`,
       deps: contentIds.length > 0 ? contentIds : [],
       timeout: 30_000,
       maxRetries: 1,

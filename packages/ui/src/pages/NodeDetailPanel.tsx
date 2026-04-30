@@ -58,7 +58,6 @@ export function NodeDetailPanel({ nodo, onClose, onComplete }: Props) {
             nodoId: nodo.id,
             concepto: nodo.concepto,
             respuesta,
-            rangoEdad: nodo.rangoEdad,
             tipoPedagogico: nodo.tipoPedagogico,
           }),
         })

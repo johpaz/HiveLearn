@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLessonStore } from '../store/lessonStore'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
-import type { LessonProgram, RangoEdad, EstiloAprendizaje, NivelPrevio } from '@hivelearn/core'
+import type { LessonProgram, NivelPrevio } from '@hivelearn/core'
 
 // ── Model Config Popover ─────────────────────────────────────────────────────
 
@@ -220,7 +220,6 @@ export function SessionsListScreen() {
         alumnoId:  data.alumno_id,
         tema:      data.meta ?? '',
         topicSlug: data.topic_slug ?? null,
-        rangoEdad: data.rango_edad,
         nodos,
         gamificacion: {
           xpRecompensa: data.xp_total ?? 0,
@@ -229,11 +228,8 @@ export function SessionsListScreen() {
         },
         evaluacion: { preguntas: [] },
         perfilAdaptacion: {
-          rangoEdad:          (data.rango_edad ?? 'adulto') as RangoEdad,
           duracionSesion:     20,
           nodosRecomendados:  nodos.length,
-          estilo:             'balanceado' as EstiloAprendizaje,
-          nivelPrevio:        'principiante' as NivelPrevio,
           tono:               'amigable',
         },
       }

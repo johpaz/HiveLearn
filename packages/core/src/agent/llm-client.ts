@@ -3,6 +3,7 @@
  * Sin dependencias externas del repositorio principal de Hive
  */
 import { getDb } from '../storage/sqlite'
+import { getProviderApiKey } from '../secrets/provider-secrets'
 
 export interface LLMMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -99,13 +100,14 @@ export async function resolveProviderConfig(providerId: string, modelId?: string
   
   const model = modelId || (agent?.model_id as string) || 'gemma4-e4b'
   const provider = (agent?.provider_id as string) || 'ollama'
-  
-  // Por ahora retornamos configuración básica
-  // En producción, esto debería desencriptar las API keys
+
+  // Obtener API key desde Bun.secrets
+  const apiKey = await getProviderApiKey(providerId)
+
   return {
     provider,
     model,
-    apiKey: process.env.HIVELEARN_API_KEY,
+    apiKey: apiKey || undefined,
     baseUrl: process.env.HIVELEARN_BASE_URL,
   }
 }

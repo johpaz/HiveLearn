@@ -18,15 +18,12 @@ function ensureColumn(db: Database, table: string, column: string, definition: s
 
 export function initHiveLearnStorage(db: Database): void {
   // Schema principal (providers, models)
+  // API keys are stored securely using Bun.secrets (OS keychain)
   db.exec('PRAGMA foreign_keys = ON')
   db.exec(`
     CREATE TABLE IF NOT EXISTS providers (
       id              TEXT PRIMARY KEY,
       name            TEXT NOT NULL UNIQUE,
-      api_key_encrypted TEXT,
-      api_key_iv      TEXT,
-      headers_encrypted TEXT,
-      headers_iv      TEXT,
       base_url        TEXT,
       category        TEXT NOT NULL DEFAULT 'llm',
       num_ctx         INTEGER,

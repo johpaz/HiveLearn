@@ -64,9 +64,9 @@ export class HiveLearnExecutor {
     if (isCacheable) {
       const meta = extractCacheKey(node.taskDescription)
       if (meta) {
-        const cached = nodeCache.get(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad)
+        const cached = nodeCache.get(node.agentId, meta.conceptoSlug, meta.nivel)
         if (cached) {
-          nodeCache.hit(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad)
+          nodeCache.hit(node.agentId, meta.conceptoSlug, meta.nivel)
           this.persistence.saveAgentOutput(threadId, node.agentId, node.id, cached.outputJson, 0, 'ok')
           return cached.outputJson
         }
@@ -99,7 +99,7 @@ export class HiveLearnExecutor {
       // Guardar en cache si fue exitoso y es cacheable
       if (status === 'ok' && isCacheable && output) {
         const meta = extractCacheKey(node.taskDescription)
-        if (meta) nodeCache.set(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad, output)
+        if (meta) nodeCache.set(node.agentId, meta.conceptoSlug, meta.nivel, output)
       }
     }
 

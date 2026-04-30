@@ -194,7 +194,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <Button
                 variant="default"
                 className="w-full justify-start bg-hive-amber text-primary-foreground hover:bg-hive-amber/90 shadow-honey"
-                onClick={() => onNavigate('sessions')}
+                onClick={() => onNavigate('/sessions')}
               >
                 🚀 Crear Nueva Sesión
               </Button>
@@ -202,21 +202,21 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <Button
                 variant="secondary"
                 className="w-full justify-start"
-                onClick={() => onNavigate('onboarding')}
+                onClick={() => onNavigate('/onboarding')}
               >
                 🐝 Iniciar Onboarding
               </Button>
               <Button
                 variant="outline"
                 className="w-full justify-start"
-                onClick={() => onNavigate('config')}
+                onClick={() => onNavigate('/config')}
               >
                 ⚙️ Configurar Proveedor
               </Button>
               <Button
                 variant="ghost"
                 className="w-full justify-start"
-                onClick={() => onNavigate('how-to-use')}
+                onClick={() => onNavigate('/how-to-use')}
               >
                 ❓ ¿Cómo Usar?
               </Button>

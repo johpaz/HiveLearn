@@ -35,12 +35,12 @@ export async function runHiveLearnSession(
     meta,
     JSON.stringify(program.nodos),
     program.nodos.length,
-    program.rangoEdad,
+    'adulto',
     program.topicSlug,
   )
 
   // 4. Crear sesión en BD
-  persistence.createSession(program.sessionId, perfil.alumnoId, curriculoId, program.rangoEdad)
+  persistence.createSession(program.sessionId, perfil.alumnoId, curriculoId, 'adulto')
 
   return program
 }

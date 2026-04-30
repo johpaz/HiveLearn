@@ -657,7 +657,7 @@ export function LoadingScreen() {
             <div className="absolute top-4 left-6 z-20">
               <p className="text-[12px] text-white/40 font-medium max-w-xs truncate">"{meta}"</p>
               {perfil && (
-                <p className="text-[10px] text-white/20 mt-0.5">{perfil.nombre} · {perfil.tiempoSesion} min</p>
+                <p className="text-[10px] text-white/20 mt-0.5">{perfil.apodo}</p>
               )}
             </div>
           )}

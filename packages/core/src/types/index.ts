@@ -1,11 +1,9 @@
 /** Tipos compartidos entre backend y UI de HiveLearn */
 
-export type RangoEdad = 'nino' | 'adolescente' | 'adulto'
 export type TipoPedagogico = 'concept' | 'exercise' | 'quiz' | 'challenge' | 'milestone' | 'evaluation'
 export type TipoVisual = 'text_card' | 'code_block' | 'svg_diagram' | 'gif_guide' | 'infographic' | 'chart' | 'animated_card' | 'image_ai' | 'audio_ai'
 export type TipoPregunta = 'verdadero_falso' | 'multiple_choice' | 'respuesta_corta' | 'completar_codigo'
 export type NivelPrevio = 'principiante' | 'principiante_base' | 'intermedio'
-export type EstiloAprendizaje = 'visual' | 'lectura' | 'retos' | 'balanceado' | 'mis_retos'
 export type EstadoNodo = 'bloqueado' | 'disponible' | 'completado'
 
 // ─── Coordinator & Agent Status ──────────────────────────────────────────────
@@ -19,32 +17,28 @@ export interface CoordinatorState {
   totalWorkers: number
 }
 
+export type EstadoAlumno = 'onboarding' | 'activo' | 'inactivo'
+
 export interface StudentProfile {
   alumnoId: string
-  nombre: string
+  apodo: string
+  avatar: string
   edad: number
-  rangoEdad: RangoEdad
-  tiempoSesion: 15 | 30 | 45
-  nivelPrevio: NivelPrevio
-  estilo: EstiloAprendizaje
+  estado: EstadoAlumno
   sesionesTotal: number
   xpAcumulado: number
-  nivelActual: string
+  creadoEn: string
+  ultimoAcceso: string
 }
 
 export interface PerfilAdaptacion {
-  rangoEdad: RangoEdad
   duracionSesion: number
   nodosRecomendados: number
-  estilo: EstiloAprendizaje
-  nivelPrevio: NivelPrevio
   tono: string
 }
 
 export interface IntentResult {
   tema: string
-  nivelDetectado: NivelPrevio
-  topicSlug: string | null
   tono: string
   confianza: number
 }
@@ -56,7 +50,6 @@ export interface NodoLesson {
   titulo: string
   concepto: string
   nivel: NivelPrevio
-  rangoEdad: RangoEdad
   posX: number
   posY: number
   estado: EstadoNodo
@@ -201,7 +194,6 @@ export interface LessonProgram {
   alumnoId: string
   tema: string
   topicSlug: string | null
-  rangoEdad: RangoEdad
   nodos: NodoLesson[]
   gamificacion: GamificacionOutput
   evaluacion: EvaluacionOutput

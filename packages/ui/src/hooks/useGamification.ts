@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 import { useLessonStore } from '../store/lessonStore'
-import type { RangoEdad } from '@hivelearn/core'
 
 const NIVELES = ['Aprendiz', 'Explorador', 'Practicante', 'Experto', 'Maestro', 'Leyenda']
 
@@ -13,17 +12,14 @@ function calcNivel(xp: number): string {
   return NIVELES[5]
 }
 
-function mensajeXP(xp: number, rangoEdad: RangoEdad): string {
-  if (rangoEdad === 'nino') return `¡${xp} gotas de miel! 🍯`
-  if (rangoEdad === 'adolescente') return `+${xp} XP 🔥`
-  return `${xp} puntos ganados`
+function mensajeXP(xp: number): string {
+  return `+${xp} XP 🔥`
 }
 
 export function useGamification() {
   const { xpTotal, logrosDesbloqueados, program, desbloquearLogro } = useLessonStore()
 
   const nivelActual = calcNivel(xpTotal)
-  const rangoEdad = program?.rangoEdad ?? 'adulto'
 
   const checkLogros = useCallback(() => {
     if (!program?.gamificacion.logros) return
@@ -34,7 +30,7 @@ export function useGamification() {
     }
   }, [program, logrosDesbloqueados, desbloquearLogro])
 
-  const formatXP = (xp: number) => mensajeXP(xp, rangoEdad)
+  const formatXP = (xp: number) => mensajeXP(xp)
 
   const porcentajeNivel = (): number => {
     if (xpTotal < 50)  return (xpTotal / 50) * 100
@@ -45,5 +41,5 @@ export function useGamification() {
     return 100
   }
 
-  return { xpTotal, nivelActual, rangoEdad, logrosDesbloqueados, checkLogros, formatXP, porcentajeNivel }
+  return { xpTotal, nivelActual, logrosDesbloqueados, checkLogros, formatXP, porcentajeNivel }
 }

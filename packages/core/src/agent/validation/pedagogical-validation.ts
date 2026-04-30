@@ -39,7 +39,6 @@ export interface ValidationResult {
 
 export interface ValidationConfig {
   agenteId: string
-  rangoEdad: string
   tema: string
   tipoContenido: string
 }
@@ -51,8 +50,9 @@ export function validatePedagogicalContent(
   contenido: any,
   config: ValidationConfig
 ): ValidationResult {
-  const { agenteId, rangoEdad, tema, tipoContenido } = config
-  
+  const { agenteId, tema, tipoContenido } = config
+  const rangoEdad = 'adulto' // valor por defecto simplificado
+
   log.info(`[pedagogical-validation] Validating ${agenteId} for ${tipoContenido}`)
   
   // Inicializar resultados
