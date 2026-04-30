@@ -1,11 +1,11 @@
 {
-  "name": "@hivelearn/core",
+  "name": "@johpaz/hivelearn-core",
   "version": "0.1.0",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "types": "./src/index.ts",
   "bin": {
-    "hivelearn": "./src/gateway/index.ts"
+    "hivelearn-server": "./dist/gateway/index.js"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -27,8 +27,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "bun build src/index.ts --outdir dist --target bun",
-    "start": "bun src/gateway/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun && bun build src/gateway/index.ts --outdir dist/gateway --target bun",
+    "start": "bun run src/gateway/index.ts",
     "dev": "NODE_ENV=development bun run --hot src/gateway/index.ts"
   },
   "dependencies": {

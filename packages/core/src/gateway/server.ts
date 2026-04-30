@@ -12,6 +12,13 @@ import type { ServerWebSocket } from 'bun'
 import { join } from 'path'
 import { existsSync } from 'fs'
 
+type UIBundle = Map<string, { data: Buffer; mime: string }>
+let embeddedUIBundle: UIBundle | null = null
+
+export function registerEmbeddedUI(bundle: UIBundle): void {
+  embeddedUIBundle = bundle
+}
+
 const log = logger.child('server')
 
 const isDev = process.env.NODE_ENV === 'development'
@@ -76,26 +83,38 @@ function handleWsMessage(ws: ServerWebSocket<undefined>, message: string | Array
 
 // Helper para servir archivos estáticos de la UI
 async function serveUIFile(pathname: string): Promise<Response | null> {
-  // En producción, el binario está en dist/hivelearn.js y la UI en dist/ui/
-  // En desarrollo, usamos la ruta relativa desde src/
-  const uiDir = isDev 
-    ? join(__dirname, '../../../ui/dist')
-    : join(__dirname, '../../ui')
+  const subPath = pathname === '/' || !pathname.includes('.') ? '/index.html' : pathname
 
-  // Normalize path
-  let subPath = pathname === '/' ? '/index.html' : pathname.replace(/^\/ui/, '')
-  if (subPath === '/' || !subPath) subPath = '/index.html'
-
-  const filePath = join(uiDir, subPath)
-
-  // Check for file
-  const file = Bun.file(filePath)
-  if (await file.exists()) {
-    return new Response(file)
+  // First try registered embedded UI bundle (from CLI postbuild)
+  if (embeddedUIBundle) {
+    const entry = embeddedUIBundle.get(subPath) ?? embeddedUIBundle.get('/index.html')
+    if (entry) {
+      return new Response(entry.data as unknown as Uint8Array, {
+        headers: {
+          'Content-Type': entry.mime,
+          'Cache-Control': subPath === '/index.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
+        },
+      })
+    }
   }
 
-  // SPA fallback - serve index.html for routes without extension
-  if (!pathname.includes('.')) {
+  // Fallback to disk — try multiple locations
+  const candidates = [
+    join(process.cwd(), 'packages/ui/dist'),
+    join(__dirname, '../../../ui/dist'),
+    join(__dirname, '../../ui'),
+  ]
+
+  for (const uiDir of candidates) {
+    if (!existsSync(uiDir)) continue
+
+    const filePath = join(uiDir, subPath)
+    const file = Bun.file(filePath)
+    if (await file.exists()) {
+      return new Response(file)
+    }
+
+    // SPA fallback
     const indexFile = Bun.file(join(uiDir, 'index.html'))
     if (await indexFile.exists()) {
       return new Response(indexFile)
@@ -118,35 +137,43 @@ export function createServer(): Server {
         })
       }
 
-      // ── UI Static Files (Production) ───────────────────────────────────
-      if (!isDev && (url.pathname === '/' || url.pathname.startsWith('/ui'))) {
-        const uiResponse = await serveUIFile(url.pathname)
-        if (uiResponse) {
-          return uiResponse
+      // ── Health check ───────────────────────────────────────────────────
+      if (url.pathname === '/health') {
+        return new Response(JSON.stringify({ status: 'ok' }), {
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      // ── Dev Mode: Proxy to Vite ────────────────────────────────────────
+      if (isDev) {
+        const upgrade = req.headers.get('Upgrade')
+        if (upgrade === 'websocket') {
+          return new Response('WebSocket upgrade required', { status: 426 })
+        }
+
+        if (!url.pathname.startsWith('/api')) {
+          const ports = [5173, 5174]
+          for (const port of ports) {
+            try {
+              const viteUrl = `http://localhost:${port}${url.pathname}${url.search}`
+              const response = await fetch(viteUrl, { signal: AbortSignal.timeout(2000) })
+              if (response.ok || response.status < 500) return response
+            } catch {
+              continue
+            }
+          }
+          // Vite not ready yet — return auto-refresh loading page
+          return new Response(
+            `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta http-equiv="refresh" content="1"><title>HiveLearn — Iniciando…</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:#e2e8f0}div{text-align:center}h2{font-size:2rem;margin-bottom:.5rem}p{color:#94a3b8}</style></head><body><div><h2>🐝 HiveLearn</h2><p>Iniciando servidor de desarrollo…</p><p><small>Esta página se recargará automáticamente</small></p></div></body></html>`,
+            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          )
         }
       }
 
-      // ── Dev Mode: Proxy to Vite ───────────────────────────────────────
-      if (isDev) {
-        // Detectar WebSocket upgrade - NO proxear a Vite
-        const upgrade = req.headers.get('Upgrade')
-        if (upgrade === 'websocket') {
-          // WebSocket upgrade lo maneja Bun.serve con server.websocket
-          // Retornar 426 para forzar el upgrade
-          return new Response('WebSocket upgrade required', { status: 426 })
-        }
-        
-        // Proxy para TODAS las rutas que no son API
-        // Vite maneja: /src/*, /@vite/*, /@react-refresh/*, /node_modules/*, etc.
-        if (!url.pathname.startsWith('/api')) {
-          try {
-            const viteUrl = `http://localhost:5173${url.pathname}${url.search}`
-            const response = await fetch(viteUrl)
-            return response
-          } catch {
-            return new Response('Vite dev server not available', { status: 503 })
-          }
-        }
+      // ── Production: serve UI for all non-API routes ────────────────────
+      if (!isDev && !url.pathname.startsWith('/api') && !url.pathname.startsWith('/ws')) {
+        const uiResponse = await serveUIFile(url.pathname)
+        if (uiResponse) return uiResponse
       }
 
       // ── API Routes ─────────────────────────────────────────────────────

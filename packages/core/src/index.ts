@@ -1,6 +1,6 @@
 /**
  * HiveLearn Core — Backend entry point
- * 
+ *
  * Módulo independiente de aprendizaje adaptativo con IA
  * Sin dependencias externas del repositorio principal de Hive
  */
@@ -68,6 +68,14 @@ export { getDb, initializeDatabase, getDbPath } from './storage/sqlite'
 // ─── Logger ───────────────────────────────────────────────────────────────────
 export { logger, getLogger, Logger, ChildLogger } from './utils/logger'
 export type { LogLevel, LogEntry, LoggerConfig, LogMeta } from './utils/logger'
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+export { loadConfig, getHiveDir, resetConfig } from './config/loader'
+export type { HiveLearnConfig } from './config/loader'
+
+// ─── Gateway Manager ──────────────────────────────────────────────────────────
+export { startGateway, stopGateway, getGatewayStatus, getServerInstance } from './gateway/manager'
+export { registerEmbeddedUI } from './gateway/server'
 
 // ─── Tipos de herramientas ────────────────────────────────────────────────────
 export type { Tool, ToolParameters } from './types/tool'

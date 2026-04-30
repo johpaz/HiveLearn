@@ -1,12 +1,13 @@
 /**
  * HiveLearn SQLite — Gestión de base de datos independiente
- * 
+ *
  * Base de datos propia de HiveLearn, separada del core principal de Hive
  */
 import { Database } from 'bun:sqlite'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { mkdirSync, existsSync } from 'fs'
+import { logger } from '../utils/logger.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -66,8 +67,8 @@ export function initializeDatabase(): Database {
   db = new Database(path, { create: true })
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA foreign_keys = ON')
-  
-  console.log(`[hivelearn-db] Database initialized at ${path}`)
+
+  logger.info(`Database initialized at ${path}`, { source: 'hivelearn-db' })
   return db
 }
 
@@ -92,6 +93,6 @@ export function closeDatabase(): void {
   if (db) {
     db.close()
     db = null
-    console.log('[hivelearn-db] Database closed')
+    logger.info('Database closed', { source: 'hivelearn-db' })
   }
 }

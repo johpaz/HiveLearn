@@ -1,21 +1,31 @@
 {
-  "name": "hivelearn",
+  "name": "@johpaz/hivelearn",
   "version": "0.1.0",
-  "private": true,
   "description": "HiveLearn — Plataforma de aprendizaje adaptativo con IA",
   "type": "module",
+  "bin": {
+    "hivelearn": "./dist/hive.js",
+    "hive": "./dist/hive.js"
+  },
+  "main": "./dist/hive.js",
+  "files": [
+    "dist/",
+    "README.md"
+  ],
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run scripts/dev.ts",
+    "dev": "bun run --cwd packages/cli src/index.ts start",
     "dev:ui": "bun run --cwd packages/ui dev",
     "dev:server": "NODE_ENV=development bun run --cwd packages/core dev",
-    "build": "bun run build:core && bun run build:ui && bun run copy:ui",
-    "build:core": "bun build packages/core/src/index.ts --bundle --outfile dist/hivelearn.js --target bun && bun build packages/core/src/gateway/index.ts --bundle --outfile dist/server.js --target bun",
+    "dev:cli": "bun run --cwd packages/cli dev",
+    "build": "bun run build:core && bun run build:ui && bun run build:cli && bun run copy:assets",
+    "build:core": "bun build packages/core/src/index.ts --outdir dist/core --target bun && bun build packages/core/src/gateway/index.ts --bundle --outfile dist/server.js --target bun",
     "build:ui": "bun run --cwd packages/ui build",
-    "copy:ui": "mkdir -p dist/ui && cp -r packages/ui/dist/* dist/ui/",
-    "start": "NODE_ENV=production bun run dist/server.js",
+    "build:cli": "bun run --cwd packages/cli build",
+    "copy:assets": "mkdir -p dist/ui && cp -r packages/ui/dist/* dist/ui/ 2>/dev/null || true",
+    "start": "bun run --cwd packages/cli src/index.ts start",
     "typecheck": "bun run --filter '*' typecheck",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist"
   },

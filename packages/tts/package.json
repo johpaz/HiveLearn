@@ -1,7 +1,7 @@
 {
-  "name": "@johpaz/hive-tts",
+  "name": "@johpaz/hivelearn-tts",
   "version": "0.1.0",
-  "description": "Offline local TTS for Hive — Piper-based fallback when no internet providers available",
+  "description": "Offline local TTS for HiveLearn — Piper-based fallback when no internet providers available",
   "module": "src/index.ts",
   "main": "src/index.ts",
   "type": "module",
@@ -19,6 +19,6 @@
   "devDependencies": {
     "typescript": "^5.0.0"
   },
-  "keywords": ["hive", "tts", "offline", "piper", "voice", "spanish"],
+  "keywords": ["hivelearn", "tts", "offline", "piper", "voice", "spanish"],
   "license": "MIT"
 }
