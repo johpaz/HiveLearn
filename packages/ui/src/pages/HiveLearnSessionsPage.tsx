@@ -318,7 +318,7 @@ export function HiveLearnSessionsPage() {
   };
 
   const handleResume = (id: string) => {
-    navigate(`/hivelearn?session=${id}`);
+    navigate(`/lesson?session=${id}`);
   };
 
   const filteredSessions = sessions.filter(s => {
@@ -396,7 +396,7 @@ export function HiveLearnSessionsPage() {
 
             <div className="flex items-center gap-3">
               <button
-                onClick={() => navigate("/hivelearn")}
+                onClick={() => navigate("/onboarding")}
                 className="px-5 py-2.5 bg-hive-amber hover:bg-hive-amber/90 text-primary-foreground font-bold rounded-xl text-sm transition-all shadow-honey flex items-center gap-2"
               >
                 <Zap className="h-4 w-4" />
@@ -428,7 +428,7 @@ export function HiveLearnSessionsPage() {
                 Completa tu primera lección para ver tu historial, XP ganado y estadísticas de aprendizaje.
               </p>
               <button
-                onClick={() => navigate("/hivelearn")}
+                onClick={() => navigate("/onboarding")}
                 className="px-6 py-3 bg-hive-amber hover:bg-hive-amber/90 text-primary-foreground font-bold rounded-xl transition-all shadow-honey relative z-10"
               >
                 Empezar a aprender

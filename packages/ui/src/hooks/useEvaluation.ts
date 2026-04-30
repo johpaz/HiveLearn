@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLessonStore } from '../store/lessonStore'
 import type { PreguntaEvaluacion } from '@hivelearn/core'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
 
 export function useEvaluation() {
+  const navigate = useNavigate()
   const { program, responderEvaluacion, respuestasEvaluacion, setPuntajeEvaluacion, setScreen, sessionId, xpTotal, logrosDesbloqueados } = useLessonStore()
   const [preguntaActual, setPreguntaActual] = useState(0)
   const [enviando, setEnviando] = useState(false)
@@ -46,10 +48,11 @@ export function useEvaluation() {
       }
 
       setScreen('result')
+      navigate('/result')
     } finally {
       setEnviando(false)
     }
-  }, [preguntas, respuestasEvaluacion, total, setPuntajeEvaluacion, setScreen, sessionId, xpTotal, logrosDesbloqueados])
+  }, [preguntas, respuestasEvaluacion, total, setPuntajeEvaluacion, setScreen, navigate, sessionId, xpTotal, logrosDesbloqueados])
 
   return {
     preguntas,

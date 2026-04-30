@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLessonStore } from '../store/lessonStore'
 import { useGamification } from '../hooks/useGamification'
 import { RatingModal } from './RatingModal'
@@ -11,6 +12,7 @@ function getCalificacion(puntaje: number): { emoji: string; texto: string; color
 }
 
 export function ResultScreen() {
+  const navigate = useNavigate()
   const {
     program, puntajeEvaluacion, xpTotal,
     logrosDesbloqueados, nodosCompletados, tiempoInicioSesion, reset, setScreen
@@ -97,13 +99,13 @@ export function ResultScreen() {
         {/* Acciones */}
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
           <button
-            onClick={reset}
+            onClick={() => { reset(); navigate('/onboarding') }}
             className="flex-1 rounded-xl bg-hive-amber py-4 text-sm font-black text-primary-foreground hover:bg-hive-amber/90 shadow-honey transition-all active:scale-[0.98]"
           >
             🐝 Nueva lección
           </button>
           <button
-            onClick={() => setScreen('sessions')}
+            onClick={() => navigate('/sessions')}
             className="flex-1 rounded-xl bg-secondary border border-border py-4 text-sm font-black text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-all active:scale-[0.98] shadow-sm"
           >
             ← Mis sesiones

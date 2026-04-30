@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLessonStore } from '../store/lessonStore'
 import { wsUrl } from '../lib/wsUrl'
 import { SwarmCanvas } from '../canvas/SwarmCanvas'
@@ -88,6 +89,7 @@ function HexAvatar({ theme }: { theme: typeof THEME.adulto }) {
 }
 
 export function ChatOnboardingScreen() {
+  const navigate = useNavigate()
   const {
     setScreen, setPerfil, setMeta,
     setOnboardingSessionId, completeOnboarding,
@@ -236,7 +238,8 @@ export function ChatOnboardingScreen() {
           setCurriculoId(msg.curriculoId as number)
           setIsGenerating(false)
           setSwarmProgress({ etapa: 'complete', agenteActivo: '', porcentaje: 100, mensaje: '¡Lección lista!' })
-          setTimeout(() => setScreen('lesson'), 1800)
+          setScreen('lesson')
+          setTimeout(() => navigate('/lesson'), 1800)
           return
         }
 
@@ -358,7 +361,7 @@ export function ChatOnboardingScreen() {
               </button>
             )}
             <button
-              onClick={() => setScreen('sessions')}
+              onClick={() => navigate('/sessions')}
               className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
             >
               ← Mis sesiones

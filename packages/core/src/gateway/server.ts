@@ -89,7 +89,7 @@ async function serveUIFile(pathname: string): Promise<Response | null> {
   if (embeddedUIBundle) {
     const entry = embeddedUIBundle.get(subPath) ?? embeddedUIBundle.get('/index.html')
     if (entry) {
-      return new Response(entry.data as unknown as Uint8Array, {
+      return new Response(entry.data as any, {
         headers: {
           'Content-Type': entry.mime,
           'Cache-Control': subPath === '/index.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
