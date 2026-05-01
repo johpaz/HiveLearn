@@ -59,7 +59,7 @@ const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.coordinator, name: 'HiveLearnCoordinator', description: 'Coordina el enjambre educativo completo', systemPrompt: COORDINATOR_PROMPT, maxIterations: 10 },
   { id: AGENT_IDS.profile, name: 'ProfileAgent', description: 'Construye el perfil de adaptación del alumno', systemPrompt: PROFILE_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.intent, name: 'IntentAgent', description: 'Extrae tema, nivel y tono de la meta del alumno', systemPrompt: INTENT_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.structure, name: 'StructureAgent', description: 'Diseña el esqueleto completo del programa de estudio', systemPrompt: STRUCTURE_PROMPT, maxIterations: 10 },
+  { id: AGENT_IDS.structure, name: 'StructureAgent', description: 'Diseña la estructura del mundo de aprendizaje (zonas PixiJS)', systemPrompt: STRUCTURE_PROMPT, maxIterations: 10 },
   { id: AGENT_IDS.explanation, name: 'ExplanationAgent', description: 'Genera explicaciones de conceptos (máx 70 palabras)', systemPrompt: EXPLANATION_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.exercise, name: 'ExerciseAgent', description: 'Crea ejercicios prácticos con pistas', systemPrompt: EXERCISE_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.quiz, name: 'QuizAgent', description: 'Genera preguntas de quiz con 4 opciones', systemPrompt: QUIZ_PROMPT, maxIterations: 3 },

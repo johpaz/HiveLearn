@@ -217,7 +217,7 @@ export interface MundoActualizarEstado {
     zona_actual: number
     vidas: number
     racha: number
-    nodos_completados: string[]
+    modulos_completados: string[]
     logros: string[]
   }
 }

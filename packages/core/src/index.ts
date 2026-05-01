@@ -11,14 +11,6 @@ export * from './types'
 export type { CalificacionOutput, CalificacionInput } from './tools/evaluation/calificar-evaluacion.tool'
 export type { SessionData, SessionMetrics } from './storage/LessonPersistence'
 
-// ─── Swarm y sesión ───────────────────────────────────────────────────────────
-export { HiveLearnSwarm } from './agent/swarm/HiveLearnSwarm'
-export { runHiveLearnSession } from './agent/swarm/session'
-
-// ─── Entrega de lección dirigida por coordinador ──────────────────────────────
-export { LessonDeliverySession } from './lesson/LessonDeliverySession'
-export { resolveStudentAction, cancelPendingAction } from './tools/coordinator/enviar-interaccion.tool'
-
 // ─── Persistencia ─────────────────────────────────────────────────────────────
 export { LessonPersistence } from './storage/LessonPersistence'
 
@@ -44,10 +36,6 @@ export type { ConversationResult } from './agent/conversation'
 
 // ─── Eventos SSE ──────────────────────────────────────────────────────────────
 export { hlSwarmEmitter } from './events/swarm-events'
-
-// ─── Cache ────────────────────────────────────────────────────────────────────
-export { nodeCache } from './cache/NodeCache'
-export { cacheInvalidator } from './cache/CacheInvalidator'
 
 // ─── Storage init (llamar desde el server al arrancar) ────────────────────────
 export { initHiveLearnStorage } from './storage/init'

@@ -109,7 +109,6 @@ interface LessonState {
 
   // Estado de la sesión
   nodoActualId: string | null
-  selectedNodeId: string | null   // nodo seleccionado en el grafo (panel lateral)
   xpTotal: number
   logrosDesbloqueados: string[]
   nodosCompletados: string[]
@@ -166,10 +165,6 @@ interface LessonState {
   completeOnboarding: () => void
   reset: () => void
 
-  // Acciones de panel lateral
-  selectNode: (nodeId: string) => void
-  deselectNode: () => void
-
   // Acciones de gamificación
   perderVida: () => void
   incrementarRacha: () => void
@@ -198,7 +193,6 @@ const initialState = {
   isGenerating: false,
   sessionRestored: false,
   nodoActualId: null,
-  selectedNodeId: null,
   xpTotal: 0,
   logrosDesbloqueados: [],
   nodosCompletados: [],
@@ -306,10 +300,6 @@ export const useLessonStore = create<LessonState>()(persist((set, get) => ({
     selectedProviderId: s.selectedProviderId,
     selectedModelId: s.selectedModelId,
   })),
-
-  // Panel lateral
-  selectNode: (nodeId) => set({ selectedNodeId: nodeId, lastFeedback: null }),
-  deselectNode: () => set({ selectedNodeId: null, lastFeedback: null }),
 
   // Gamificación
   perderVida: () => set((s) => ({ vidas: Math.max(0, s.vidas - 1) })),

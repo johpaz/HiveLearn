@@ -11,6 +11,7 @@ const HEARTBEAT_INTERVAL = 25000 // 25 seconds
 export interface WebSocketSessionManager {
   onboardingSessions: Map<string, ServerWebSocket<any>>
   lessonSessions: Map<string, ServerWebSocket<any>>
+  programSessions: Map<string, ServerWebSocket<any>>
   eventSubscribers: Set<ServerWebSocket<any>>
 }
 
@@ -37,7 +38,14 @@ export function startHeartbeat(sessions: WebSocketSessionManager): void {
         ws.send(pingMessage)
       }
     }
-    
+
+    // Ping program sessions
+    for (const [sessionId, ws] of sessions.programSessions.entries()) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(pingMessage)
+      }
+    }
+
     // Ping event subscribers
     for (const ws of sessions.eventSubscribers) {
       if (ws.readyState === WebSocket.OPEN) {

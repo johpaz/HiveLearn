@@ -6,35 +6,22 @@ import type { TaskNode } from './scheduler/dag'
 import { runHiveLearnAgent } from './runner'
 import { AGENT_PROMPTS } from './prompts'
 import { LessonPersistence } from '../storage/LessonPersistence'
-import { nodeCache } from '../cache/NodeCache'
 
 const DEFAULT_PROMPT = 'Eres un agente educativo de HiveLearn. Responde en JSON estructurado.'
-
-/** Extrae metadatos del taskDescription para usar como cache key */
-function extractCacheKey(taskDesc: string): { conceptoSlug: string; nivel: string; rangoEdad: string } | null {
-  const concepto = taskDesc.match(/Concepto: "([^"]+)"/)?.[1]
-  const nivel = taskDesc.match(/Nivel: (\S+)/)?.[1]?.replace('.', '')
-  const rangoEdad = taskDesc.match(/Rango edad: (\S+)/)?.[1]?.replace('.', '')
-  if (!concepto || !nivel || !rangoEdad) return null
-  const conceptoSlug = concepto.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 40)
-  return { conceptoSlug, nivel, rangoEdad }
-}
 
 /** Extrae contexto de validación del taskDescription */
 function extractValidationContext(taskDesc: string): {
   rangoEdad?: string
   tema?: string
-  nodoId?: string
 } {
-  const rangoEdad = taskDesc.match(/Rango edad: (\S+)/)?.[1]?.replace('.', '')
-  const tema = taskDesc.match(/Meta: "([^"]+)"/)?.[1] || 
-               taskDesc.match(/Tema: "([^"]+)"/)?.[1]
-  const nodoId = taskDesc.match(/Nodo: "([^"]+)"/)?.[1]
-  
+  const rangoEdadMatch = taskDesc.match(/Rango edad:\s*(\S+)/)
+  const rangoEdad = rangoEdadMatch ? rangoEdadMatch[1].replace('.', '') : undefined
+  const metaMatch = taskDesc.match(/Meta:\s*"([^"]+)"/) || taskDesc.match(/Tema:\s*"([^"]+)"/)
+  const tema = metaMatch ? metaMatch[1] : undefined
+
   return {
     rangoEdad,
     tema,
-    nodoId,
   }
 }
 
@@ -59,20 +46,6 @@ export class HiveLearnExecutor {
     const { AGENT_EXECUTABLE_TOOLS } = await import('./tool-map')
     const tools = AGENT_EXECUTABLE_TOOLS[node.agentId] ?? []
 
-    // ── Node cache (solo para agentes de contenido/visual) ──────────────
-    const isCacheable = node.id.startsWith('content-') || node.id.startsWith('visual-')
-    if (isCacheable) {
-      const meta = extractCacheKey(node.taskDescription)
-      if (meta) {
-        const cached = nodeCache.get(node.agentId, meta.conceptoSlug, meta.nivel)
-        if (cached) {
-          nodeCache.hit(node.agentId, meta.conceptoSlug, meta.nivel)
-          this.persistence.saveAgentOutput(threadId, node.agentId, node.id, cached.outputJson, 0, 'ok')
-          return cached.outputJson
-        }
-      }
-    }
-
     const t0 = Date.now()
     let output = ''
     let status: 'ok' | 'failed' = 'ok'
@@ -80,7 +53,7 @@ export class HiveLearnExecutor {
     try {
       // Extraer contexto de validación del taskDescription
       const validationContext = extractValidationContext(node.taskDescription)
-      
+
       output = await runHiveLearnAgent({
         agentId: node.agentId,
         taskDescription: node.taskDescription + contextBlock,
@@ -96,11 +69,6 @@ export class HiveLearnExecutor {
     } finally {
       const durationMs = Date.now() - t0
       this.persistence.saveAgentOutput(threadId, node.agentId, node.id, output, durationMs, status)
-      // Guardar en cache si fue exitoso y es cacheable
-      if (status === 'ok' && isCacheable && output) {
-        const meta = extractCacheKey(node.taskDescription)
-        if (meta) nodeCache.set(node.agentId, meta.conceptoSlug, meta.nivel, output)
-      }
     }
 
     return output

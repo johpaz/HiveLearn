@@ -4,7 +4,7 @@
  * Gateway independiente con rutas API, WebSocket y serving de UI
  */
 import { getDb } from '../storage/sqlite'
-import { LessonPersistence, HiveLearnSwarm, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
+import { LessonPersistence, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
 import { obtenerPrograma, crearPrograma } from '../skills/gestionar-programas.skill'
 import { logger, redact } from '../utils/logger'
 import {
@@ -20,6 +20,11 @@ import {
   isWebSocketRoute,
   handleOnboardingInit,
   handleOnboardingUserMessage,
+  iniciarPrograma,
+  procesarRespuesta,
+  cleanupProgramSession,
+  startLessonSession,
+  handleLessonMessage,
   type WebSocketSessionManager
 } from '../websocket'
 import { getOrGenerateCorrelationId } from '../utils/correlation-id'
@@ -46,6 +51,7 @@ const isDev = process.env.NODE_ENV === 'development'
 const sessions: WebSocketSessionManager = {
   onboardingSessions: new Map<string, ServerWebSocket<any>>(),
   lessonSessions: new Map<string, ServerWebSocket<any>>(),
+  programSessions: new Map<string, ServerWebSocket<any>>(),
   eventSubscribers: new Set<ServerWebSocket<any>>(),
 }
 
@@ -601,70 +607,13 @@ export function createServer(): any {
 
       // POST /api/hivelearn/generate
       if (url.pathname === '/api/hivelearn/generate' && req.method === 'POST') {
-        try {
-          const body = await req.json() as {
-            perfil: any
-            meta: string
-            providerId: string
-            modelId: string
-          }
-          
-          const db = getDb()
-          updateHiveLearnAgentsProviderModel(db, body.providerId, body.modelId)
-          
-          // SSE stream
-          const encoder = new TextEncoder()
-          const { readable, writable } = new TransformStream()
-          const writer = writable.getWriter()
-          
-          const send = (data: any) => {
-            writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
-          }
-          
-          ;(async () => {
-            try {
-              const swarm = new HiveLearnSwarm({
-                onProgress: (progress) => send({ type: 'progress', payload: progress }),
-              })
-              
-              const eventHandler = (event: any) => {
-                send({ type: 'event', payload: event })
-              }
-              hlSwarmEmitter.subscribe('*', eventHandler)
-
-              const program = await swarm.run(body.perfil, body.meta)
-              send({ type: 'complete', payload: program })
-
-              hlSwarmEmitter.unsubscribe('*', eventHandler)
-              await writer.close()
-            } catch (error) {
-              send({ type: 'error', payload: { message: (error as Error).message } })
-              hlSwarmEmitter.unsubscribe('*', (e: any) => {})
-              await writer.close()
-            }
-          })()
-          
-          return addCorsHeaders(
-            new Response(readable, {
-              status: 200,
-              headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-              },
-            }),
-            req
-          )
-        } catch (e) {
-          log.error('[hivelearn/generate] Error', { error: (e as Error).message })
-          return addCorsHeaders(
-            new Response(JSON.stringify({ error: (e as Error).message }), {
-              status: 500,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-            req
-          )
-        }
+        return addCorsHeaders(
+          new Response(JSON.stringify({ error: 'Generación vía swarm en reconstrucción. Use el flujo A2UI dinámico.' }), {
+            status: 501,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+          req
+        )
       }
 
       // GET /api/hivelearn/sessions
@@ -1011,6 +960,8 @@ export function createServer(): any {
         await handleWebSocketOpen(ws, sessionId, pathname, sessions)
         if (sessionId) ws._sessionId = sessionId
         ws._isOnboarding = (pathname ?? '').includes('hivelearn-onboarding')
+        ws._isProgram    = (pathname ?? '').includes('hivelearn-program')
+        ws._isLesson     = (pathname ?? '').includes('hivelearn-lesson')
       },
 
       message(ws: any, message: any) {
@@ -1020,10 +971,37 @@ export function createServer(): any {
             ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }))
             return
           }
-          // Route onboarding messages
-          const sessionId = ws._sessionId as string | undefined
+          const sessionId   = ws._sessionId   as string | undefined
           const isOnboarding = ws._isOnboarding as boolean | undefined
-          if (isOnboarding && sessionId) {
+          const isProgram    = ws._isProgram    as boolean | undefined
+          const isLesson     = ws._isLesson     as boolean | undefined
+
+          if (isLesson && sessionId) {
+            if (data?.tipo === 'iniciar_sesion') {
+              startLessonSession(sessionId, ws)
+            } else {
+              handleLessonMessage(sessionId, data)
+            }
+          } else if (isProgram && sessionId) {
+            if (data?.type === 'iniciar_programa') {
+              iniciarPrograma(ws, {
+                perfil: data.perfil,
+                meta: data.meta,
+                session_id: sessionId,
+                alumno_id: data.alumno_id,
+              }).catch((e: Error) =>
+                log.error('[ws] program init error', { error: e.message })
+              )
+            } else if (data?.type === 'responder' && data.respuesta !== undefined) {
+              procesarRespuesta(ws, {
+                session_id: sessionId,
+                respuesta: String(data.respuesta),
+                zona_numero: Number(data.zona_numero ?? 0),
+              }).catch((e: Error) =>
+                log.error('[ws] program response error', { error: e.message })
+              )
+            }
+          } else if (isOnboarding && sessionId) {
             if (data?.type === 'init') {
               handleOnboardingInit(ws, sessionId).catch((e: Error) =>
                 log.error('[ws] onboarding init error', { error: e.message })
@@ -1040,6 +1018,10 @@ export function createServer(): any {
       },
 
       close(ws: any, code: any, reason: any) {
+        const sessionId = ws._sessionId as string | undefined
+        if (sessionId && ws._isProgram) {
+          cleanupProgramSession(sessionId)
+        }
         handleWebSocketClose(ws, code, reason, sessions)
       },
     },

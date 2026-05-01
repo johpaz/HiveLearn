@@ -253,29 +253,33 @@ export async function start(flags: string[]): Promise<void> {
 
   // Auto-build in development mode to catch errors early
   if (isDev && !skipCheck) {
-    console.log("🔨 Building in development mode...\n");
+    log.info("🔨 Building in development mode...\n");
     try {
       const { execSync } = await import("node:child_process");
       const rootDir = path.join(process.cwd(), "..", "..");
       
       // Build core
-      console.log("📦 Building core...");
+      log.info("📦 Building core...");
       execSync(
         "bun build packages/core/src/index.ts --outdir dist/core --target bun && bun build packages/core/src/gateway/index.ts --bundle --outfile dist/server.js --target bun",
         { stdio: "inherit", cwd: rootDir }
       );
       
+      // Build UI
+      log.info("📦 Building UI...");
+      execSync("bun run build", { stdio: "inherit", cwd: path.join(rootDir, "packages/ui") });
+      
       // Build CLI
-      console.log("📦 Building CLI...");
+      log.info("📦 Building CLI...");
       execSync(
         "bun run scripts/generate-ui-bundle.ts && bun build src/index.ts --outfile dist/hive.js --target bun",
         { stdio: "inherit", cwd: path.join(rootDir, "packages/cli") }
       );
       
-      console.log("✅ Build completed\n");
+      log.info("✅ Build completed\n");
     } catch (error) {
-      console.error("❌ Build failed. Fix errors and try again.");
-      console.error((error as Error).message);
+      log.error("❌ Build failed. Fix errors and try again.");
+      log.error((error as Error).message);
       process.exit(1);
     }
   }

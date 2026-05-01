@@ -270,7 +270,7 @@ export interface MundoGuardado {
   xpTotal: number
   nivel: number
   zonaActual: number
-  nodosCompletados: string[]
+  modulosCompletados: string[]
   logros: string[]
   coleccionables: string[]
   vidas: number

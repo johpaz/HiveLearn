@@ -7,6 +7,7 @@
 import type { ServerWebSocket } from 'bun'
 import { logger } from '../utils/logger'
 import { obtenerConfiguracionCoordinador } from '../skills/gestionar-instancia.skill'
+import { closeLessonSession } from './lesson-handler'
 
 const log = logger.child('websocket')
 
@@ -19,7 +20,8 @@ export function isWebSocketRoute(pathname: string): boolean {
   return (
     pathname.includes('hivelearn-onboarding') ||
     pathname.includes('hivelearn-lesson') ||
-    pathname.includes('hivelearn-events')
+    pathname.includes('hivelearn-events') ||
+    pathname.includes('hivelearn-program')
   )
 }
 
@@ -61,6 +63,9 @@ export async function handleWebSocketOpen(
   } else if (pathname.includes('lesson') && sessionId) {
     sessions.lessonSessions.set(sessionId, ws)
     log.debug('[ws] Registered lesson session', { sessionId })
+  } else if (pathname.includes('program') && sessionId) {
+    sessions.programSessions.set(sessionId, ws)
+    log.debug('[ws] Registered program session', { sessionId })
   } else if (pathname.includes('events')) {
     sessions.eventSubscribers.add(ws)
     log.debug('[ws] Registered event subscriber')
@@ -88,7 +93,14 @@ export function handleWebSocketClose(
   for (const [sessionId, sessionWs] of sessions.lessonSessions.entries()) {
     if (sessionWs === ws) {
       sessions.lessonSessions.delete(sessionId)
+      closeLessonSession(sessionId)
       log.debug('[ws] Removed lesson session', { sessionId })
+    }
+  }
+  for (const [sessionId, sessionWs] of sessions.programSessions.entries()) {
+    if (sessionWs === ws) {
+      sessions.programSessions.delete(sessionId)
+      log.debug('[ws] Removed program session', { sessionId })
     }
   }
   sessions.eventSubscribers.delete(ws)

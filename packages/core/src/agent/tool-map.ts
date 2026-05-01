@@ -11,12 +11,6 @@
 import type { Tool } from '../types/tool'
 import { AGENT_IDS } from '../agent/registry'
 import {
-  // Coordinator
-  revisarProgramaTool,
-  delegarEnjambreTool,
-  // Canvas / structured output
-  disenarEstructuraTool,
-  poblarNodoTool,
   // Content — structured output
   generarExplicacionTool,
   generarEjercicioTool,
@@ -40,14 +34,14 @@ import {
 import { generarAudioTool } from '../tools/content/generar-audio.tool'
 
 export const AGENT_EXECUTABLE_TOOLS: Record<string, Tool[]> = {
-  [AGENT_IDS.coordinator]: [delegarEnjambreTool, revisarProgramaTool],
+  [AGENT_IDS.coordinator]: [],
   [AGENT_IDS.profile]:      [clasificarIntencionTool, buscarCurriculoExistenteTool],
   [AGENT_IDS.intent]:       [clasificarIntencionTool, buscarEnHiveLearnTool],
-  [AGENT_IDS.structure]:    [disenarEstructuraTool],
-  [AGENT_IDS.explanation]:  [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool, poblarNodoTool],
-  [AGENT_IDS.exercise]:     [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool, poblarNodoTool],
-  [AGENT_IDS.quiz]:         [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool, poblarNodoTool],
-  [AGENT_IDS.challenge]:    [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool, poblarNodoTool],
+  [AGENT_IDS.structure]:    [buscarCurriculoExistenteTool, buscarEnHiveLearnTool],
+  [AGENT_IDS.explanation]:  [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool],
+  [AGENT_IDS.exercise]:     [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool],
+  [AGENT_IDS.quiz]:         [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool],
+  [AGENT_IDS.challenge]:    [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool],
   [AGENT_IDS.code]:         [generarCodigoTool, generarSvgTool, generarFramesGifTool, generarInfografiaTool],
   [AGENT_IDS.svg]:          [generarCodigoTool, generarSvgTool, generarFramesGifTool, generarInfografiaTool],
   [AGENT_IDS.gif]:          [generarCodigoTool, generarSvgTool, generarFramesGifTool, generarInfografiaTool],

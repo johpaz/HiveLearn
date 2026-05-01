@@ -64,7 +64,7 @@ export class WorldSaveManager {
       xpTotal: state.xpTotal,
       nivel: state.nivelActual,
       zonaActual: state.zonaActual,
-      nodosCompletados: state.nodosCompletados,
+      modulosCompletados: state.modulosCompletados,
       logros: state.logros.map(l => l.nombre),
       coleccionables: state.coleccionables,
       vidas: state.vidas,
@@ -197,7 +197,7 @@ export class WorldSaveManager {
       xpTotal: estado.xpTotal || 0,
       nivelActual: estado.nivel || 1,
       zonaActual: estado.zonaActual || 0,
-      nodosCompletados: estado.nodosCompletados || [],
+      modulosCompletados: estado.modulosCompletados || [],
       logros: (estado.logros || []).map(nombre => ({
         nombre,
         descripcion: '',
@@ -325,14 +325,14 @@ export class WorldRegenerator {
     const { zonas, desbloquearZona, completarZona, setZonaActual } = useMundoStore.getState()
     
     // Restaurar estado de cada zona
-    estado.nodosCompletados.forEach((nodoId, index) => {
+    estado.modulosCompletados.forEach((moduloUuid, index) => {
       completarZona(index)
     })
     
     // Set zona actual
     setZonaActual(estado.zonaActual || 0)
     
-    console.log('[WorldRegenerator] Zonas regeneradas:', estado.nodosCompletados.length)
+    console.log('[WorldRegenerator] Zonas regeneradas:', estado.modulosCompletados.length)
   }
 
   /**

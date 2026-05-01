@@ -247,7 +247,8 @@ export function SessionsListScreen() {
     return (
       (s.meta?.toLowerCase().includes(search)) ||
       (s.nombre?.toLowerCase().includes(search)) ||
-      (s.session_id?.toLowerCase().includes(search))
+      (s.session_id?.toLowerCase().includes(search)) ||
+      (s.alumno_id?.toLowerCase().includes(search))
     )
   })
 

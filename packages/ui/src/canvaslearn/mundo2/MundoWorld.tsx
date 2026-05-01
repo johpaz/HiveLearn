@@ -8,7 +8,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { Application, Container, Graphics, Text, TextStyle, Assets, Ticker, Sprite } from 'pixi.js'
 import { useMundoStore } from '../../store/mundoStore'
-import { useSwarmStore } from '../../store/swarmStore'
 import {
   TILE_SIZE,
   VIEWPORT_WIDTH,
@@ -67,7 +66,7 @@ export interface MundoWorldProps {
   onZoneInteract?: (zona: Zona) => void
   
   /** Callback cuando el alumno responde */
-  onAnswer?: (nodoId: string, respuesta: any) => void
+  onAnswer?: (moduloUuid: string, respuesta: any) => void
 }
 
 /**
@@ -137,7 +136,7 @@ export function MundoWorld({
     setZonaActual,
   } = useMundoStore()
   
-  const { setAgentStatus } = useSwarmStore()
+
 
   // ─── Inicialización ────────────────────────────────────────────────────────
 

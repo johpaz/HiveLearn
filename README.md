@@ -6,7 +6,7 @@ HiveLearn es un sistema educativo impulsado por un enjambre de 16 agentes de IA 
 
 ## ✨ Características
 
-- **16 Agentes Especializados**: Perfil, intención, estructura, explicación, ejercicios, quiz, retos, código, SVG, GIF, infografías, imágenes, gamificación, evaluación y feedback
+- **15 Agentes Especializados**: Perfil, intención, estructura del mundo, explicación, ejercicios, quiz, retos, código, SVG, GIF, infografías, imágenes, gamificación, evaluación y feedback
 - **Onboarding Conversacional**: Chat interactivo que recoge información del estudiante paso a paso
 - **Persistencia Incremental**: Guardado automático del progreso en cada paso del onboarding
 - **Reanudación**: Capacidad de retomar donde se quedó si se corta la conexión
@@ -87,11 +87,12 @@ bun run --cwd packages/server start
 
 ### Componentes Principales
 
-1. **SwarmCanvas**: Animación de 16 agentes trabajando
-2. **ChatOnboardingScreen**: Conversacional responsivo con guardado incremental
-3. **A2UILessonScreen**: Entrega de lección interactiva
-4. **EvaluationScreen**: Evaluación final
-5. **ResultScreen**: Resultados con gamificación
+1. **ChatOnboardingScreen**: Conversacional responsivo con guardado incremental
+2. **HiveLearnSwarmPage**: Visualización del enjambre generando el programa
+3. **MundoWorld (PixiJS)**: Mundo pixel art interactivo con zonas de aprendizaje
+4. **A2UILessonScreen**: Entrega de contenido dinámico vía A2UI por WebSocket
+5. **EvaluationScreen**: Evaluación final
+6. **ResultScreen**: Resultados con gamificación
 
 ## 🗄️ Base de Datos
 
@@ -117,7 +118,7 @@ La BD se almacena en:
 |--------|----------|-------------|
 | GET | `/api/hivelearn/config` | Obtener configuración |
 | POST | `/api/hivelearn/config` | Guardar configuración |
-| POST | `/api/hivelearn/generate` | Generar lección (SSE) |
+| POST | `/api/hivelearn/generate` | Generar programa (WS) |
 | GET | `/api/hivelearn/sessions` | Listar sesiones |
 
 ### WebSocket
@@ -125,18 +126,18 @@ La BD se almacena en:
 | Endpoint | Descripción |
 |----------|-------------|
 | `/hivelearn-onboarding` | Chat de onboarding |
-| `/hivelearn-lesson` | Entrega de lección |
+| `/hivelearn-program` | Flujo del programa de formación (A2UI + mundo PixiJS) |
 | `/hivelearn-events` | Eventos en tiempo real |
 
 ## 🧠 Enjambre de Agentes
 
 ### Coordinador
-- **hl-coordinator-agent**: Coordina los 16 workers especializados
+- **hl-coordinator-agent**: Coordina los 15 workers especializados
 
-### Workers (16 agentes)
+### Workers (15 agentes)
 1. **hl-profile-agent**: Construye perfil del alumno
 2. **hl-intent-agent**: Extrae tema y objetivo
-3. **hl-structure-agent**: Diseña esqueleto del programa
+3. **hl-structure-agent**: Diseña la estructura del mundo de aprendizaje PixiJS (zonas y módulos)
 4. **hl-explanation-agent**: Genera explicaciones
 5. **hl-exercise-agent**: Crea ejercicios prácticos
 6. **hl-quiz-agent**: Genera preguntas de quiz

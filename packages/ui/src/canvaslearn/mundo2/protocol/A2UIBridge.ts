@@ -120,7 +120,7 @@ export class A2UIBridge {
    * Procesar resultado de evaluación
    */
   private procesarResultado(event: MundoResultado): void {
-    const { agregarXP, completarNodo, guardarRespuesta, desbloquearLogro } = useMundoStore.getState()
+    const { agregarXP, completarModulo, guardarRespuesta, desbloquearLogro } = useMundoStore.getState()
     
     const { calificacion, xp, feedback, razonamiento, pista, siguiente, logro_desbloqueado } = event.datos
 
@@ -140,9 +140,9 @@ export class A2UIBridge {
     // Guardar respuesta
     guardarRespuesta(zonaActual.moduloUuid || '', 1, correcta, xp)
 
-    // Completar nodo si es correcto
+    // Completar módulo si es correcto
     if (correcta) {
-      completarNodo(zonaActual.moduloUuid || '', xp, correcta)
+      completarModulo(zonaActual.moduloUuid || '', xp, correcta)
       
       // Marcar zona como completada
       this.mundoRef.zoneManager?.completarZona(zonaActual.numero)

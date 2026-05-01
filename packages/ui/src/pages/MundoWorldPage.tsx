@@ -174,14 +174,14 @@ export function MundoWorldPage() {
     // navigate(`/lesson?zona=${zona.numero}&modulo=${zona.moduloUuid}`)
   }, [])
 
-  const handleAnswer = useCallback((nodoId: string, respuesta: any) => {
-    console.log('[MundoWorldPage] Respuesta del alumno:', { nodoId, respuesta })
+  const handleAnswer = useCallback((moduloUuid: string, respuesta: any) => {
+    console.log('[MundoWorldPage] Respuesta del alumno:', { moduloUuid, respuesta })
     
     // Enviar respuesta vía WebSocket
     if (bridgeRef.current && sessionId) {
       bridgeRef.current.enviarRespuesta(
-        nodoId,
-        nodoId,
+        moduloUuid,
+        moduloUuid,
         respuesta,
         1 // intento
       )

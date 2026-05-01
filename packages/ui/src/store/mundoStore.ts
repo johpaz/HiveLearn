@@ -97,10 +97,10 @@ export interface MundoState {
   /** Módulo actual */
   moduloActual: string | null
   
-  /** Nodos completados */
-  nodosCompletados: string[]
+  /** Módulos completados */
+  modulosCompletados: string[]
   
-  /** Respuestas del alumno (por nodo) */
+  /** Respuestas del alumno (por módulo) */
   respuestas: Record<string, {
     intento: number
     correcta: boolean
@@ -196,8 +196,8 @@ export interface MundoStore extends MundoState {
   
   // Módulo
   setModuloActual: (moduloId: string | null) => void
-  completarNodo: (nodoId: string, xpGanada: number, correcta: boolean) => void
-  guardarRespuesta: (nodoId: string, intento: number, correcta: boolean, xpGanada: number) => void
+  completarModulo: (moduloUuid: string, xpGanada: number, correcta: boolean) => void
+  guardarRespuesta: (moduloUuid: string, intento: number, correcta: boolean, xpGanada: number) => void
   
   // Jugador
   setJugadorPosicion: (x: number, y: number) => void
@@ -324,7 +324,7 @@ const initialState: MundoState = {
   zonas: [],
   zonaActual: 0,
   moduloActual: null,
-  nodosCompletados: [],
+  modulosCompletados: [],
   respuestas: {},
   
   jugador: initialJugadorEstado,
@@ -374,7 +374,7 @@ export const useMundoStore = create<MundoStore>()(persist((set, get) => ({
     zonas: [],
     zonaActual: 0,
     moduloActual: null,
-    nodosCompletados: [],
+    modulosCompletados: [],
     respuestas: {},
     jugador: { ...initialJugadorEstado },
     vidas: 3,
@@ -487,21 +487,21 @@ export const useMundoStore = create<MundoStore>()(persist((set, get) => ({
   
   setModuloActual: (moduloId) => set({ moduloActual: moduloId }),
 
-  completarNodo: (nodoId, xpGanada, correcta) => set((state) => {
+  completarModulo: (moduloUuid, xpGanada, correcta) => set((state) => {
     const rachaIncrementada = correcta ? state.racha + 1 : 0
     const nuevaMejorRacha = Math.max(state.mejorRacha, rachaIncrementada)
     
     return {
-      nodosCompletados: [...state.nodosCompletados, nodoId],
+      modulosCompletados: [...state.modulosCompletados, moduloUuid],
       racha: rachaIncrementada,
       mejorRacha: nuevaMejorRacha,
     }
   }),
 
-  guardarRespuesta: (nodoId, intento, correcta, xpGanada) => set((state) => ({
+  guardarRespuesta: (moduloUuid, intento, correcta, xpGanada) => set((state) => ({
     respuestas: {
       ...state.respuestas,
-      [nodoId]: {
+      [moduloUuid]: {
         intento,
         correcta,
         xp_ganada: xpGanada,
@@ -608,7 +608,7 @@ export const useMundoStore = create<MundoStore>()(persist((set, get) => ({
     zonas: [],
     zonaActual: 0,
     moduloActual: null,
-    nodosCompletados: [],
+    modulosCompletados: [],
     respuestas: {},
     jugador: { ...initialJugadorEstado },
     vidas: 3,
@@ -645,7 +645,7 @@ export const useMundoStore = create<MundoStore>()(persist((set, get) => ({
     coleccionables: state.coleccionables,
     zonas: state.zonas,
     zonaActual: state.zonaActual,
-    nodosCompletados: state.nodosCompletados,
+    modulosCompletados: state.modulosCompletados,
     respuestas: state.respuestas,
     vidas: state.vidas,
     mejorRacha: state.mejorRacha,

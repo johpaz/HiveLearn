@@ -3,14 +3,11 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useLessonStore } from "@/store/lessonStore";
 import {
   RefreshCw, Settings2, Crown, Shield, Bot, Terminal,
-  Wifi, WifiOff, Zap, Eye, Grid3X3, Rocket, Clock,
+  Wifi, WifiOff, Zap,
 } from "lucide-react";
 import { useHiveLearnLive, type AgentLiveStatus } from "@/hooks/useHiveLearnLive";
 import { AgentConfigDialog } from "@/modules/hivelearn/AgentConfigDialog";
 import { apiClient } from "@/lib/api";
-import { LaboratoryWorld } from "@/canvaslearn/mundo1/LaboratoryWorld";
-import type { AgentStatus } from "@/canvaslearn/mundo1/constants";
-
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface HLAgent {
   id: string;
@@ -38,7 +35,7 @@ interface AgentState {
 const AGENT_META: Record<string, { icon: any; emoji: string; label: string; accion: string; color: string }> = {
   "hl-profile-agent":      { icon: Bot,         emoji: "👤", label: "Perfil",       accion: "Analiza edad, nivel y estilo de aprendizaje", color: "blue" },
   "hl-intent-agent":       { icon: Crown,        emoji: "🎯", label: "Intención",    accion: "Extrae el tema y define los objetivos", color: "amber" },
-  "hl-structure-agent":    { icon: Terminal,     emoji: "🗺️", label: "Estructura",   accion: "Diseña el mapa de nodos del currículo", color: "indigo" },
+  "hl-structure-agent":    { icon: Terminal,     emoji: "🗺️", label: "Estructura",   accion: "Diseña las zonas del mundo de aprendizaje PixiJS", color: "indigo" },
   "hl-explanation-agent":  { icon: Bot,          emoji: "📖", label: "Explicación",  accion: "Genera teoría clara y ejemplos", color: "emerald" },
   "hl-exercise-agent":     { icon: Zap,          emoji: "✏️", label: "Ejercicios",   accion: "Crea práctica activa paso a paso", color: "orange" },
   "hl-quiz-agent":         { icon: Bot,          emoji: "❓", label: "Quiz",         accion: "Prepara preguntas de verificación", color: "pink" },
@@ -56,6 +53,7 @@ const AGENT_META: Record<string, { icon: any; emoji: string; label: string; acci
 };
 
 const WORKER_IDS = Object.keys(AGENT_META).filter(id => id !== "hl-coordinator-agent");
+const TOTAL_WORKERS = WORKER_IDS.length;
 
 const COLOR_MAP: Record<string, { bg: string; border: string; text: string; glow: string; iconBg: string; badgeBorder: string }> = {
   blue: { bg: "bg-blue-500/10", border: "border-blue-500/30", text: "text-blue-400", glow: "shadow-[0_0_20px_rgba(59,130,246,0.25)]", iconBg: "bg-blue-500/15", badgeBorder: "border-blue-500/20" },
@@ -292,7 +290,7 @@ function CoordinatorCard({
               <StatusPill status={agentState.status} />
             </div>
             <p className="text-muted-foreground text-sm leading-relaxed mb-3">
-              {coordinator?.description ?? "Coordina el enjambre educativo completo. Recibe el perfil del alumno y su meta, delega tareas a 15 agentes workers, ensambla el LessonProgram y lo renderiza vía A2UI."}
+              {coordinator?.description ?? "Coordina el enjambre educativo completo. Recibe el perfil del alumno y su meta, delega tareas a 14 agentes workers, ensambla el programa y lo renderiza vía A2UI."}
             </p>
 
 
@@ -401,7 +399,6 @@ export function HiveLearnSwarmPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [agentStates, setAgentStates] = useState<Record<string, AgentState>>({});
-  const [viewMode, setViewMode] = useState<'world' | 'grid'>('world');
   const [isMuted, setIsMuted] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
   const [countdown, setCountdown] = useState(15);
@@ -412,15 +409,6 @@ export function HiveLearnSwarmPage() {
 
   const { isConnected, isGenerating: liveGenerating, agentStatuses, currentAgentId } = useHiveLearnLive();
   const isGenerating = liveGenerating || generationTriggered;
-
-  // Convert agentStatuses to AgentStatus type for PixiSwarmWorld
-  const pixiAgentStatuses: Record<string, AgentStatus> = {}
-  for (const [agentId, status] of Object.entries(agentStatuses)) {
-    if (status === 'running') pixiAgentStatuses[agentId] = 'running'
-    else if (status === 'completed') pixiAgentStatuses[agentId] = 'completed'
-    else if (status === 'failed') pixiAgentStatuses[agentId] = 'failed'
-    else pixiAgentStatuses[agentId] = 'idle'
-  }
 
   // Calculate progress based on completed agents
   const totalAgents = Object.keys(AGENT_META).length
@@ -534,11 +522,11 @@ export function HiveLearnSwarmPage() {
   ).length;
 
   const completedCount = Object.values(agentStates).filter(s => s.status === "completed").length;
+  const allAgentsCompleted = completedCount >= TOTAL_WORKERS && !isGenerating;
 
   // ─── Transición automática al Mundo de Aprendizaje ─────────────────────────
   
-  // Detectar cuando todos los agentes están completados
-  const allAgentsCompleted = completedCount >= 16 && !isGenerating;
+
 
   useEffect(() => {
     if (allAgentsCompleted && !showTransition) {
@@ -599,34 +587,6 @@ export function HiveLearnSwarmPage() {
         <div className="flex items-center gap-3 shrink-0">
           <LiveBadge isConnected={isConnected} />
           
-          {/* View mode toggle */}
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-secondary/50 p-1">
-            <button
-              onClick={() => setViewMode('world')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
-                viewMode === 'world'
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              title="Vista Mundo PixiJS"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              Mundo
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
-                viewMode === 'grid'
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              title="Vista Grid"
-            >
-              <Grid3X3 className="h-3.5 w-3.5" />
-              Grid
-            </button>
-          </div>
-          
           <button
             className="p-2 rounded-xl glass-card hover:border-amber-500/30 transition-all group shadow-sm"
             onClick={fetchAgents}
@@ -639,66 +599,7 @@ export function HiveLearnSwarmPage() {
 
       </div>
 
-      {/* ── PixiJS Laboratory World View ── */}
-      {viewMode === 'world' && (
-        <div className="relative rounded-2xl border border-border/50 overflow-hidden glass-card w-full">
-          <LaboratoryWorld
-            agentStatuses={pixiAgentStatuses}
-            currentAgentId={currentAgentId}
-            progress={progress}
-            mensaje={isGenerating ? 'Generando lección...' : 'Listo'}
-            soundEnabled={!isMuted}
-            volume={0.3}
-          />
-          
-          {/* Botón Comenzar Aventura (solo cuando generación completa) */}
-          {allAgentsCompleted && !showTransition && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-              <button
-                onClick={handleIrAlMundo}
-                className="group relative px-8 py-4 bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl font-black text-lg shadow-2xl hover:shadow-amber-500/50 transition-all hover:scale-105 animate-pulse"
-              >
-                <span className="flex items-center gap-3 text-white">
-                  <Rocket className="h-6 w-6 group-hover:rotate-12 transition-transform" />
-                  🚀 COMENZAR AVENTURA
-                  <Rocket className="h-6 w-6 group-hover:-rotate-12 transition-transform" />
-                </span>
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity blur-xl" />
-              </button>
-            </div>
-          )}
-          
-          {/* Overlay de Transición */}
-          {showTransition && countdown > 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/80 to-amber-900/80 backdrop-blur-md">
-              <div className="text-center space-y-6">
-                <div className="text-6xl mb-4 animate-bounce">🚀</div>
-                <h3 className="text-3xl font-black text-white">
-                  ¡Programa Listo!
-                </h3>
-                <p className="text-xl text-amber-200">
-                  Tu aventura de aprendizaje comienza en...
-                </p>
-                <div className="text-7xl font-black text-amber-400 animate-pulse">
-                  {countdown}
-                </div>
-                <p className="text-sm text-white/70">
-                  O haz click para ir ahora
-                </p>
-                <button
-                  onClick={handleIrAlMundo}
-                  className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all hover:scale-105"
-                >
-                  Ir Ahora →
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── Coordinator & Workers Grid View ── */}
-      {viewMode === 'grid' && (
         <div className="space-y-6">
           {/* ── Coordinator (prominent, first) ── */}
           <CoordinatorCard
@@ -714,7 +615,7 @@ export function HiveLearnSwarmPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-widest">
-              15 Agentes Workers
+              {TOTAL_WORKERS} Agentes Workers
             </span>
           </div>
           <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest">
@@ -787,7 +688,6 @@ export function HiveLearnSwarmPage() {
         onSuccess={handleConfigSuccess}
       />
         </div>
-      )}
       </div>
     </>
   );
