@@ -99,6 +99,9 @@ export function ProviderManager({ providers, onProviderToggle }: ProviderManager
     setStatus(p => ({ ...p, [pid]: "idle" }));
     try {
       await apiClient(`/api/providers/${pid}/api-key`, { method: "POST", body: { apiKey: key.trim() }, showError: false });
+      // Auto-activate the provider after setting the key
+      await apiClient(`/api/providers/${pid}/toggle`, { method: "PUT", body: { active: true }, showError: false });
+      
       setStatus(p => ({ ...p, [pid]: "success" }));
       setApiKeys(p => ({ ...p, [pid]: "" }));
       onProviderToggle?.();

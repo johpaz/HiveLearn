@@ -90,8 +90,9 @@ export function HiveLearnConfigPage() {
         }
       }
 
-      // Build ProviderOption[] for swarm tab (existing behavior)
+      // Build ProviderOption[] for swarm tab (filtered by enabled & active)
       const allProviders: ProviderOption[] = rawProviders
+        .filter(p => p.enabled === 1 && p.active === 1)
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(p => ({
           id: p.id,
@@ -130,7 +131,7 @@ export function HiveLearnConfigPage() {
         });
 
       const activeModels: ModelOption[] = rawModels
-        .filter(m => m.enabled || m.active)
+        .filter(m => m.enabled === 1 && m.active === 1)
         .map(m => ({
           id: m.id,
           name: m.name,

@@ -44,12 +44,16 @@ interface Agent {
 interface Provider {
   id: string;
   name: string;
+  enabled: number;
+  active: number;
 }
 
 interface Model {
   id: string;
   name: string;
   provider_id: string;
+  enabled: number;
+  active: number;
 }
 
 interface AgentConfig {
@@ -323,8 +327,8 @@ export function SwarmVisualizer({ onAgentsChange }: SwarmVisualizerProps) {
         apiClient<{ models: Model[] }>("/api/models", { showError: false }),
       ]);
       setAgents(agentsData.agents || []);
-      setProviders(providersData.providers || []);
-      setModels(modelsData.models || []);
+      setProviders((providersData.providers || []).filter(p => p.enabled === 1 && p.active === 1));
+      setModels((modelsData.models || []).filter(m => m.enabled === 1 && m.active === 1));
       onAgentsChange?.(agentsData.agents?.length || 0);
     } catch (e) {
       console.error(e);
