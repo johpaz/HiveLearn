@@ -161,40 +161,40 @@ export function ProviderManager({ providers, onProviderToggle }: ProviderManager
   const activeCount = providers.filter(p => p.active === 1).length;
 
   return (
-    <div className="space-y-32 animate-in fade-in duration-1000 pb-32">
-      {/* ── Stitch Refined Header ───────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-16">
-        <div className="space-y-8">
-          <div className="flex items-center gap-6">
-            <div className="h-px w-20 bg-hive-amber/40" />
-            <span className="text-[12px] font-black tracking-[0.8em] uppercase text-hive-amber/70">
-              Infraestructura_Proveedores_v4
+    <div className="space-y-16 animate-in fade-in duration-1000 pb-32">
+      {/* ── Compact Header ───────────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-10">
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="h-px w-12 bg-hive-amber/40" />
+            <span className="text-[10px] font-black tracking-[0.6em] uppercase text-hive-amber/70">
+              Gestión_Infraestructura
             </span>
           </div>
-          <h2 className="text-8xl font-black tracking-tighter text-white leading-[0.8] uppercase">
-            Control de <span className="text-hive-amber italic block mt-4">Proveedores_IO</span>
+          <h2 className="text-5xl font-black tracking-tighter text-white leading-none uppercase">
+            Control de <span className="text-hive-amber italic block mt-2">Proveedores</span>
           </h2>
-          <p className="text-xl font-medium text-white/30 max-w-2xl italic leading-relaxed">
-            Orquestación de terminales de procesamiento. Conmuta entre proveedores locales y en la nube para optimizar la latencia del enjambre.
+          <p className="text-sm font-medium text-white/20 max-w-xl italic">
+            Configuración y orquestación de terminales de cómputo para el enjambre.
           </p>
         </div>
 
-        <div className="flex items-center gap-14 px-14 py-8 rounded-[3rem] bg-white/[0.01] backdrop-blur-3xl border border-white/[0.03] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center gap-10 px-10 py-6 rounded-2xl bg-white/[0.01] border border-white/[0.03]">
           <div className="text-right">
-            <div className="flex items-center justify-end gap-4 mb-2">
-              <div className="h-2 w-2 rounded-full bg-hive-connected animate-pulse" />
-              <span className="text-[11px] font-black uppercase tracking-[0.5em] text-white/30">Estado_Red</span>
+            <div className="flex items-center justify-end gap-3 mb-1">
+              <div className="h-1.5 w-1.5 rounded-full bg-hive-connected animate-pulse" />
+              <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/30">Estado_Red</span>
             </div>
-            <span className="text-5xl font-black text-hive-amber tabular-nums leading-none">
+            <span className="text-4xl font-black text-hive-amber tabular-nums">
               {activeCount.toString().padStart(2, '0')}
-              <span className="text-xl text-white/10 ml-4 italic">/ {providers.length.toString().padStart(2, '0')}</span>
+              <span className="text-base text-white/10 ml-3 italic">/ {providers.length.toString().padStart(2, '0')}</span>
             </span>
           </div>
         </div>
       </div>
 
-      {/* ── Grid — Obsidian Architecture Refined by Stitch ──────────── */}
-      <div className="grid grid-cols-1 gap-16">
+      {/* ── Grid 2 Columns (Starting from MD) ────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {providers.map((prov, idx) => {
           const isActive = prov.active === 1;
           const isLoadingKey = loading[prov.id];
@@ -205,194 +205,128 @@ export function ProviderManager({ providers, onProviderToggle }: ProviderManager
           return (
             <div
               key={prov.id}
-              className={`group relative rounded-[4rem] transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)]
+              className={`group relative rounded-[2rem] transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]
                 ${isActive 
-                  ? "bg-white/[0.02] shadow-[0_128px_256px_-64px_rgba(0,0,0,0.9)]" 
-                  : "bg-white/[0.005] opacity-30 grayscale hover:opacity-50 hover:grayscale-0 hover:scale-[1.01]"
+                  ? "bg-white/[0.02] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)]" 
+                  : "bg-white/[0.005] opacity-30 grayscale"
                 }
-                border border-white/[0.02] overflow-hidden
+                border border-white/[0.02] overflow-hidden flex flex-col
               `}
-              style={{ animationDelay: `${idx * 200}ms` }}
             >
-              {/* Atmospheric Glow (Stitch Directives) */}
               <div 
-                className={`absolute -top-64 -right-64 w-[50rem] h-[50rem] rounded-full blur-[150px] transition-all duration-1000 pointer-events-none opacity-0
-                  ${isActive ? "group-hover:opacity-[0.12]" : ""}
+                className={`absolute -top-16 -right-16 w-[20rem] h-[20rem] rounded-full blur-[80px] transition-all duration-1000 pointer-events-none opacity-0
+                  ${isActive ? "group-hover:opacity-[0.08]" : ""}
                 `}
                 style={{ background: `radial-gradient(circle, hsl(var(${cat.accentVar})), transparent 70%)` }}
               />
 
-              <div className="relative z-10 p-12 md:p-20">
-                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-16">
-                  <div className="flex-1 space-y-12">
-                    {/* Header Row */}
-                    <div className="flex items-start gap-12">
-                      <div className={`p-8 rounded-3xl bg-white/[0.02] border border-white/[0.05] transition-all duration-1000
-                        ${isActive ? cat.textClass + " scale-110 shadow-[0_0_40px_rgba(255,255,255,0.05)]" : "text-white/5"}
+              <div className="relative z-10 p-8 flex-1 flex flex-col justify-between space-y-8">
+                <div className="flex items-start justify-between gap-6">
+                  <div className="flex items-start gap-6">
+                    <div className={`p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] transition-all
+                      ${isActive ? cat.textClass : "text-white/5"}
+                    `}>
+                      <cat.icon className="h-6 w-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <span className={`text-[8px] font-black uppercase tracking-[0.3em] ${cat.textClass} px-2 py-0.5 rounded bg-white/[0.02] border border-white/[0.05]`}>
+                        {cat.label}
+                      </span>
+                      <h3 className={`text-2xl font-black tracking-tight uppercase
+                        ${isActive ? "text-white" : "text-white/10"}
                       `}>
-                        <cat.icon className="h-12 w-12" />
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-6 mb-4">
-                          <span className={`text-[11px] font-black uppercase tracking-[0.6em] ${cat.textClass} px-5 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]`}>
-                            {cat.label}_PROTOCOL
-                          </span>
-                          {prov.isLocal && (
-                            <span className="text-[11px] font-black uppercase tracking-[0.6em] text-hive-cyan px-5 py-2 rounded-xl bg-hive-cyan/5 border border-hive-cyan/10">
-                              LOCAL_NODE
-                            </span>
-                          )}
-                        </div>
-                        <h3 className={`text-6xl font-black tracking-tighter uppercase transition-all duration-1000
-                          ${isActive ? "text-white" : "text-white/10"}
-                        `}>
-                          {prov.name}
-                        </h3>
-                      </div>
-                    </div>
-
-                    {/* Metadata Grid (Editorial Staging) */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
-                      <div className="space-y-3">
-                        <span className="block text-[10px] font-black uppercase tracking-[0.5em] text-white/10 italic">Identificador</span>
-                        <span className="block text-sm font-mono text-white/20">ID::{prov.id.toUpperCase()}</span>
-                      </div>
-                      {prov.maxContext && (
-                        <div className="space-y-3">
-                          <span className="block text-[10px] font-black uppercase tracking-[0.5em] text-white/10 italic">Capacidad_Ventana</span>
-                          <span className="block text-sm font-mono text-hive-cyan/40">{prov.maxContext.toLocaleString()} TOKENS</span>
-                        </div>
-                      )}
-                      <div className="space-y-3">
-                        <span className="block text-[10px] font-black uppercase tracking-[0.5em] text-white/10 italic">Nodos_Registrados</span>
-                        <span className="block text-sm font-mono text-white/20">{prov.modelCount.toString().padStart(2, '0')} UNIDADES</span>
-                      </div>
-                      <div className="space-y-3">
-                        <span className="block text-[10px] font-black uppercase tracking-[0.5em] text-white/10 italic">Seguridad_SSL</span>
-                        <div className="flex items-center gap-3">
-                          <div className={`h-2 w-2 rounded-full ${prov.hasApiKey || prov.isLocal ? "bg-hive-connected" : "bg-hive-amber"} animate-pulse`} />
-                          <span className={`text-[11px] font-black uppercase tracking-[0.4em] ${prov.hasApiKey || prov.isLocal ? "text-hive-connected/60" : "text-hive-amber/60"}`}>
-                            {prov.isLocal ? "BYPASS" : prov.hasApiKey ? "ENCRYPTED" : "REQUIRED"}
-                          </span>
-                        </div>
-                      </div>
+                        {prov.name}
+                      </h3>
                     </div>
                   </div>
 
-                  {/* Skeuomorphic Activation Switch (Stitch) */}
-                  <div className="flex items-center gap-12">
-                    <div className="hidden xl:block h-32 w-px bg-white/[0.03]" />
+                  <button
+                    onClick={() => handleToggle(prov.id, isActive)}
+                    disabled={isToggling}
+                    className={`relative h-14 w-14 rounded-2xl transition-all active:scale-95 flex items-center justify-center overflow-hidden flex-shrink-0
+                      ${isActive ? "bg-hive-amber text-[#2a1700]" : "bg-white/[0.02] text-white/10 hover:bg-white/[0.05]"}
+                    `}
+                  >
+                    {isToggling ? <Loader2 className="h-5 w-5 animate-spin" /> : <Power className="h-6 w-6" />}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6 py-6 border-y border-white/[0.03]">
+                  <div className="space-y-1">
+                    <span className="block text-[8px] font-black uppercase tracking-[0.3em] text-white/10">Nodos</span>
+                    <span className="block text-xs font-mono text-white/20">{prov.modelCount.toString().padStart(2, '0')} UNITS</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="block text-[8px] font-black uppercase tracking-[0.3em] text-white/10">Auth</span>
+                    <div className="flex items-center gap-2">
+                      <div className={`h-1 w-1 rounded-full ${prov.hasApiKey || prov.isLocal ? "bg-hive-connected" : "bg-hive-amber"} animate-pulse`} />
+                      <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${prov.hasApiKey || prov.isLocal ? "text-hive-connected/60" : "text-hive-amber/60"}`}>
+                        {prov.isLocal ? "BYPASS" : prov.hasApiKey ? "PASS" : "REQUIRED"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {isOllama ? (
                     <button
-                      onClick={() => handleToggle(prov.id, isActive)}
-                      disabled={isToggling}
-                      className={`relative group/toggle h-32 w-32 rounded-[3.5rem] transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)]
-                        ${isActive 
-                          ? "bg-hive-amber text-[#2a1700] shadow-[0_64px_128px_-32px_rgba(245,158,11,0.5)]" 
-                          : "bg-white/[0.02] text-white/10 hover:bg-white/[0.05] hover:text-white/30"
-                        }
-                        active:scale-95 flex items-center justify-center overflow-hidden
-                      `}
+                      onClick={handleOllamaImport}
+                      disabled={ollamaImporting}
+                      className="relative w-full h-12 rounded-xl overflow-hidden bg-hive-cyan/90 text-[#002a2a] transition-all active:scale-98"
                     >
-                      {/* Internal shadow for skeuomorphic depth */}
-                      <div className={`absolute inset-0 rounded-[3.5rem] border-t-2 border-l-2 transition-all duration-1000
-                        ${isActive ? "border-white/30" : "border-white/5"}
-                      `} />
-                      <div className={`absolute inset-0 rounded-[3.5rem] border-b-2 border-r-2 transition-all duration-1000
-                        ${isActive ? "border-black/20" : "border-black/10"}
-                      `} />
-                      
-                      {isToggling ? (
-                        <Loader2 className="h-10 w-10 animate-spin" />
-                      ) : (
-                        <Power className={`h-10 w-10 transition-all duration-1000 ${isActive ? "scale-110 drop-shadow-[0_0_15px_rgba(0,0,0,0.3)]" : ""}`} />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Sub-Interface (Glassmorphic Wells) */}
-                <div className="mt-20 space-y-12">
-                  <div className="h-px bg-gradient-to-r from-white/[0.05] via-white/[0.02] to-transparent" />
-
-                  <div className="flex flex-col xl:flex-row gap-16">
-                    {/* Endpoint Metadata */}
-                    {prov.base_url && (
-                      <div className="flex-1 space-y-6">
-                        <div className="flex items-center gap-6">
-                          <Globe className="h-5 w-5 text-white/20" />
-                          <span className="text-[11px] font-black uppercase tracking-[0.6em] text-white/20 italic">Acceso_Topológico</span>
-                        </div>
-                        <div className="p-10 rounded-[2rem] bg-white/[0.005] border border-white/[0.03] font-mono text-sm text-white/30 break-all transition-all hover:bg-white/[0.01] hover:text-white/50">
-                          {prov.base_url}
-                        </div>
+                      <div className="relative z-10 flex items-center justify-center gap-3 text-[10px] font-black uppercase tracking-[0.2em]">
+                        {ollamaImporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Layers className="h-3 w-3" />}
+                        {ollamaImporting ? "ESCANEANDO..." : "Sincronizar Local"}
                       </div>
-                    )}
-
-                    {/* Auth / Node Actions */}
-                    <div className="flex-[1.5] space-y-8">
-                      {isOllama ? (
-                        <div className="space-y-8">
-                          <div className="flex items-center gap-6">
-                            <Download className="h-5 w-5 text-hive-cyan" />
-                            <span className="text-[11px] font-black uppercase tracking-[0.6em] text-hive-cyan/60 italic">Motor_Sincronización</span>
-                          </div>
-                          <button
-                            onClick={handleOllamaImport}
-                            disabled={ollamaImporting}
-                            className="relative w-full h-20 rounded-[2rem] overflow-hidden group/sync transition-all duration-700 active:scale-98 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.4)]"
-                          >
-                            <div className="absolute inset-0 bg-hive-cyan opacity-90 group-hover/sync:opacity-100 group-hover/sync:scale-105 transition-all duration-1000" />
-                            <div className="relative z-10 flex items-center justify-center gap-6 text-[#002a2a] text-[13px] font-black uppercase tracking-[0.3em]">
-                              {ollamaImporting ? <Loader2 className="h-6 w-6 animate-spin" /> : <Layers className="h-6 w-6" />}
-                              {ollamaImporting ? "ESCANEANDO_NODOS..." : "SINCRONIZAR_INFRAESTRUCTURA_LOCAL"}
-                            </div>
-                          </button>
-                        </div>
-                      ) : !prov.isLocal && (
-                        <div className="space-y-8">
-                          <div className="flex items-center gap-6">
-                            <KeyRound className="h-5 w-5 text-white/20" />
-                            <span className="text-[11px] font-black uppercase tracking-[0.6em] text-white/20 italic">Protocolo_Autenticación</span>
-                          </div>
-                          <div className="flex flex-col md:flex-row gap-6">
-                            <div className="relative flex-1">
-                              <input
-                                type={showKey[prov.id] ? "text" : "password"}
-                                value={apiKeys[prov.id] || ""}
-                                onChange={e => setApiKeys(p => ({ ...p, [prov.id]: e.target.value }))}
-                                placeholder="HL_SECURE_TOKEN_..."
-                                className="w-full h-20 px-10 pr-20 rounded-[2rem] bg-white/[0.01] border border-white/[0.05] outline-none text-sm font-mono text-white/70 focus:bg-white/[0.03] focus:border-hive-amber/40 transition-all placeholder:text-white/5"
-                              />
-                              <button
-                                onClick={() => setShowKey(p => ({ ...p, [prov.id]: !showKey[prov.id] }))}
-                                className="absolute right-8 top-1/2 -translate-y-1/2 text-white/10 hover:text-white/40 transition-colors p-2"
-                              >
-                                {showKey[prov.id] ? <EyeOff className="h-6 w-6" /> : <Eye className="h-6 w-6" />}
-                              </button>
-                            </div>
-                            <button
-                              onClick={() => handleSaveKey(prov.id)}
-                              disabled={isLoadingKey || !apiKeys[prov.id]?.trim()}
-                              className="relative h-20 px-12 rounded-[2rem] overflow-hidden group/save transition-all duration-700 active:scale-95 disabled:opacity-20 shadow-[0_32px_64px_-16px_rgba(245,158,11,0.2)]"
-                            >
-                              <div className="absolute inset-0 bg-hive-amber opacity-90 group-hover/save:opacity-100 transition-all duration-1000" />
-                              <div className="relative z-10 flex items-center justify-center gap-4 text-[#2a1700] text-[13px] font-black uppercase tracking-[0.3em]">
-                                {isLoadingKey ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-                                VALIDAR
-                              </div>
-                            </button>
-                          </div>
-                        </div>
+                    </button>
+                  ) : !prov.isLocal && (
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex-1">
+                        <input
+                          type={showKey[prov.id] ? "text" : "password"}
+                          value={apiKeys[prov.id] || ""}
+                          onChange={e => setApiKeys(p => ({ ...p, [prov.id]: e.target.value }))}
+                          placeholder={prov.hasApiKey ? "TOKEN_CONFIGURADO" : "API_KEY"}
+                          className="w-full h-12 px-5 pr-12 rounded-xl bg-white/[0.01] border border-white/[0.05] outline-none text-[10px] font-mono text-white/40 focus:bg-white/[0.02] focus:border-hive-amber/20 transition-all"
+                        />
+                        <button
+                          onClick={() => setShowKey(p => ({ ...p, [prov.id]: !showKey[prov.id] }))}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-white/10 hover:text-white/30 p-1 flex items-center justify-center"
+                        >
+                          {showKey[prov.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => handleSaveKey(prov.id)}
+                        disabled={isLoadingKey || !apiKeys[prov.id]?.trim()}
+                        className={`h-12 px-5 rounded-xl transition-all active:scale-95 disabled:opacity-10 flex items-center justify-center
+                          ${status[prov.id] === "success" ? "bg-hive-connected text-black" : "bg-hive-amber/90 hover:bg-hive-amber text-[#2a1700]"}
+                        `}
+                      >
+                        {isLoadingKey ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : status[prov.id] === "success" ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                      </button>
+                      {prov.hasApiKey && (
+                        <button
+                          onClick={() => handleDeleteKey(prov.id)}
+                          disabled={isLoadingKey}
+                          className="h-12 px-4 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500/40 hover:text-red-500 transition-all active:scale-95 border border-red-500/10 flex items-center justify-center"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* Technical Metadata (Blueprint Style) */}
-                <div className="absolute bottom-10 right-16 flex items-center gap-6 pointer-events-none opacity-[0.05]">
-                  <span className="text-[10px] font-mono tracking-[0.8em] uppercase italic">
-                    Topology_Ref::{prov.id.substring(0,6).toUpperCase()} // Matrix_Node_0x{idx.toString(16).toUpperCase()}
-                  </span>
+                <div className="pt-2 flex items-center justify-between opacity-[0.02]">
+                  <span className="text-[7px] font-mono tracking-[0.4em] uppercase">ID::{prov.id.substring(0,8)}</span>
+                  <span className="text-[7px] font-mono tracking-[0.4em] uppercase">NODE_0x{idx.toString(16).toUpperCase()}</span>
                 </div>
               </div>
             </div>

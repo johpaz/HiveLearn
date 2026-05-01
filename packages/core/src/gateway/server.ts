@@ -233,11 +233,18 @@ export function createServer(): any {
       if (url.pathname === '/api/providers' && req.method === 'GET') {
         try {
           const db = getDb()
-          const providers = db.query(`
+          const rawProviders = db.query(`
             SELECT id, name, base_url, category, enabled, active, created_at
             FROM providers
             ORDER BY name
-          `).all()
+          `).all() as any[]
+
+          // Enriquecer con estado de API Key en una sola pasada de backend
+          const providers = await Promise.all(rawProviders.map(async p => ({
+            ...p,
+            hasApiKey: await hasProviderApiKey(p.id)
+          })))
+
           return addCorsHeaders(
             new Response(JSON.stringify({ providers }), {
               status: 200,
@@ -481,8 +488,10 @@ export function createServer(): any {
 
           if (body.active) {
             db.query(`UPDATE providers SET active = 1, enabled = 1 WHERE id = ?`).run(providerId)
+            db.query(`UPDATE models SET active = 1, enabled = 1 WHERE provider_id = ?`).run(providerId)
           } else {
             db.query(`UPDATE providers SET active = 0, enabled = 0 WHERE id = ?`).run(providerId)
+            db.query(`UPDATE models SET active = 0, enabled = 0 WHERE provider_id = ?`).run(providerId)
           }
 
           log.info('[PUT /api/providers/:id/toggle] Success', { providerId, active: body.active, correlationId })

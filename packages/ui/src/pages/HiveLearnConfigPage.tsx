@@ -71,24 +71,8 @@ export function HiveLearnConfigPage() {
         apiClient<AgentResponse>("/api/hivelearn/agents", { showError: false }),
       ]);
 
-      const rawProviders: RawProvider[] = providersData.providers ?? [];
+      const rawProviders: any[] = providersData.providers ?? [];
       const rawModels: RawModel[] = modelsData.models ?? [];
-
-      // Check API keys for all external providers
-      const apiKeyChecks = await Promise.allSettled(
-        rawProviders
-          .filter(p => !["ollama", "local-tts", "local-llama"].includes(p.id))
-          .map(async p => {
-            const result = await apiClient<{ hasApiKey: boolean }>(`/api/providers/${p.id}/api-key`, { showError: false });
-            return { id: p.id, hasApiKey: result.hasApiKey };
-          })
-      );
-      const apiKeyMap: Record<string, boolean> = {};
-      for (const check of apiKeyChecks) {
-        if (check.status === "fulfilled") {
-          apiKeyMap[check.value.id] = check.value.hasApiKey;
-        }
-      }
 
       // Build ProviderOption[] for swarm tab (filtered by enabled & active)
       const allProviders: ProviderOption[] = rawProviders
@@ -98,7 +82,7 @@ export function HiveLearnConfigPage() {
           id: p.id,
           name: p.name,
           active: p.active === 1,
-          hasApiKey: apiKeyMap[p.id] ?? false,
+          hasApiKey: p.hasApiKey ?? false,
           isLocal: p.base_url?.includes('localhost') ?? false,
         }));
 
@@ -124,7 +108,7 @@ export function HiveLearnConfigPage() {
             active: p.active,
             created_at: p.created_at,
             modelCount: providerModels.length,
-            hasApiKey: apiKeyMap[p.id] ?? false,
+            hasApiKey: p.hasApiKey ?? false,
             isLocal: p.base_url?.includes('localhost') ?? false,
             maxContext: maxCtx,
           };
@@ -132,14 +116,27 @@ export function HiveLearnConfigPage() {
 
       const activeModels: ModelOption[] = rawModels
         .filter(m => m.enabled === 1 && m.active === 1)
-        .map(m => ({
-          id: m.id,
-          name: m.name,
-          provider_id: m.provider_id ?? (m as any).providerId ?? "",
-          context_window: m.context_window,
-          capabilities: Array.isArray(m.capabilities) ? m.capabilities : [],
-          active: !!(m.active ?? false),
-        }));
+        .map(m => {
+          let caps: string[] = [];
+          try {
+            if (typeof m.capabilities === 'string') {
+              caps = JSON.parse(m.capabilities);
+            } else if (Array.isArray(m.capabilities)) {
+              caps = m.capabilities;
+            }
+          } catch (e) {
+            caps = [];
+          }
+
+          return {
+            id: m.id,
+            name: m.name,
+            provider_id: m.provider_id ?? (m as any).providerId ?? "",
+            context_window: m.context_window,
+            capabilities: caps,
+            active: !!(m.active ?? false),
+          };
+        });
 
       setProviders(allProviders);
       setFullProviders(full);
