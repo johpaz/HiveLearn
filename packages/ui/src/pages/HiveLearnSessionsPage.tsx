@@ -20,7 +20,7 @@ interface HLSession {
   nivel_alcanzado: string;
   evaluacion_puntaje: number | null;
   completada: number;
-  created_at: number;
+  created_at: string;
 }
 
 interface HLMetrics {
@@ -50,7 +50,7 @@ function BrandPanel({ count, completed, inProgress }: {
       {/* Hive Hex Pattern */}
       <div className="absolute inset-0 z-0 opacity-[0.03] hive-hex-pattern" />
       <div className="absolute inset-0 bg-gradient-to-br from-hive-amber/5 via-transparent to-transparent z-0" />
-      
+
       {/* Content */}
       <div className="relative z-10 flex flex-col justify-between h-full p-10 xl:p-12">
         {/* Top branding */}
@@ -142,8 +142,8 @@ function SessionCard({
     ? Math.round((session.nodos_completados / session.total_nodos) * 100)
     : 0;
 
-  const rawDate = session.created_at || '';
-  const isoDate = rawDate ? rawDate.replace(' ', 'T') : '';
+  const rawDate = String(session.created_at || '');
+  const isoDate = rawDate.includes(' ') ? rawDate.replace(' ', 'T') : rawDate;
   const date = new Date(isoDate || 0).toLocaleDateString('es', {
     day: 'numeric', month: 'short', year: 'numeric',
   });

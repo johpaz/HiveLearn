@@ -1,23 +1,41 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLessonStore } from '../store/lessonStore'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
-import type { LessonProgram, NivelPrevio } from '@hivelearn/core'
+import type { LessonProgram } from '@hivelearn/core'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import {
+  Search,
+  Plus,
+  Settings,
+  Trash2,
+  Play,
+  CheckCircle2,
+  PauseCircle,
+  Zap,
+  Clock,
+  User,
+  BookOpen,
+  ArrowRight
+} from 'lucide-react'
 
 // ── Model Config Popover ─────────────────────────────────────────────────────
 
 interface ProviderRow { id: string; name: string }
-interface ModelRow    { id: string; name: string; provider_id: string; context_window?: number }
+interface ModelRow { id: string; name: string; provider_id: string; context_window?: number }
 
 function ModelConfigPopover({ onClose }: { onClose: () => void }) {
   const { selectedProviderId, selectedModelId, setSelectedProvider, setSelectedModel } = useLessonStore()
 
-  const [providers, setProviders]     = useState<ProviderRow[]>([])
-  const [models, setModels]           = useState<ModelRow[]>([])
+  const [providers, setProviders] = useState<ProviderRow[]>([])
+  const [models, setModels] = useState<ModelRow[]>([])
   const [localProvider, setLocalProvider] = useState<string | null>(selectedProviderId)
-  const [localModel, setLocalModel]   = useState<string | null>(selectedModelId)
-  const [loading, setLoading]         = useState(true)
-  const [saving, setSaving]           = useState(false)
-  const [saved, setSaved]             = useState(false)
+  const [localModel, setLocalModel] = useState<string | null>(selectedModelId)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -31,7 +49,7 @@ function ModelConfigPopover({ onClose }: { onClose: () => void }) {
         const mData = await mRes.json()
         setProviders((pData.providers ?? []).filter((p: any) => p.enabled || p.active))
         setModels((mData.models ?? []).filter((m: any) => m.enabled || m.active))
-      } catch {}
+      } catch { }
       setLoading(false)
     }
     load()
@@ -60,7 +78,7 @@ function ModelConfigPopover({ onClose }: { onClose: () => void }) {
       setSelectedModel(localModel)
       setSaved(true)
       setTimeout(onClose, 900)
-    } catch {}
+    } catch { }
     setSaving(false)
   }
 
@@ -166,10 +184,10 @@ interface SessionRow {
 function timeAgo(dateStr: string): string {
   const iso = dateStr ? dateStr.replace(' ', 'T') : ''
   const diff = Date.now() - new Date(iso || 0).getTime()
-  const mins  = Math.floor(diff / 60_000)
+  const mins = Math.floor(diff / 60_000)
   const hours = Math.floor(diff / 3_600_000)
-  const days  = Math.floor(diff / 86_400_000)
-  if (mins < 60)  return `hace ${mins} min`
+  const days = Math.floor(diff / 86_400_000)
+  if (mins < 60) return `hace ${mins} min`
   if (hours < 24) return `hace ${hours} h`
   return `hace ${days} día${days !== 1 ? 's' : ''}`
 }
@@ -181,7 +199,8 @@ export function SessionsListScreen() {
   const [restoring, setRestoring] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [showModelConfig, setShowModelConfig] = useState(false)
-
+  const [searchTerm, setSearchTerm] = useState('')
+  console.log("yo")
   const fetchSessions = async () => {
     try {
       const res = await fetchWithAuth('/api/hivelearn/sessions')
@@ -195,6 +214,16 @@ export function SessionsListScreen() {
   }
 
   useEffect(() => { fetchSessions() }, [])
+
+  const filteredSessions = sessions.filter(s => {
+    const search = searchTerm.toLowerCase()
+    return (
+      (s.meta?.toLowerCase().includes(search)) ||
+      (s.nombre?.toLowerCase().includes(search)) ||
+      (s.alumno_id?.toLowerCase().includes(search)) ||
+      (s.session_id?.toLowerCase().includes(search))
+    )
+  })
 
   const handleNew = () => {
     reset()
@@ -218,8 +247,8 @@ export function SessionsListScreen() {
       const nodos = JSON.parse(data.nodos_json || '[]')
       const program: LessonProgram = {
         sessionId: data.session_id,
-        alumnoId:  data.alumno_id,
-        tema:      data.meta ?? '',
+        alumnoId: data.alumno_id,
+        tema: data.meta ?? '',
         topicSlug: data.topic_slug ?? null,
         nodos,
         gamificacion: {
@@ -229,19 +258,19 @@ export function SessionsListScreen() {
         },
         evaluacion: { preguntas: [] },
         perfilAdaptacion: {
-          duracionSesion:     20,
-          nodosRecomendados:  nodos.length,
-          tono:               'amigable',
+          duracionSesion: 20,
+          nodosRecomendados: nodos.length,
+          tono: 'amigable',
         },
       }
 
       restoreSession(program, {
-        sessionId:        data.session_id,
-        xpTotal:          data.xp_total ?? 0,
+        sessionId: data.session_id,
+        xpTotal: data.xp_total ?? 0,
         nodosCompletados: [],
-        lastNodeId:       data.last_node_id ?? null,
+        lastNodeId: data.last_node_id ?? null,
         sessionStateJson: data.session_state_json ?? null,
-        paused_at:        data.paused_at ?? null,
+        paused_at: data.paused_at ?? null,
       })
 
       // restoreSession hace setScreen('lesson'); si completada vamos a result
@@ -266,154 +295,225 @@ export function SessionsListScreen() {
     }
   }
 
+
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-gray-950 p-6 overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <span className="text-3xl">🐝</span>
-          <div>
-            <h1 className="text-xl font-bold text-white">HiveLearn</h1>
-            <p className="text-xs text-gray-500">Tus sesiones de aprendizaje</p>
+    <div className="hive-page overflow-y-auto">
+      {/* Background Blobs */}
+      <div className="hive-glow-blob hive-glow-blob--blue w-[500px] h-[500px] -top-40 -left-40 opacity-20" />
+      <div className="hive-glow-blob hive-glow-blob--purple w-[400px] h-[400px] top-1/2 -right-20 opacity-10" />
+
+      <div className="hive-page-container relative z-10">
+        {/* Header */}
+        <div className="hive-page-header">
+          <div className="flex flex-col">
+            <div className="hive-page-header__eyebrow">
+              <div className="hive-page-header__dot" />
+              <span className="hive-page-header__label">HiveLearn Platform</span>
+            </div>
+            <h1 className="hive-title-page uppercase">
+              Tus <span className="hive-title-page__accent">Sesiones</span>
+            </h1>
+            <p className="hive-subtitle">
+              Gestiona y continúa tus trayectorias de aprendizaje personalizadas impulsadas por el enjambre.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Model config button */}
+            <div className="relative">
+              <Button
+                variant="ghost"
+                onClick={() => setShowModelConfig(v => !v)}
+                className={`hive-btn--ghost gap-2 rounded-xl h-12 px-5 border-white/5 transition-all ${showModelConfig ? 'bg-white/10 text-white' : 'text-white/60'
+                  }`}
+              >
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-widest">
+                  {selectedModelId ?? 'Configurar Motor'}
+                </span>
+              </Button>
+              {showModelConfig && (
+                <ModelConfigPopover onClose={() => setShowModelConfig(false)} />
+              )}
+            </div>
+
+            <Button
+              onClick={handleNew}
+              className="hive-btn--primary"
+            >
+              <Plus className="w-5 h-5 mr-1" />
+              <span className="uppercase tracking-tight">Nueva lección</span>
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Model config button */}
+        {/* Filter Bar */}
+        <div className="mb-12 relative group max-w-4xl mx-auto w-full">
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500/20 to-blue-500/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition duration-500" />
           <div className="relative">
-            <button
-              onClick={() => setShowModelConfig(v => !v)}
-              title="Configurar modelo del enjambre"
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all
-                ${showModelConfig
-                  ? 'bg-gray-800 border-blue-500/50 text-blue-300'
-                  : 'bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300'}`}
-            >
-              <span>⚙️</span>
-              <span className="hidden sm:inline max-w-[120px] truncate">
-                {selectedModelId ?? 'Modelo'}
-              </span>
-            </button>
-            {showModelConfig && (
-              <ModelConfigPopover onClose={() => setShowModelConfig(false)} />
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20 group-focus-within:text-amber-500 transition-colors" />
+            <Input
+              placeholder="Buscar por tema, estudiante o ID de sesión..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="hive-input w-full h-16 pl-14 pr-6 rounded-2xl text-lg md:text-xl border-white/10 bg-black/40 backdrop-blur-xl focus:border-amber-500/50 transition-all placeholder:text-white/10"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors"
+              >
+                <span className="text-xs font-bold uppercase tracking-widest">Limpiar</span>
+              </button>
             )}
           </div>
-
-          <button
-            onClick={handleNew}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition-all hover:scale-[1.03] active:scale-[0.97]"
-          >
-            + Nueva lección
-          </button>
         </div>
-      </div>
 
-      {/* Content */}
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-5xl mb-3 animate-pulse">🐝</div>
-            <p className="text-gray-400 text-sm">Cargando sesiones...</p>
+        {/* Content */}
+        {loading ? (
+          <div className="py-20 flex flex-col items-center justify-center">
+            <div className="relative">
+              <div className="text-7xl animate-pulse">🐝</div>
+              <div className="absolute inset-0 bg-amber-500/20 blur-3xl animate-pulse-slow" />
+            </div>
+            <p className="mt-8 hive-label--field animate-pulse">Sincronizando con el enjambre...</p>
           </div>
-        </div>
-      ) : sessions.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <div className="text-6xl">📚</div>
-            <h2 className="text-lg font-bold text-white">Sin sesiones aún</h2>
-            <p className="text-gray-500 text-sm">Crea tu primera lección personalizada</p>
-            <button
-              onClick={handleNew}
-              className="px-6 py-3 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold transition-all"
-            >
-              + Nueva lección
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sessions.map(session => {
-            const isCompleted = !!session.completada
-            const isPaused = !isCompleted && !!session.paused_at
-            const progress = session.total_nodos > 0
-              ? Math.round((session.nodos_completados / session.total_nodos) * 100)
-              : 0
-            const isBusy = restoring === session.session_id || deleting === session.session_id
-
-            return (
-              <div
-                key={session.session_id}
-                className="rounded-2xl bg-gray-900 border border-gray-800 p-5 flex flex-col gap-4 hover:border-gray-700 transition-colors"
+        ) : filteredSessions.length === 0 ? (
+          <div className="hive-empty-state max-w-2xl mx-auto p-12 text-center">
+            <div className="text-6xl mb-6 opacity-20">📚</div>
+            <h2 className="text-xl font-black text-white uppercase tracking-tighter mb-3">
+              {searchTerm ? 'Sin coincidencias' : 'El vacío del conocimiento'}
+            </h2>
+            <p className="text-white/40 text-sm max-w-xs mx-auto leading-relaxed mb-8">
+              {searchTerm
+                ? `No encontramos resultados para "${searchTerm}". Prueba con términos más generales.`
+                : 'Aún no has iniciado ninguna sesión. El enjambre está listo para comenzar tu primera lección.'}
+            </p>
+            {!searchTerm && (
+              <Button
+                onClick={handleNew}
+                className="hive-btn--primary px-8"
               >
-                {/* Status badge */}
-                <div className="flex items-start justify-between gap-2">
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                    isCompleted
-                      ? 'bg-green-500/15 text-green-400'
-                      : isPaused
-                      ? 'bg-yellow-500/15 text-yellow-400'
-                      : 'bg-blue-500/15 text-blue-400'
-                  }`}>
-                    {isCompleted ? '✅ Completada' : isPaused ? '⏸ Pausada' : '🔵 En progreso'}
-                  </span>
-                  <span className="text-[11px] text-gray-600">{timeAgo(session.created_at)}</span>
-                </div>
+                Iniciar Primera Sesión
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filteredSessions.map(session => {
+              const isCompleted = !!session.completada
+              const isPaused = !isCompleted && !!session.paused_at
+              const progress = session.total_nodos > 0
+                ? Math.round((session.nodos_completados / session.total_nodos) * 100)
+                : 0
+              const isBusy = restoring === session.session_id || deleting === session.session_id
 
-                {/* Topic */}
-                <div>
-                  <p className="text-white font-semibold text-sm leading-snug line-clamp-2">
-                    {session.meta || 'Sin tema'}
-                  </p>
-                  <p className="text-gray-500 text-xs mt-1">{session.nombre || session.alumno_id}</p>
-                </div>
+              return (
+                <div
+                  key={session.session_id}
+                  className="group hive-card hive-card--active flex flex-col min-h-[340px]"
+                >
+                  <div className="hive-card-body flex flex-col flex-1 gap-6">
+                    {/* Header: Status & XP */}
+                    <div className="flex items-center justify-between">
+                      <div className={`hive-tag ${isCompleted ? 'border-emerald-500/20 text-emerald-400 bg-emerald-500/5' :
+                        isPaused ? 'border-amber-500/20 text-amber-400 bg-amber-500/5' :
+                          'hive-tag--provider'
+                        }`}>
+                        {isCompleted ? <CheckCircle2 className="w-3 h-3" /> : isPaused ? <PauseCircle className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                        <span>{isCompleted ? 'Completada' : isPaused ? 'Pausada' : 'Activa'}</span>
+                      </div>
 
-                {/* Progress */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>{session.nodos_completados}/{session.total_nodos} nodos</span>
-                    {isCompleted && session.evaluacion_puntaje != null && (
-                      <span className="text-amber-400 font-bold">{session.evaluacion_puntaje}%</span>
-                    )}
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="text-[11px] font-black text-white">{session.xp_total} XP</span>
+                      </div>
+                    </div>
+
+                    {/* Topic & Student */}
+                    <div className="space-y-3">
+                      <h3 className="text-xl font-black text-white uppercase tracking-tight leading-[1.1] group-hover:text-amber-400 transition-colors line-clamp-3">
+                        {session.meta || 'Lección Exploratoria'}
+                      </h3>
+                      <div className="flex items-center gap-2 text-white/30">
+                        <User className="w-3.5 h-3.5" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest truncate">
+                          {session.nombre || 'ID: ' + session.alumno_id.slice(0, 8)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Info */}
+                    <div className="mt-auto space-y-3">
+                      <div className="flex justify-between items-end">
+                        <div className="flex flex-col">
+                          <span className="hive-label text-[9px]">Progreso del Nodo</span>
+                          <span className="text-xs font-black text-white/80">{session.nodos_completados} / {session.total_nodos}</span>
+                        </div>
+                        {isCompleted && session.evaluacion_puntaje != null && (
+                          <div className="flex flex-col items-end">
+                            <span className="hive-label text-[9px]">Puntaje Final</span>
+                            <span className="text-lg font-black text-amber-400">{session.evaluacion_puntaje}%</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="relative h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-amber-300'
+                            }`}
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4 border-t border-white/[0.05]">
+                      <div className="flex items-center gap-2 text-white/20">
+                        <Clock className="w-3 h-3" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">{timeAgo(session.created_at)}</span>
+                      </div>
+                      <div className="hive-mono">{session.nivel_alcanzado}</div>
+                    </div>
+
+                    {/* Actions Overlay / Bottom */}
+                    <div className="flex gap-3 mt-2">
+                      <Button
+                        onClick={() => handleContinue(session)}
+                        disabled={isBusy}
+                        className={`flex-1 h-12 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all ${isCompleted
+                          ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-white/5 hover:bg-white/10 text-white border border-white/10 group-hover:border-amber-500/30'
+                          }`}
+                      >
+                        {restoring === session.session_id ? (
+                          <span className="animate-pulse">Sincronizando...</span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            {isCompleted ? 'Revisar Resultados' : 'Retomar Lección'}
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(session.session_id)}
+                        disabled={isBusy}
+                        className="h-12 w-12 rounded-xl bg-red-500/5 hover:bg-red-500/20 text-red-500/30 hover:text-red-500 transition-all border border-transparent hover:border-red-500/20"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${isCompleted ? 'bg-green-500' : 'bg-blue-500'}`}
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </div>
 
-                {/* XP */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-yellow-400 text-sm">⚡</span>
-                  <span className="text-xs text-gray-400">{session.xp_total} XP · {session.nivel_alcanzado}</span>
+                  {/* Bottom Strip */}
+                  <div className="hive-strip--bottom" />
                 </div>
-
-                {/* Actions */}
-                <div className="flex gap-2 mt-auto pt-2 border-t border-gray-800">
-                  <button
-                    onClick={() => handleContinue(session)}
-                    disabled={isBusy}
-                    className="flex-1 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-bold transition-colors disabled:opacity-50"
-                  >
-                    {restoring === session.session_id
-                      ? 'Cargando...'
-                      : isCompleted ? 'Ver resultado' : 'Continuar'}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(session.session_id)}
-                    disabled={isBusy}
-                    className="px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition-colors disabled:opacity-50"
-                    title="Eliminar sesión"
-                  >
-                    {deleting === session.session_id ? '...' : '🗑'}
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
