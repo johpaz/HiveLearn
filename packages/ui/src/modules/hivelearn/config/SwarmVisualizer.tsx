@@ -381,11 +381,11 @@ export function SwarmVisualizer({ onAgentsChange }: SwarmVisualizerProps) {
             <div className="flex items-center gap-4 mb-2">
               <div className="h-1.5 w-1.5 rounded-full bg-hive-amber" />
               <span className="text-[11px] font-black tracking-[0.5em] uppercase text-hive-amber/60">
-                Topología_del_Enjambre
+                Arquitectura_del_Enjambre
               </span>
             </div>
             <h3 className="text-4xl font-black tracking-tighter text-white uppercase">
-              Visualización de <span className="text-hive-amber">Nodos</span>
+              Visualización de <span className="text-hive-amber">Agentes</span>
             </h3>
             <p className="text-sm font-medium text-white/20 mt-3 italic">
               Mapa operacional de la red de agentes y sus interconexiones.
@@ -477,7 +477,7 @@ export function SwarmVisualizer({ onAgentsChange }: SwarmVisualizerProps) {
       {/* Network Stats — Editorial */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-8 pt-12 border-t border-white/[0.03]">
         <div className="space-y-2">
-          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/10">Nodos_Registrados</span>
+          <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/10">Agentes_Registrados</span>
           <div className="text-4xl font-black text-white">{agents.length}</div>
         </div>
         <div className="space-y-2">

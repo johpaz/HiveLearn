@@ -159,6 +159,10 @@ export function HiveLearnConfigPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  useEffect(() => {
+    document.title = "HiveLearn | Configuración del Enjambre";
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (!selectedProviderId || !selectedModelId) return;
     setIsSaving(true);
@@ -267,7 +271,7 @@ export function HiveLearnConfigPage() {
                       }`}
                   >
                     <Icon className={`h-4 w-4 ${isActive ? "text-hive-amber" : "opacity-30"}`} />
-                    {tab === "swarm" ? "Enjambre" : tab === "proveedores" ? "Nodos" : "Topología"}
+                    {tab === "swarm" ? "Motor del Enjambre" : tab === "proveedores" ? "Proveedores" : "Enjambre"}
                   </button>
                 );
               })}
@@ -371,7 +375,7 @@ export function HiveLearnConfigPage() {
                     <div className="grid grid-cols-1 gap-6">
                       <ConfigInsightCard
                         icon={GitBranch}
-                        title="TOPOLOGÍA_DAG"
+                        title="ARQUITECTURA_ENJAMBRE"
                         description="Orquestación determinística de agentes mediante grafos acíclicos de alta fidelidad."
                         theme="blue"
                       />
