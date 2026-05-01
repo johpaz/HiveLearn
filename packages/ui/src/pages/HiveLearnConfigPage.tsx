@@ -47,56 +47,55 @@ export function HiveLearnConfigPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [agentCount, setAgentCount] = useState(0);
 
-  // Load data from real API
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        const [providersData, modelsData, configData, agentsData] = await Promise.all([
-          apiClient<any>("/api/providers", { showError: false }),
-          apiClient<any>("/api/models", { showError: false }),
-          apiClient<HiveLearnConfig>("/api/hivelearn/config", { showError: false }),
-          apiClient<AgentResponse>("/api/hivelearn/agents", { showError: false }),
-        ]);
+  // Load data from real API. silent=true para refresh sin mostrar skeleton.
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
+    try {
+      const [providersData, modelsData, configData, agentsData] = await Promise.all([
+        apiClient<any>("/api/providers", { showError: false }),
+        apiClient<any>("/api/models", { showError: false }),
+        apiClient<HiveLearnConfig>("/api/hivelearn/config", { showError: false }),
+        apiClient<AgentResponse>("/api/hivelearn/agents", { showError: false }),
+      ]);
 
-        const allProviders: ProviderOption[] = (providersData.providers ?? [])
-          .sort((a: Provider, b: Provider) => a.name.localeCompare(b.name))
-          .map((p: Provider) => ({
-            id: p.id,
-            name: p.name,
-            active: p.active === 1,
-            hasApiKey: false,
-            isLocal: p.base_url?.includes('localhost') ?? false,
-          }));
+      const allProviders: ProviderOption[] = (providersData.providers ?? [])
+        .sort((a: Provider, b: Provider) => a.name.localeCompare(b.name))
+        .map((p: Provider) => ({
+          id: p.id,
+          name: p.name,
+          active: p.active === 1,
+          hasApiKey: false,
+          isLocal: p.base_url?.includes('localhost') ?? false,
+        }));
 
-        const activeModels: ModelOption[] = (modelsData.models ?? [])
-          .filter((m: any) => m.enabled || m.active)
-          .map((m: any) => ({
-            id: m.id,
-            name: m.name,
-            provider_id: m.provider_id ?? m.providerId ?? "",
-            context_window: m.context_window,
-            capabilities: Array.isArray(m.capabilities) ? m.capabilities : [],
-            active: m.active ?? false,
-          }));
+      const activeModels: ModelOption[] = (modelsData.models ?? [])
+        .filter((m: any) => m.enabled || m.active)
+        .map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          provider_id: m.provider_id ?? m.providerId ?? "",
+          context_window: m.context_window,
+          capabilities: Array.isArray(m.capabilities) ? m.capabilities : [],
+          active: m.active ?? false,
+        }));
 
-        setProviders(allProviders);
-        setModels(activeModels);
-        setAgentCount((agentsData.agents ?? []).length || 16);
+      setProviders(allProviders);
+      setModels(activeModels);
+      setAgentCount((agentsData.agents ?? []).length || 16);
 
-        // Restore saved config if exists
-        if (configData.configured && configData.providerId) {
-          setSelectedProviderId(configData.providerId);
-          setSelectedModelId(configData.modelId);
-        }
-      } catch {
-        // Silently fail — user will see empty selectors
-      } finally {
-        setIsLoading(false);
+      // Restore saved config if exists
+      if (configData.configured && configData.providerId) {
+        setSelectedProviderId(configData.providerId);
+        setSelectedModelId(configData.modelId);
       }
-    };
-    load();
+    } catch {
+      // Silently fail — user will see empty selectors
+    } finally {
+      if (!silent) setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleSave = useCallback(async () => {
     if (!selectedProviderId || !selectedModelId) return;
@@ -375,7 +374,7 @@ export function HiveLearnConfigPage() {
 
             {activeTab === "import" && (
               <div className="rounded-2xl border border-border bg-background/80 backdrop-blur-xl p-8 shadow-honey">
-                <OllamaImporter />
+                <OllamaImporter onImportComplete={() => loadData(true)} />
               </div>
             )}
 

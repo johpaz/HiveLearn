@@ -93,13 +93,21 @@ export interface ProviderConfig {
  */
 export async function resolveProviderConfig(providerId: string, modelId?: string): Promise<ProviderConfig> {
   const db = getDb()
-  
+
   const agent = db.query(
     'SELECT * FROM hl_agents WHERE id = ? LIMIT 1'
   ).get(providerId) as Record<string, unknown> | undefined
-  
-  const model = modelId || (agent?.model_id as string) || 'gemma4-e4b'
+
+  const rawModelId = modelId || (agent?.model_id as string) || 'gemma4-e4b'
   const provider = (agent?.provider_id as string) || 'ollama'
+
+  // Para Ollama, el ID almacenado es 'ollama-gemma4-e4b' pero la API necesita
+  // el nombre real 'gemma4:e4b'. Lo resolvemos desde la tabla models.
+  let model = rawModelId
+  if (provider === 'ollama') {
+    const row = db.query('SELECT name FROM models WHERE id = ? LIMIT 1').get(rawModelId) as { name: string } | undefined
+    if (row?.name) model = row.name
+  }
 
   // Obtener API key desde Bun.secrets
   const apiKey = await getProviderApiKey(providerId)

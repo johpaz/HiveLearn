@@ -64,8 +64,18 @@ async function getCoordinatorConfig() {
     'SELECT provider_id, model_id FROM hl_agents WHERE id = ? LIMIT 1'
   ).get('hl-coordinator-agent')
 
-  const providerId = agent?.provider_id || 'ollama'
-  const modelId    = agent?.model_id    || 'gemma2:9b'
+  const providerId  = agent?.provider_id || 'ollama'
+  const rawModelId  = agent?.model_id    || 'gemma2:9b'
+
+  // Para Ollama, el ID interno es 'ollama-gemma4-e4b' pero la API necesita 'gemma4:e4b'.
+  // Resolvemos el nombre real desde la tabla models.
+  let modelId = rawModelId
+  if (providerId === 'ollama') {
+    const row = db.query<{ name: string }, [string]>(
+      'SELECT name FROM models WHERE id = ? LIMIT 1'
+    ).get(rawModelId)
+    if (row?.name) modelId = row.name
+  }
 
   const providerRow = db.query<{ base_url: string }, [string]>(
     'SELECT base_url FROM providers WHERE id = ? LIMIT 1'

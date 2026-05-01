@@ -491,10 +491,12 @@ export function createServer(): any {
             // Insertar o actualizar modelo
             db.query(`
               INSERT OR REPLACE INTO models (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
-              VALUES (?, 'ollama', ?, 'llm', 32000, '["chat", "local"]', 1, 0)
+              VALUES (?, 'ollama', ?, 'llm', 32000, '["chat", "local"]', 1, 1)
             `).run(modelId, modelName)
             imported++
           }
+          // Activar el provider Ollama para que sus modelos aparezcan en los selectores
+          db.query(`UPDATE providers SET active = 1, enabled = 1 WHERE id = 'ollama'`).run()
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true, imported, models: data.models?.map(m => m.name) || [] }), {
               status: 200,
