@@ -46,31 +46,40 @@ export function HeroMiniWorld() {
 
   return (
     <div className="relative w-full h-[400px] lg:h-[600px] flex items-center justify-center">
-      {/* Contenedor del mini-mundo */}
+      {/* Padre con drop-shadow que sigue la forma del hijo */}
       <div
-        className="relative flex items-center justify-center"
+        className="flex items-center justify-center"
         style={{
-          height: '85%',
-          aspectRatio: '1.1547',
+          filter: 'drop-shadow(0 0 20px rgba(245,158,11,0.6)) drop-shadow(0 0 50px rgba(245,158,11,0.4)) drop-shadow(0 0 80px rgba(245,158,11,0.2))',
         }}
       >
-        {/* Canvas container */}
+        {/* Hexágono con canvas dentro */}
         <div
-          ref={containerRef}
-          className="w-full h-full flex items-center justify-center"
-        />
+          className="relative flex items-center justify-center"
+          style={{
+            height: '85%',
+            aspectRatio: '1.1547',
+            clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)',
+          }}
+        >
+          {/* Canvas container */}
+          <div
+            ref={containerRef}
+            className="w-full h-full flex items-center justify-center"
+          />
 
-        {/* Loading spinner */}
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center space-y-3">
-              <div className="w-10 h-10 border-3 border-hive-amber/30 border-t-hive-amber rounded-full animate-spin mx-auto" />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">
-                Cargando mundo...
-              </p>
+          {/* Loading spinner */}
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center space-y-3">
+                <div className="w-10 h-10 border-3 border-hive-amber/30 border-t-hive-amber rounded-full animate-spin mx-auto" />
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">
+                  Cargando mundo...
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

@@ -290,6 +290,53 @@ export async function initHeroMiniWorld(
   skyBg.fill({ color: 0x121530, alpha: 1 })
   bgLayer.addChild(skyBg)
 
+  // ─── Luz de fondo difusa (glow central) ────────────────────────────────────
+  const ambientGlow = new Graphics()
+  ambientGlow.ellipse(WORLD_W / 2, WORLD_H / 2 + 20, 220, 160)
+  ambientGlow.fill({ color: COLORS.amber, alpha: 0.06 })
+  ambientGlow.ellipse(WORLD_W / 2, WORLD_H / 2 + 20, 180, 130)
+  ambientGlow.fill({ color: COLORS.nectarLight, alpha: 0.04 })
+  bgLayer.addChild(ambientGlow)
+
+  // ─── Marco hexagonal con glow (dibujado en PixiJS) ─────────────────────────
+  const hexFrame = new Graphics()
+  const hexCenterX = WORLD_W / 2
+  const hexCenterY = WORLD_H / 2
+  const hexR = 245
+
+  function getHexPoints(cx: number, cy: number, r: number): number[] {
+    const pts: number[] = []
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI / 3) * i
+      pts.push(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r)
+    }
+    return pts
+  }
+
+  // Glow externo difuso (3 capas)
+  const glowPoints1 = getHexPoints(hexCenterX, hexCenterY, hexR + 18)
+  const glowPoints2 = getHexPoints(hexCenterX, hexCenterY, hexR + 10)
+  const glowPoints3 = getHexPoints(hexCenterX, hexCenterY, hexR + 4)
+
+  hexFrame.poly(glowPoints1)
+  hexFrame.stroke({ color: COLORS.amber, width: 8, alpha: 0.08 })
+  hexFrame.poly(glowPoints2)
+  hexFrame.stroke({ color: COLORS.amber, width: 5, alpha: 0.15 })
+  hexFrame.poly(glowPoints3)
+  hexFrame.stroke({ color: COLORS.amber, width: 3, alpha: 0.3 })
+
+  // Borde principal
+  const mainHexPoints = getHexPoints(hexCenterX, hexCenterY, hexR)
+  hexFrame.poly(mainHexPoints)
+  hexFrame.stroke({ color: COLORS.nectarLight, width: 2.5, alpha: 0.7 })
+
+  // Línea interior brillante
+  const innerHexPoints = getHexPoints(hexCenterX, hexCenterY, hexR - 3)
+  hexFrame.poly(innerHexPoints)
+  hexFrame.stroke({ color: COLORS.white, width: 1, alpha: 0.25 })
+
+  midLayer.addChild(hexFrame)
+
   // ─── Estrellas parpadeantes ────────────────────────────────────────────────
   const stars: Star[] = []
   for (let i = 0; i < 50; i++) {
@@ -395,6 +442,12 @@ export async function initHeroMiniWorld(
   titleContainer.x = WORLD_W / 2
   titleContainer.y = 42
   uiLayer.addChild(titleContainer)
+
+  // Pill oscuro detrás del título
+  const titlePill = new Graphics()
+  titlePill.roundRect(-105, -22, 210, 58, 12)
+  titlePill.fill({ color: 0x0a0e27, alpha: 0.75 })
+  titleContainer.addChild(titlePill)
 
   const titleText = new Text({
     text: 'HiveLearn',
@@ -503,12 +556,20 @@ export async function initHeroMiniWorld(
   })
 
   // ─── Texto inferior ────────────────────────────────────────────────────────
+  // Pill oscuro detrás del footer
+  const footerPill = new Graphics()
+  footerPill.roundRect(-150, -18, 300, 26, 10)
+  footerPill.fill({ color: 0x0a0e27, alpha: 0.75 })
+  footerPill.x = WORLD_W / 2
+  footerPill.y = WORLD_H - 14
+  uiLayer.addChild(footerPill)
+
   const footerText = new Text({
     text: 'HiveLearn potenciado por Bun + Gemma 4 + PixiJS',
     style: {
       fontFamily: 'monospace',
       fontSize: 10,
-      fill: 'rgba(255,255,255,0.25)',
+      fill: 'rgba(255,255,255,0.6)',
       letterSpacing: 1,
     },
   })
@@ -616,6 +677,13 @@ export async function initHeroMiniWorld(
   app.ticker.add((ticker) => {
     const dt = ticker.deltaTime / 60
     time += dt
+
+    // ─── Pulso del marco hexagonal ───────────────────────────────────────────
+    const pulse = 0.7 + Math.sin(time * 2) * 0.15
+    hexFrame.alpha = pulse
+
+    // ─── Pulso de la luz de fondo ────────────────────────────────────────────
+    ambientGlow.alpha = 0.8 + Math.sin(time * 1.5) * 0.2
 
     // ─── Estrellas parpadeantes ──────────────────────────────────────────────
     stars.forEach((star) => {

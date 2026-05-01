@@ -9,6 +9,7 @@ export { SwarmPipelinePreview } from "./SwarmPipelinePreview";
 export { ConfigInsightCard } from "./ConfigInsightCard";
 export { StatusMessage } from "./StatusMessage";
 
-export { ApiKeyManager } from "./ApiKeyManager";
-export { OllamaImporter } from "./OllamaImporter";
+export { ProviderManager } from "./ApiKeyManager";
+export type { FullProvider } from "./ApiKeyManager";
+
 export { SwarmVisualizer } from "./SwarmVisualizer";

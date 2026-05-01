@@ -28,6 +28,17 @@ const GemmaLogo = ({ className }: { className?: string }) => (
   </svg>
 )
 
+const PixiJSLogo = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 512 512" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M256 48L464 160V336L256 448L48 336V160L256 48Z" fill="#E91E63" fillOpacity="0.15"/>
+    <path d="M256 48L464 160L256 272L48 160L256 48Z" fill="#E91E63"/>
+    <path d="M464 160V336L256 448L256 272L464 160Z" fill="#8B5CF6"/>
+    <path d="M48 160V336L256 448L256 272L48 160Z" fill="#06B6D4"/>
+    <circle cx="256" cy="260" r="50" fill="#FFFFFF"/>
+    <path d="M256 220L276 250L256 280L236 250L256 220Z" fill="#E91E63"/>
+  </svg>
+)
+
 
 
 export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProps) {
@@ -165,7 +176,24 @@ export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProp
           </div>
 
           {/* Right Column: Mini-Mundo PixiJS */}
-          <div className="order-1 lg:order-2 w-full flex items-center justify-center">
+          <div className="order-1 lg:order-2 w-full flex flex-col items-center justify-center gap-4">
+            {/* Logos del stack */}
+            <div className="flex items-center gap-6 mb-2">
+              <div className="flex flex-col items-center gap-1 group">
+                <BunLogo className="w-10 h-10 group-hover:scale-110 transition-transform duration-300" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40 group-hover:text-hive-amber transition-colors">Bun</span>
+              </div>
+              <div className="w-px h-8 bg-white/10" />
+              <div className="flex flex-col items-center gap-1 group">
+                <GemmaLogo className="w-10 h-10 group-hover:scale-110 transition-transform duration-300" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40 group-hover:text-hive-blue transition-colors">Gemma 4</span>
+              </div>
+              <div className="w-px h-8 bg-white/10" />
+              <div className="flex flex-col items-center gap-1 group">
+                <PixiJSLogo className="w-10 h-10 group-hover:scale-110 transition-transform duration-300" />
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40 group-hover:text-[#E91E63] transition-colors">PixiJS</span>
+              </div>
+            </div>
             <HeroMiniWorld />
           </div>
 

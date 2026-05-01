@@ -468,6 +468,55 @@ export function createServer(): any {
         }
       }
 
+      // PUT /api/providers/:id/toggle - Activar/desactivar provider
+      if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/toggle') && req.method === 'PUT') {
+        const correlationId = getOrGenerateCorrelationId(req)
+        const providerId = url.pathname.split('/')[3]
+
+        log.info('[PUT /api/providers/:id/toggle]', { providerId, correlationId })
+
+        try {
+          const body = await req.json() as { active: boolean }
+          const db = getDb()
+
+          if (body.active) {
+            db.query(`UPDATE providers SET active = 1, enabled = 1 WHERE id = ?`).run(providerId)
+          } else {
+            db.query(`UPDATE providers SET active = 0, enabled = 0 WHERE id = ?`).run(providerId)
+          }
+
+          log.info('[PUT /api/providers/:id/toggle] Success', { providerId, active: body.active, correlationId })
+
+          return addCorsHeaders(
+            new Response(JSON.stringify({ ok: true, active: body.active }), {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[PUT /api/providers/:id/toggle] Error', {
+            providerId,
+            error: (e as Error).message,
+            correlationId,
+          })
+
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
+            }),
+            req
+          )
+        }
+      }
+
       // POST /api/providers/ollama/import - Importar modelos desde Ollama local
       if (url.pathname === '/api/providers/ollama/import' && req.method === 'POST') {
         try {
