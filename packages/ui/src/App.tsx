@@ -3,7 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
-import { useLocation, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { Navbar, Footer, LandingLayout, AppLayout, LearningLayout } from "@/components";
 
 // Lazy load pages con named exports
@@ -11,7 +11,7 @@ const LandingPage = lazy(() => import("@/pages/LandingPage").then(m => ({ defaul
 const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(m => ({ default: m.DashboardPage })));
 const HowToUsePage = lazy(() => import("@/pages/HowToUsePage").then(m => ({ default: m.HowToUsePage })));
 const ProviderSelectScreen = lazy(() => import("@/pages/HiveLearnConfigPage").then(m => ({ default: m.HiveLearnConfigPage })));
-const SessionsListScreen = lazy(() => import("@/pages/HiveLearnSessionsPage").then(m => ({ default: m.HiveLearnSessionsPage })));
+const SessionsListScreen = lazy(() => import("@/pages/SessionsListScreen").then(m => ({ default: m.SessionsListScreen })));
 const ChatOnboardingScreen = lazy(() => import("@/pages/ChatOnboardingScreen").then(m => ({ default: m.ChatOnboardingScreen })));
 const A2UILessonScreen = lazy(() => import("@/pages/A2UILessonScreen").then(m => ({ default: m.A2UILessonScreen })));
 const EvaluationScreen = lazy(() => import("@/pages/EvaluationScreen").then(m => ({ default: m.EvaluationScreen })));
