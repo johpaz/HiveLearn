@@ -24,6 +24,24 @@ export interface SessionData {
   completada: boolean
 }
 
+export interface SessionRow {
+  session_id: string
+  alumno_id: string
+  curriculo_id: number
+  xp_total: number
+  nivel_alcanzado: string
+  logros_json: string
+  nodos_completados: number
+  evaluacion_puntaje: number | null
+  completada: number
+  meta: string
+  nombre: string
+  nickname: string
+  total_nodos: number
+  rango_edad: string
+  created_at: string
+}
+
 export interface SessionMetrics {
   sessionId: string
   alumnoId: string
@@ -82,11 +100,13 @@ export class LessonPersistence {
   saveStudentProfile(profile: StudentProfile): void {
     this.db.query(`
       INSERT OR REPLACE INTO hl_student_profiles
-        (alumno_id, apodo, avatar, edad, estado, sesiones_total, xp_acumulado, created_at, ultimo_acceso, updated_at)
-      VALUES (?, ?, ?, ?, ?, COALESCE((SELECT sesiones_total FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT xp_acumulado FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT created_at FROM hl_student_profiles WHERE alumno_id = ?), CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        (alumno_id, nombre, nickname, apodo, avatar, edad, estado, sesiones_total, xp_acumulado, created_at, ultimo_acceso, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT sesiones_total FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT xp_acumulado FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT created_at FROM hl_student_profiles WHERE alumno_id = ?), CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run(
       profile.alumnoId,
-      profile.apodo,
+      profile.nombre,
+      profile.nickname,
+      profile.nickname,
       profile.avatar,
       profile.edad,
       profile.estado,
@@ -101,7 +121,8 @@ export class LessonPersistence {
     if (!row) return null
     return {
       alumnoId: row.alumno_id,
-      apodo: row.apodo,
+      nombre: row.nombre,
+      nickname: row.nickname || row.apodo,
       avatar: row.avatar,
       edad: row.edad,
       estado: row.estado,
@@ -138,6 +159,15 @@ export class LessonPersistence {
         (session_id, alumno_id, curriculo_id, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
       VALUES (?, ?, ?, 0, 'Aprendiz', '[]', 0, NULL, 0)
     `).run(sessionId, alumnoId, curriculoId)
+  }
+
+  /** Crea sesión temprana (durante onboarding, sin currículo aún) */
+  createEarlySession(sessionId: string, alumnoId: string): void {
+    this.db.query(`
+      INSERT OR IGNORE INTO hl_sessions
+        (session_id, alumno_id, curriculo_id, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
+      VALUES (?, ?, NULL, 0, 'Aprendiz', '[]', 0, NULL, 0)
+    `).run(sessionId, alumnoId)
   }
 
   updateSessionProgress(sessionId: string, nodosCompletados: number, xpTotal: number): void {
@@ -395,7 +425,8 @@ export class LessonPersistence {
       alumnoId = `alumno_${fieldValue.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}_${Date.now()}`
       this.saveStudentProfile({
         alumnoId,
-        apodo: fieldValue,
+        nombre: fieldValue,
+        nickname: fieldValue,
         avatar: 'tigre_azul',
         edad: 0,
         estado: 'onboarding',
@@ -536,9 +567,12 @@ export class LessonPersistence {
     const perfil = perfilFinal as any
     this.db.query(`
       UPDATE hl_student_profiles
-      SET edad = ?, updated_at = ?
+      SET nombre = ?, nickname = ?, apodo = ?, edad = ?, updated_at = ?
       WHERE alumno_id = ?
     `).run(
+      perfil.nombre || '',
+      perfil.nickname || perfil.nombre || '',
+      perfil.nickname || perfil.nombre || '',
       perfil.edad || 18,
       now,
       alumnoId,
@@ -714,6 +748,69 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
+    }))
+  }
+
+  /**
+   * Devuelve todas las sesiones con metadatos del currículo y perfil del alumno.
+   * Soporta búsqueda por nombre/nickname (q) y filtro por nickname exacto.
+   */
+  getAllSessions(opts?: { q?: string; nickname?: string }): SessionRow[] {
+    let sql = `
+      SELECT
+        s.session_id,
+        s.alumno_id,
+        s.curriculo_id,
+        s.xp_total,
+        s.nivel_alcanzado,
+        s.logros_json,
+        s.nodos_completados,
+        s.evaluacion_puntaje,
+        s.completada,
+        s.created_at,
+        c.meta_alumno AS meta,
+        c.total_nodos,
+        c.rango_edad,
+        p.nombre,
+        p.nickname
+      FROM hl_sessions s
+      LEFT JOIN hl_curricula c ON c.id = s.curriculo_id
+      LEFT JOIN hl_student_profiles p ON p.alumno_id = s.alumno_id
+      WHERE 1=1
+    `
+    const params: any[] = []
+
+    if (opts?.q) {
+      sql += ` AND (p.nombre LIKE ? OR p.nickname LIKE ? OR p.apodo LIKE ?)`
+      const like = `%${opts.q}%`
+      params.push(like, like, like)
+    }
+
+    if (opts?.nickname) {
+      sql += ` AND (p.nickname = ? OR p.apodo = ? OR p.nombre = ?)`
+      params.push(opts.nickname, opts.nickname, opts.nickname)
+    }
+
+    sql += ` ORDER BY s.created_at DESC`
+
+    const rows = this.db.query(sql).all(...params) as Record<string, any>[]
+
+    return rows.map(row => ({
+      session_id: row.session_id,
+      alumno_id: row.alumno_id,
+      curriculo_id: row.curriculo_id,
+      xp_total: row.xp_total,
+      nivel_alcanzado: row.nivel_alcanzado,
+      logros_json: row.logros_json,
+      nodos_completados: row.nodos_completados,
+      evaluacion_puntaje: row.evaluacion_puntaje,
+      completada: row.completada,
+      meta: row.meta ?? '',
+      nombre: row.nombre ?? '',
+      nickname: row.nickname ?? row.apodo ?? '',
+      total_nodos: row.total_nodos ?? 0,
+      rango_edad: row.rango_edad ?? '',
+      created_at: row.created_at ?? '',
     }))
   }
 }

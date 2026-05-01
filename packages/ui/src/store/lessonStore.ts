@@ -1,6 +1,61 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { StudentProfile, LessonProgram, NodoLesson, SwarmProgress, FeedbackOutput, AgentStatus, CoordinatorState } from '@hivelearn/core'
+import { apiClient } from '@/lib/api'
+
+// Función para obtener/generar instanceId único
+export async function getInstanceId(): Promise<string> {
+  const state = useLessonStore.getState()
+  
+  // Si ya existe en el store, validar que sigue registrado en el server
+  if (state.instanceId) {
+    try {
+      const check = await apiClient<{ configured: boolean }>(
+        `/api/hivelearn/instance?instanceId=${state.instanceId}`,
+        { showError: false }
+      )
+      if (check.configured) return state.instanceId
+    } catch {
+      // ID stale o server sin esa instancia — continuar a generar uno nuevo
+    }
+    useLessonStore.getState().setInstanceId('')
+  }
+  
+  try {
+    // Intentar obtener del server
+    const data = await apiClient<{ 
+      configured: boolean
+      instanceId?: string
+    }>('/api/hivelearn/instance?instanceId=local', { showError: false })
+    
+    if (data.configured && data.instanceId) {
+      useLessonStore.getState().setInstanceId(data.instanceId)
+      return data.instanceId
+    }
+  } catch {
+    // Si falla, continuamos para generar uno nuevo
+  }
+  
+  // Generar nuevo UUID
+  const newInstanceId = typeof crypto !== 'undefined' && crypto.randomUUID 
+    ? crypto.randomUUID() 
+    : `instance-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  
+  // Registrar en el server
+  try {
+    await apiClient('/api/hivelearn/instance', {
+      method: 'POST',
+      body: { instanceId: newInstanceId },
+      showError: false,
+    })
+  } catch {
+    // Si falla el registro, igual usamos el ID localmente
+  }
+  
+  // Guardar en el store
+  useLessonStore.getState().setInstanceId(newInstanceId)
+  return newInstanceId
+}
 
 export type Screen =
   | 'landing'
@@ -24,6 +79,9 @@ export interface XpFloat {
 interface LessonState {
   // Navegación
   screen: Screen
+
+  // Instancia única (UUID por instalación)
+  instanceId: string | null
 
   // Provider y modelo seleccionados
   selectedProviderId: string | null
@@ -77,6 +135,7 @@ interface LessonState {
   sessionPausedAt: string | null
 
   // Acciones base
+  setInstanceId: (instanceId: string) => void
   setScreen: (screen: Screen) => void
   setSelectedProvider: (providerId: string) => void
   setSelectedModel: (modelId: string | null) => void
@@ -120,6 +179,7 @@ interface LessonState {
 
 const initialState = {
   screen: 'sessions' as Screen,
+  instanceId: null,
   perfil: null,
   meta: '',
   program: null,
@@ -159,6 +219,7 @@ let xpFloatKey = 0
 export const useLessonStore = create<LessonState>()(persist((set, get) => ({
   ...initialState,
 
+  setInstanceId: (instanceId) => set({ instanceId }),
   setScreen: (screen) => set({ screen }),
   setSelectedProvider: (selectedProviderId) => set({ selectedProviderId }),
   setSelectedModel: (selectedModelId) => set({ selectedModelId }),

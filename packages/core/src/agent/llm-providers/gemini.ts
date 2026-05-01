@@ -161,7 +161,7 @@ export class GeminiProvider implements LLMProvider {
 
     log.info(`[llm-client] gemini/${options.model} — ${contents.length} turns, ${options.tools?.length ?? 0} tools`)
 
-    const response = await ai.models.generateContent({ model: options.model, contents, config })
+    const response = await ai.models.generateContent({ model: options.model || 'gemini-1.5-flash', contents, config })
 
     const candidate = response.candidates?.[0]
 

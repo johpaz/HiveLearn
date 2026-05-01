@@ -442,4 +442,9 @@ export const logger = {
   setHandler: (handler: any) => { /* no-op for compatibility */ },
 };
 
+/**
+ * Export redact function for use in middleware
+ */
+export { redact };
+
 export default logger;

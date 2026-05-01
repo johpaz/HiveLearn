@@ -19,8 +19,8 @@ const HELP = `
 Usage: hivelearn <command> [subcommand] [options]
 
 Gateway:
-  start [--daemon]           Arrancar el Gateway (abre setup web si es primera vez)
-  dev                        Modo desarrollo con hot-reload (usa ~/.hive-dev)
+  start [--daemon]           Arrancar el Gateway
+  dev                        Modo desarrollo con hot-reload
   stop                       Detener el Gateway
   reload                     Recargar config sin reiniciar
   status                     Estado del Gateway

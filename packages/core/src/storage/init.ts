@@ -6,7 +6,7 @@
 import type { Database } from 'bun:sqlite'
 import { HIVELEARN_SCHEMA_V1, HIVELEARN_SCHEMA_V2, HIVELEARN_SCHEMA_V3, HIVELEARN_SCHEMA_V4, HIVELEARN_SCHEMA_V5 } from './hivelearn-schema'
 import { registerHiveLearnAgents } from '../agent/registry'
-import { seedAllData } from './seed'
+import { seedIfEmpty } from './seed'
 
 /** Añade una columna a una tabla solo si no existe (compatible con cualquier versión de SQLite) */
 function ensureColumn(db: Database, table: string, column: string, definition: string): void {
@@ -49,6 +49,11 @@ export function initHiveLearnStorage(db: Database): void {
   // HiveLearn schema v1+
   db.exec(HIVELEARN_SCHEMA_V1)
 
+  // V1 migrations: columnas añadidas después de la creación inicial de la tabla
+  ensureColumn(db, 'hl_student_profiles', 'apodo', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'hl_student_profiles', 'nombre', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'hl_student_profiles', 'nickname', "TEXT NOT NULL DEFAULT ''")
+
   // V2: CREATE TABLE y CREATE INDEX (sin ALTER TABLE)
   try {
     db.exec(HIVELEARN_SCHEMA_V2)
@@ -90,5 +95,5 @@ export function initHiveLearnStorage(db: Database): void {
   }
 
   registerHiveLearnAgents(db)
-  seedAllData()
+  seedIfEmpty()  // Seed solo si la BD está vacía
 }

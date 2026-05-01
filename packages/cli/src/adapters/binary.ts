@@ -31,7 +31,7 @@ import { PORTS } from "./types";
  */
 export class BinaryAdapter implements InstallationAdapter {
   readonly type = "binary" as const;
-  
+
   private hiveDir: string;
   private pidFile: string;
   private binaryPath: string;
@@ -42,9 +42,9 @@ export class BinaryAdapter implements InstallationAdapter {
     this.pidFile = path.join(this.hiveDir, "gateway.pid");
     this.binaryPath = options?.binaryPath || this.findBinary();
     // Detect if running inside Docker container
-    this.isDockerContainer = process.env.HIVE_UI_DIR === "/app/ui" || 
-                             process.env.HIVE_HOST === "0.0.0.0" ||
-                             existsSync("/.dockerenv");
+    this.isDockerContainer = process.env.HIVE_UI_DIR === "/app/ui" ||
+      process.env.HIVE_HOST === "0.0.0.0" ||
+      existsSync("/.dockerenv");
   }
 
   /**
@@ -62,20 +62,20 @@ export class BinaryAdapter implements InstallationAdapter {
     const scriptPath = process.argv[1];
     if (scriptPath) {
       const dir = path.dirname(scriptPath);
-      
+
       // Check if we're in dist directory
       if (path.basename(dir) === "dist") {
         const binaryInDist = path.join(dir, "hive");
         if (existsSync(binaryInDist)) {
           return binaryInDist;
         }
-        
+
         const binaryWindows = path.join(dir, "hive.exe");
         if (existsSync(binaryWindows)) {
           return binaryWindows;
         }
       }
-      
+
       // Check current executable
       if (existsSync(scriptPath) && !scriptPath.endsWith(".ts")) {
         return scriptPath;
@@ -108,7 +108,7 @@ export class BinaryAdapter implements InstallationAdapter {
   async detect(): Promise<boolean> {
     // Check if running as compiled binary (not from .ts source)
     const scriptPath = process.argv[1];
-    
+
     if (!scriptPath) {
       return false;
     }
@@ -183,7 +183,8 @@ export class BinaryAdapter implements InstallationAdapter {
       }
     }
 
-    const port = parseInt(env.HIVE_PORT || "18790", 10) || PORTS.GATEWAY;
+    // Use port from env var if set, otherwise default to 8787
+    const port = env.HIVE_PORT ? parseInt(env.HIVE_PORT, 10) : PORTS.GATEWAY;
     const publicUrl = env.HIVE_PUBLIC_URL || undefined;
 
     return {
@@ -192,7 +193,6 @@ export class BinaryAdapter implements InstallationAdapter {
         host: env.HIVE_HOST || (this.isDockerContainer ? "0.0.0.0" : "127.0.0.1"),
         port,
         wsPort: port,
-        codeBridgePort: PORTS.CODE_BRIDGE,
         publicUrl,
         openBrowser: !env.NO_BROWSER && !this.isDockerContainer,
         daemon: !!env.HIVE_DAEMON,
@@ -346,12 +346,10 @@ export class BinaryAdapter implements InstallationAdapter {
    * Get Binary environment variables
    */
   async getEnvironment(): Promise<Record<string, string>> {
-    const fileEnv = loadEnvFile();
-    const homeEnv = loadEnvFile(path.join(this.hiveDir, ".env"));
-
-    const defaults = {
+    // Hardcoded defaults - no .env files
+    return {
       HIVE_HOST: "127.0.0.1",
-      HIVE_PORT: String(PORTS.GATEWAY),
+      HIVE_PORT: String(PORTS.GATEWAY),  // "8787"
       HIVE_HOME: this.hiveDir,
       HIVE_UI_DIR: process.env.HIVE_UI_DIR || "",
       NO_BROWSER: "0",
@@ -359,8 +357,6 @@ export class BinaryAdapter implements InstallationAdapter {
       HIVE_DAEMON: "0",
       NODE_ENV: "production",
     };
-
-    return mergeEnv(defaults, fileEnv, homeEnv, process.env);
   }
 
   /**
@@ -374,7 +370,7 @@ export class BinaryAdapter implements InstallationAdapter {
     // Check binary existence
     if (existsSync(this.binaryPath)) {
       info.push(`Binary: ${this.binaryPath}`);
-      
+
       try {
         const stat = await import("node:fs/promises").then(m => m.stat(this.binaryPath));
         if (stat && !stat.isDirectory()) {

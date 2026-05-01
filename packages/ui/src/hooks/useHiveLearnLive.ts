@@ -28,9 +28,9 @@ const MAX_RECONNECT_MS  = 30_000;  // max reconnect delay
 
 function getWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  // Gateway runs on :18790 both in dev and prod
+  // Gateway runs on :8787 both in dev and prod
   const host = import.meta.env.DEV
-    ? `${window.location.hostname}:18790`
+    ? `${window.location.hostname}:8787`
     : window.location.host;
   return `${protocol}//${host}/hivelearn-events?sessionId=hl-ui`;
 }

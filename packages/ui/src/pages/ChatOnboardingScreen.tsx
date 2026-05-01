@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLessonStore } from '../store/lessonStore'
 import { wsUrl } from '../lib/wsUrl'
-import { SwarmCanvas } from '../canvas/SwarmCanvas'
 import type { StudentProfile } from '@hivelearn/core'
 
 type RangoEdad = 'nino' | 'adolescente' | 'adulto'
@@ -91,72 +90,52 @@ function HexAvatar({ theme }: { theme: typeof THEME.adulto }) {
 export function ChatOnboardingScreen() {
   const navigate = useNavigate()
   const {
-    setScreen, setPerfil, setMeta,
+    setPerfil, setMeta,
     setOnboardingSessionId, completeOnboarding,
-    setSessionId, setCurriculoId, setProgram, setIsGenerating,
-    setSwarmProgress, setAgentStatus,
-    selectedProviderId, selectedModelId,
+    instanceId, setInstanceId,
   } = useLessonStore()
-
+  
   const [messages, setMessages]             = useState<ChatMessage[]>([])
   const [inputValue, setInputValue]         = useState('')
   const [isWaiting, setIsWaiting]           = useState(false)
   const [isComplete, setIsComplete]         = useState(false)
   const [rangoEdad, setRangoEdad]           = useState<RangoEdad>('adulto')
   const [capturedFields, setCapturedFields] = useState<Record<string, string>>({})
-  const [activatingSwarm, setActivatingSwarm] = useState(false)
   const [isLoadingProgress, setIsLoadingProgress] = useState(true)
 
-  const sessionId   = useRef(`onboard-${Date.now()}-${Math.random().toString(36).slice(2)}`)
   const wsRef       = useRef<WebSocket | null>(null)
   const chatEndRef  = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const theme = THEME[rangoEdad]
 
-  // Cargar progreso guardado al montar el componente
+  // Inicializar instanceId al montar
   useEffect(() => {
-    const loadSavedProgress = async () => {
+    const initInstanceId = async () => {
       try {
-        const savedSessionId = localStorage.getItem('hivelearn-onboarding-session')
-        const savedFields = localStorage.getItem('hivelearn-onboarding-fields')
-        const savedMessages = localStorage.getItem('hivelearn-onboarding-messages')
-
-        if (savedSessionId && savedFields) {
-          sessionId.current = savedSessionId
-          const fields = JSON.parse(savedFields)
-          setCapturedFields(fields)
-
-          if (fields.edad) {
-            const age = parseInt(fields.edad, 10)
-            setRangoEdad(age <= 12 ? 'nino' : age <= 17 ? 'adolescente' : 'adulto')
-          }
-
-          if (savedMessages) {
-            const messages = JSON.parse(savedMessages)
-            setMessages(messages)
-          }
-
-          setOnboardingSessionId(sessionId.current)
-          setIsLoadingProgress(false)
-          return
-        }
-      } catch (err) {
-        console.error('Error loading saved progress:', err)
+        const { getInstanceId } = await import('@/store/lessonStore')
+        const id = await getInstanceId()
+        setInstanceId(id)
+        console.log('[ChatOnboarding] Instance ID:', id)
+      } catch (error) {
+        console.error('[ChatOnboarding] Error al obtener instanceId:', error)
+      } finally {
+        setIsLoadingProgress(false)
       }
-      setIsLoadingProgress(false)
     }
-
-    loadSavedProgress()
-  }, [])
+    
+    initInstanceId()
+  }, [setInstanceId])
 
   useEffect(() => {
-    if (isLoadingProgress) return
+    if (isLoadingProgress || !instanceId) return
 
-    setOnboardingSessionId(sessionId.current)
-    localStorage.setItem('hivelearn-onboarding-session', sessionId.current)
+    // Usar instanceId como sessionId - es único para esta instalación
+    setOnboardingSessionId(instanceId)
 
-    const url = wsUrl(`/hivelearn-onboarding?sessionId=${sessionId.current}&providerId=${encodeURIComponent(selectedProviderId ?? '')}&modelId=${encodeURIComponent(selectedModelId ?? '')}`)
+    // WebSocket usa solo instanceId (no providerId/modelId)
+    // El server obtiene la configuración del coordinador desde BD
+    const url = wsUrl(`/hivelearn-onboarding?sessionId=${instanceId}`)
     const ws = new WebSocket(url)
     wsRef.current = ws
 
@@ -167,6 +146,11 @@ export function ChatOnboardingScreen() {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data as string)
+
+        if (msg.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }))
+          return
+        }
 
         if (msg.type === 'connected') {
           ws.send(JSON.stringify({ type: 'init' }))
@@ -197,58 +181,20 @@ export function ChatOnboardingScreen() {
         }
 
         if (msg.type === 'complete') {
-          setIsComplete(true)
-          setActivatingSwarm(true)
           const perfil = msg.perfil as StudentProfile
           const meta   = msg.meta as string
+          const alumnoId = msg.alumnoId as string | undefined
           completeOnboarding()
           setPerfil(perfil)
           setMeta(meta)
-          setIsGenerating(true)
-          return
-        }
-
-        if (msg.type === 'generation_progress') {
-          setSwarmProgress(msg as any)
-          return
-        }
-
-        if (msg.type === 'agent_started') {
-          setAgentStatus(msg.agentId as string, 'running')
-          return
-        }
-
-        if (msg.type === 'agent_completed') {
-          setAgentStatus(msg.agentId as string, 'completed')
-          return
-        }
-
-        if (msg.type === 'agent_failed') {
-          setAgentStatus(msg.agentId as string, 'failed')
-          return
-        }
-
-        if (msg.type === 'generation_complete') {
+          if (alumnoId) {
+            localStorage.setItem('hivelearn-student-uuid', alumnoId)
+          }
           localStorage.removeItem('hivelearn-onboarding-session')
           localStorage.removeItem('hivelearn-onboarding-fields')
           localStorage.removeItem('hivelearn-onboarding-messages')
-          
-          setProgram(msg as any)
-          setSessionId(msg.sessionId as string)
-          setCurriculoId(msg.curriculoId as number)
-          setIsGenerating(false)
-          setSwarmProgress({ etapa: 'complete', agenteActivo: '', porcentaje: 100, mensaje: '¡Lección lista!' })
-          setScreen('lesson')
-          setTimeout(() => navigate('/lesson'), 1800)
-          return
-        }
-
-        if (msg.type === 'generation_error') {
-          setActivatingSwarm(false)
-          setIsComplete(false)
-          setIsGenerating(false)
-          setMessages(prev => [...prev, { role: 'agent', text: `Error generando la lección: ${(msg as any).message ?? 'Error desconocido'}` } as ChatMessage])
-          setIsWaiting(false)
+          setIsComplete(true)
+          navigate('/hivelearn-swarm', { state: { perfil, meta } })
           return
         }
 
@@ -275,7 +221,7 @@ export function ChatOnboardingScreen() {
     return () => {
       ws.close()
     }
-  }, [isLoadingProgress, isComplete, selectedProviderId, selectedModelId])
+  }, [isLoadingProgress, isComplete, instanceId])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -323,13 +269,6 @@ export function ChatOnboardingScreen() {
       {/* ── Background decoration ── */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.03] hive-hex-pattern" />
 
-      {/* ── LoadingScreen overlay ── */}
-      {activatingSwarm && (
-        <div className="absolute inset-0 z-50">
-          <SwarmCanvas />
-        </div>
-      )}
-
       {/* ══ Chat ══════════════════════════════════ */}
       <div className={`flex flex-col w-full md:w-[60%] h-full border-r border-border bg-gradient-to-b ${theme.gradientFrom} ${theme.gradientTo}`}>
 
@@ -348,11 +287,9 @@ export function ChatOnboardingScreen() {
                     localStorage.removeItem('hivelearn-onboarding-session')
                     localStorage.removeItem('hivelearn-onboarding-fields')
                     localStorage.removeItem('hivelearn-onboarding-messages')
-                    sessionId.current = `onboard-${Date.now()}-${Math.random().toString(36).slice(2)}`
                     setCapturedFields({})
                     setMessages([])
                     setRangoEdad('adulto')
-                    setOnboardingSessionId(sessionId.current)
                   }
                 }}
                 className="text-[10px] font-bold uppercase tracking-widest text-hive-red hover:opacity-70 transition-opacity"

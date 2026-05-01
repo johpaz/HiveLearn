@@ -10,6 +10,15 @@ export const HIVELEARN_SCHEMA_V1 = `
 -- HiveLearn Schema v1
 -- Prefijo hl_ para coexistir sin conflictos con tablas de Hive OSS
 
+-- Tabla de instancias únicas (UUID por instalación)
+CREATE TABLE IF NOT EXISTS hl_instances (
+  instance_id     TEXT PRIMARY KEY,
+  provider_id     TEXT NOT NULL DEFAULT 'ollama',
+  model_id        TEXT NOT NULL DEFAULT 'gemma2:9b',
+  created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tabla propia de agentes HL (sin FK a providers/users para evitar constraint failures)
 CREATE TABLE IF NOT EXISTS hl_agents (
   id              TEXT PRIMARY KEY,
@@ -18,7 +27,7 @@ CREATE TABLE IF NOT EXISTS hl_agents (
   system_prompt   TEXT,
   role            TEXT NOT NULL DEFAULT 'worker',
   provider_id     TEXT NOT NULL DEFAULT 'ollama',
-  model_id        TEXT NOT NULL DEFAULT 'gemma4-e4b',
+  model_id        TEXT NOT NULL DEFAULT 'gemma2:9b',
   max_iterations  INTEGER NOT NULL DEFAULT 3,
   tools_json      TEXT DEFAULT '[]',
   workspace       TEXT,
@@ -32,7 +41,9 @@ CREATE TABLE IF NOT EXISTS hl_agents (
 CREATE TABLE IF NOT EXISTS hl_student_profiles (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   alumno_id       TEXT UNIQUE NOT NULL,
-  apodo           TEXT NOT NULL,
+  nombre          TEXT NOT NULL DEFAULT '',
+  nickname        TEXT NOT NULL DEFAULT '',
+  apodo           TEXT NOT NULL DEFAULT '',
   avatar          TEXT NOT NULL,
   edad            INTEGER NOT NULL,
   estado          TEXT NOT NULL DEFAULT 'onboarding' CHECK(estado IN ('onboarding','activo','inactivo')),
@@ -218,6 +229,19 @@ CREATE INDEX IF NOT EXISTS idx_hli_session ON hl_lesson_interactions(session_id)
 export const HIVELEARN_SCHEMA_V3 = `
 -- HiveLearn Schema v3
 -- Permite pausar/retomar sesiones sin depender de localStorage (multi-usuario/multi-dispositivo)
+
+-- Tabla de programas de aprendizaje (schema asociado a alumno y sesión)
+CREATE TABLE IF NOT EXISTS hl_programs (
+  id              TEXT PRIMARY KEY,  -- UUID del programa
+  instance_id     TEXT REFERENCES hl_instances(instance_id),
+  student_id      INTEGER REFERENCES hl_student_profiles(id),
+  session_id      TEXT REFERENCES hl_sessions(session_id),
+  topic_slug      TEXT REFERENCES hl_topics(slug),
+  schema_json     TEXT NOT NULL,  -- El schema completo del programa
+  total_nodos     INTEGER,
+  created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Historial del chat de onboarding conversacional
 CREATE TABLE IF NOT EXISTS hl_onboarding_messages (

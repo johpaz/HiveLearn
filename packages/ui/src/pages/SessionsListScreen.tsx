@@ -164,7 +164,8 @@ interface SessionRow {
 }
 
 function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
+  const iso = dateStr ? dateStr.replace(' ', 'T') : ''
+  const diff = Date.now() - new Date(iso || 0).getTime()
   const mins  = Math.floor(diff / 60_000)
   const hours = Math.floor(diff / 3_600_000)
   const days  = Math.floor(diff / 86_400_000)

@@ -33,8 +33,8 @@ export class HiveLearnSwarm {
 
   async run(perfil: StudentProfile, meta: string): Promise<LessonProgram> {
     const ts = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14)
-    const apodoSlug = perfil.apodo.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 20)
-    const sessionId = `${apodoSlug}_${ts}`
+    const nicknameSlug = perfil.nickname.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 20)
+    const sessionId = `${nicknameSlug}_${ts}`
 
     const perfilAdaptacion: PerfilAdaptacion = {
       duracionSesion:    30,
@@ -64,7 +64,7 @@ export class HiveLearnSwarm {
       ``,
       `PERFIL DEL ALUMNO:`,
       `- alumnoId: "${perfil.alumnoId}"`,
-      `- apodo: ${perfil.apodo}`,
+      `- nickname: ${perfil.nickname}`,
       `- duracionSesion: ${perfilAdaptacion.duracionSesion} minutos`,
       `- nodosRecomendados: ${perfilAdaptacion.nodosRecomendados}`,
       `- tono: ${perfilAdaptacion.tono}`,

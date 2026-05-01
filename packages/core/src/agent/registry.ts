@@ -8,7 +8,7 @@
  */
 import type { Database } from 'bun:sqlite'
 const HIVELEARN_PROVIDER_ID = 'ollama'
-const HIVELEARN_MODEL_ID = 'gemma4-e4b'
+const HIVELEARN_MODEL_ID = 'gemma2:9b'
 import { COORDINATOR_PROMPT } from './coordinator.prompt'
 import { PROFILE_PROMPT } from './prompts/profile.prompt'
 import { INTENT_PROMPT } from './prompts/intent.prompt'
@@ -29,7 +29,6 @@ import { ONBOARDING_PROMPT } from './prompts/onboarding.prompt'
 
 export const AGENT_IDS = {
   coordinator: 'hl-coordinator-agent',
-  onboarding: 'hl-onboarding-agent',
   profile: 'hl-profile-agent',
   intent: 'hl-intent-agent',
   structure: 'hl-structure-agent',
@@ -58,7 +57,6 @@ interface AgentDef {
 
 const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.coordinator, name: 'HiveLearnCoordinator', description: 'Coordina el enjambre educativo completo', systemPrompt: COORDINATOR_PROMPT, maxIterations: 10 },
-  { id: AGENT_IDS.onboarding, name: 'OnboardingAgent', description: 'Conversación inicial adaptativa para conocer al alumno', systemPrompt: ONBOARDING_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.profile, name: 'ProfileAgent', description: 'Construye el perfil de adaptación del alumno', systemPrompt: PROFILE_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.intent, name: 'IntentAgent', description: 'Extrae tema, nivel y tono de la meta del alumno', systemPrompt: INTENT_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.structure, name: 'StructureAgent', description: 'Diseña el esqueleto completo del programa de estudio', systemPrompt: STRUCTURE_PROMPT, maxIterations: 10 },

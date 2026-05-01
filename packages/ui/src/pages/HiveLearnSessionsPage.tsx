@@ -12,6 +12,7 @@ interface HLSession {
   curriculo_id: number;
   meta: string;
   nombre: string;
+  nickname: string;
   rango_edad: string;
   total_nodos: number;
   nodos_completados: number;
@@ -141,7 +142,9 @@ function SessionCard({
     ? Math.round((session.nodos_completados / session.total_nodos) * 100)
     : 0;
 
-  const date = new Date((session.created_at || 0) * 1000).toLocaleDateString('es', {
+  const rawDate = session.created_at || '';
+  const isoDate = rawDate ? rawDate.replace(' ', 'T') : '';
+  const date = new Date(isoDate || 0).toLocaleDateString('es', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
 
@@ -191,7 +194,9 @@ function SessionCard({
               {session.meta || 'Sesión sin título'}
             </p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className="text-muted-foreground text-xs">{session.nombre}</span>
+              <span className="text-muted-foreground text-xs">
+                {session.nickname || session.nombre || 'Alumno'}
+              </span>
               {session.rango_edad && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground uppercase tracking-wider font-medium">
                   {RANGO_LABEL[session.rango_edad] ?? session.rango_edad}
@@ -294,12 +299,20 @@ export function HiveLearnSessionsPage() {
   const [metrics, setMetrics] = useState<HLMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchNickname, setSearchNickname] = useState('');
 
-  const fetchAll = async () => {
+  const fetchAll = async (opts?: { q?: string; nickname?: string }) => {
     setIsLoading(true);
     try {
+      const params = new URLSearchParams();
+      if (opts?.q) params.set('q', opts.q);
+      if (opts?.nickname) params.set('nickname', opts.nickname);
+      const query = params.toString();
+      const endpoint = `/api/hivelearn/sessions${query ? `?${query}` : ''}`;
+
       const [sessData, metData] = await Promise.all([
-        apiClient<{ sessions: any[] }>("/api/hivelearn/sessions", { showError: false }),
+        apiClient<{ sessions: any[] }>(endpoint, { showError: false }),
         apiClient<any>("/api/hivelearn/metrics", { showError: false }).catch(() => null),
       ]);
       setSessions(sessData.sessions ?? []);
@@ -374,27 +387,67 @@ export function HiveLearnSessionsPage() {
 
           )}
 
-          {/* Filter tabs + New session button */}
-          <div className="flex items-center justify-between mb-6">
-            {!isLoading && sessions.length > 0 && (
-              <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl border border-border shadow-sm">
-                {(['all', 'active', 'completed'] as const).map(f => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all
-                      ${filter === f
-                        ? 'bg-hive-amber text-primary-foreground shadow-honey'
-                        : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    {f === 'all' ? 'Todas' : f === 'active' ? 'En progreso' : 'Completadas'}
-                  </button>
-                ))}
+          {/* Search + Filter tabs + New session button */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3 flex-1 w-full sm:w-auto">
+              {/* Search by name/nickname */}
+              <div className="relative flex-1 max-w-xs">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') fetchAll({ q: searchQuery, nickname: searchNickname }); }}
+                  placeholder="Buscar por nombre o nickname..."
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-secondary/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-hive-amber/50"
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 text-xs">🔍</span>
               </div>
-            )}
-
+              {/* Filter by nickname */}
+              <div className="relative max-w-[140px]">
+                <input
+                  type="text"
+                  value={searchNickname}
+                  onChange={(e) => setSearchNickname(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') fetchAll({ q: searchQuery, nickname: searchNickname }); }}
+                  placeholder="Nickname..."
+                  className="w-full pl-3 pr-3 py-2 rounded-xl bg-secondary/50 border border-border text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-hive-amber/50"
+                />
+              </div>
+              <button
+                onClick={() => fetchAll({ q: searchQuery, nickname: searchNickname })}
+                disabled={isLoading}
+                className="px-3 py-2 rounded-xl bg-hive-amber/10 hover:bg-hive-amber/20 border border-hive-amber/20 text-hive-amber text-xs font-bold transition-all"
+              >
+                Buscar
+              </button>
+              {(searchQuery || searchNickname) && (
+                <button
+                  onClick={() => { setSearchQuery(''); setSearchNickname(''); fetchAll(); }}
+                  className="px-3 py-2 rounded-xl bg-secondary/50 hover:bg-secondary border border-border text-muted-foreground text-xs font-medium transition-all"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-3">
+              {!isLoading && sessions.length > 0 && (
+                <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-xl border border-border shadow-sm">
+                  {(['all', 'active', 'completed'] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all
+                        ${filter === f
+                          ? 'bg-hive-amber text-primary-foreground shadow-honey'
+                          : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {f === 'all' ? 'Todas' : f === 'active' ? 'En progreso' : 'Completadas'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <button
                 onClick={() => navigate("/onboarding")}
                 className="px-5 py-2.5 bg-hive-amber hover:bg-hive-amber/90 text-primary-foreground font-bold rounded-xl text-sm transition-all shadow-honey flex items-center gap-2"
@@ -404,7 +457,7 @@ export function HiveLearnSessionsPage() {
               </button>
 
               <button
-                onClick={fetchAll}
+                onClick={() => fetchAll({ q: searchQuery, nickname: searchNickname })}
                 disabled={isLoading}
                 className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all group"
                 title="Refrescar"

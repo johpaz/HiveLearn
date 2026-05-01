@@ -34,7 +34,7 @@ export class OpenAICompatProvider implements LLMProvider {
   async call(options: LLMCallOptions): Promise<LLMResponse> {
     const { default: OpenAI } = await import("openai")
 
-    const baseURL = options.baseUrl?.trim() || OPENAI_COMPAT_BASE_URLS[options.provider] || undefined
+    const baseURL = options.baseUrl?.trim() || OPENAI_COMPAT_BASE_URLS[options.provider || 'openai'] || undefined
     const isLocal = baseURL?.includes("localhost") || baseURL?.includes("127.0.0.1") || baseURL?.includes("::1")
     const apiKey = options.apiKey || (isLocal ? "ollama" : undefined)
 
@@ -59,14 +59,14 @@ export class OpenAICompatProvider implements LLMProvider {
     const body: any = {
       model: (options.model ?? '').replace(providerPrefix, ""),
       messages: messagesForProvider,
-      temperature: requiresTemperature1(options.provider, options.model) ? 1 : (options.temperature ?? 0.7),
+      temperature: requiresTemperature1(options.provider || 'openai', options.model || '') ? 1 : (options.temperature ?? 0.7),
     }
     if (options.maxTokens) body.max_tokens = options.maxTokens
     if (options.numCtx && isLocal) body.num_ctx = options.numCtx
 
     // Per-provider profile drives tool call behavior
-    const profile = getProviderProfile(options.provider)
-    const sendTools = modelSupportsTools(options.provider, options.model) && !!(options.tools?.length)
+    const profile = getProviderProfile(options.provider || 'openai')
+    const sendTools = modelSupportsTools(options.provider || 'openai', options.model || '') && !!(options.tools?.length)
 
     // Map from wire name (normalized) → original name for denormalizing responses
     const toolNameMap = new Map<string, string>()

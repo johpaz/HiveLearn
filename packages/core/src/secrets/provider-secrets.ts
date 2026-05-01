@@ -12,6 +12,7 @@
 
 import { getDb } from '../storage/sqlite'
 import { logger } from '../utils/logger'
+import { getCurrentCorrelationId } from '../utils/correlation-id'
 
 const log = logger.child('provider-secrets')
 
@@ -38,19 +39,48 @@ export async function storeProviderApiKey(
   providerId: string,
   apiKey: string
 ): Promise<void> {
+  const correlationId = getCurrentCorrelationId()
+  const startTime = Date.now()
+  const secretId = makeSecretId(providerId)
+  
+  log.info('[store] Storing API key', { 
+    providerId, 
+    service: secretId.service,
+    name: secretId.name,
+    correlationId,
+  })
+
   try {
-    const secretId = makeSecretId(providerId)
-    // Usar argumentos posicionales: service, name, value
-    await Bun.secrets.set(secretId.service, secretId.name, apiKey)
-    log.info('[store] API key stored securely', { providerId, service: secretId.service })
+    // Usar objeto de opciones según bun-types v1.3+
+    await Bun.secrets.set({ 
+      service: secretId.service, 
+      name: secretId.name, 
+      value: apiKey 
+    })
+    
+    const duration = Date.now() - startTime
+    log.info('[store] API key stored securely', { 
+      providerId, 
+      service: secretId.service,
+      duration,
+      correlationId,
+    })
 
     // Marcar en BD que tiene key (sin guardar el valor)
     const db = getDb()
     db.run('UPDATE providers SET active = 1 WHERE id = ?', [providerId])
+    
+    log.debug('[store] Database updated', { providerId, correlationId })
   } catch (error) {
+    const duration = Date.now() - startTime
     log.error('[store] Failed to store API key', {
       providerId,
-      error: (error as Error).message
+      service: secretId.service,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      duration,
+      correlationId,
+      platform: process.platform,
     })
     throw new Error(`Failed to store API key for provider ${providerId}: ${(error as Error).message}`)
   }
@@ -63,15 +93,45 @@ export async function storeProviderApiKey(
 export async function getProviderApiKey(
   providerId: string
 ): Promise<string | null> {
+  const correlationId = getCurrentCorrelationId()
+  const startTime = Date.now()
+  const secretId = makeSecretId(providerId)
+  
+  log.debug('[get] Retrieving API key', { 
+    providerId, 
+    service: secretId.service,
+    name: secretId.name,
+    correlationId,
+  })
+
   try {
-    const secretId = makeSecretId(providerId)
-    // Usar argumentos posicionales: service, name
-    const apiKey = await Bun.secrets.get(secretId.service, secretId.name)
+    // Usar objeto de opciones según bun-types v1.3+
+    const apiKey = await Bun.secrets.get({ 
+      service: secretId.service, 
+      name: secretId.name 
+    })
+    
+    const duration = Date.now() - startTime
+    const found = apiKey !== null && apiKey.length > 0
+    
+    log.debug('[get] API key retrieved', { 
+      providerId, 
+      found,
+      duration,
+      correlationId,
+    })
+    
     return apiKey
   } catch (error) {
+    const duration = Date.now() - startTime
     log.error('[get] Failed to retrieve API key', {
       providerId,
-      error: (error as Error).message
+      service: secretId.service,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      duration,
+      correlationId,
+      platform: process.platform,
     })
     return null
   }
@@ -83,10 +143,30 @@ export async function getProviderApiKey(
 export async function hasProviderApiKey(
   providerId: string
 ): Promise<boolean> {
+  const correlationId = getCurrentCorrelationId()
+  
+  log.debug('[has] Checking API key existence', { 
+    providerId, 
+    correlationId,
+  })
+
   try {
     const apiKey = await getProviderApiKey(providerId)
-    return apiKey !== null && apiKey.length > 0
-  } catch {
+    const hasKey = apiKey !== null && apiKey.length > 0
+    
+    log.debug('[has] API key check result', { 
+      providerId, 
+      hasKey,
+      correlationId,
+    })
+    
+    return hasKey
+  } catch (error) {
+    log.error('[has] Failed to check API key', {
+      providerId,
+      error: (error as Error).message,
+      correlationId,
+    })
     return false
   }
 }
@@ -97,11 +177,31 @@ export async function hasProviderApiKey(
 export async function deleteProviderApiKey(
   providerId: string
 ): Promise<void> {
+  const correlationId = getCurrentCorrelationId()
+  const startTime = Date.now()
+  const secretId = makeSecretId(providerId)
+  
+  log.info('[delete] Deleting API key', { 
+    providerId, 
+    service: secretId.service,
+    name: secretId.name,
+    correlationId,
+  })
+
   try {
-    const secretId = makeSecretId(providerId)
-    // Usar argumentos posicionales: service, name
-    const deleted = await Bun.secrets.delete(secretId.service, secretId.name)
-    log.info('[delete] API key deleted', { providerId, deleted })
+    // Usar objeto de opciones según bun-types v1.3+
+    const deleted = await Bun.secrets.delete({ 
+      service: secretId.service, 
+      name: secretId.name 
+    })
+    
+    const duration = Date.now() - startTime
+    log.info('[delete] API key deleted', { 
+      providerId, 
+      deleted,
+      duration,
+      correlationId,
+    })
 
     // Limpiar en BD
     const db = getDb()
@@ -109,10 +209,18 @@ export async function deleteProviderApiKey(
       'UPDATE providers SET active = 0 WHERE id = ?',
       [providerId]
     )
+    
+    log.debug('[delete] Database updated', { providerId, correlationId })
   } catch (error) {
+    const duration = Date.now() - startTime
     log.error('[delete] Failed to delete API key', {
       providerId,
-      error: (error as Error).message
+      service: secretId.service,
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      duration,
+      correlationId,
+      platform: process.platform,
     })
     throw new Error(`Failed to delete API key for provider ${providerId}: ${(error as Error).message}`)
   }
@@ -122,6 +230,10 @@ export async function deleteProviderApiKey(
  * Lista todos los providers que tienen API keys almacenadas
  */
 export async function listProvidersWithKeys(): Promise<string[]> {
+  const correlationId = getCurrentCorrelationId()
+  
+  log.debug('[list] Listing providers with keys', { correlationId })
+
   try {
     const db = getDb()
     const rows = db.query('SELECT id FROM providers WHERE active = 1').all() as Array<{ id: string }>
@@ -134,10 +246,18 @@ export async function listProvidersWithKeys(): Promise<string[]> {
       }
     }
 
+    log.info('[list] Providers with keys', { 
+      count: providersWithKeys.length,
+      providers: providersWithKeys,
+      correlationId,
+    })
+
     return providersWithKeys
   } catch (error) {
     log.error('[list] Failed to list providers with keys', {
-      error: (error as Error).message
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      correlationId,
     })
     return []
   }

@@ -21,7 +21,8 @@ export type EstadoAlumno = 'onboarding' | 'activo' | 'inactivo'
 
 export interface StudentProfile {
   alumnoId: string
-  apodo: string
+  nombre: string
+  nickname: string
   avatar: string
   edad: number
   estado: EstadoAlumno
@@ -206,3 +207,7 @@ export interface SwarmProgress {
   porcentaje: number
   mensaje: string
 }
+
+// ─── A2UI Mundo Types (Canvas 2) ─────────────────────────────────────────────
+export * from './a2ui-mundo.types'
+export * from './tool'

@@ -70,10 +70,10 @@ export class DockerAdapter implements InstallationAdapter {
     try {
       // Check if Docker is installed
       execSync("docker --version", { stdio: "ignore" });
-      
+
       // Check if docker-compose is available
       execSync("docker compose version", { stdio: "ignore" });
-      
+
       // Check if compose file exists
       if (!existsSync(this.composeFile)) {
         return false;
@@ -101,12 +101,13 @@ export class DockerAdapter implements InstallationAdapter {
   async getConfig(): Promise<InstallationConfig> {
     const env = await this.getEnvironment();
     const paths = getDefaultPaths(this.hiveDir);
-    
+
     // In Docker mode, UI is served from /app/ui inside container
     // but we access it via the exposed port
     paths.uiDir = null;
 
-    const port = parseInt(env.HIVE_PORT || "18790", 10) || PORTS.GATEWAY;
+    // Use port from env var if set, otherwise default to 8787
+    const port = env.HIVE_PORT ? parseInt(env.HIVE_PORT, 10) : PORTS.GATEWAY;
     const publicUrl = env.HIVE_PUBLIC_URL || undefined;
 
     return {
@@ -115,7 +116,6 @@ export class DockerAdapter implements InstallationAdapter {
         host: env.HIVE_HOST || "0.0.0.0",
         port,
         wsPort: port,
-        codeBridgePort: PORTS.CODE_BRIDGE,
         publicUrl,
         openBrowser: !env.NO_BROWSER,
         daemon: false,
@@ -222,17 +222,15 @@ export class DockerAdapter implements InstallationAdapter {
    * Get Docker-specific environment variables
    */
   async getEnvironment(): Promise<Record<string, string>> {
-    const fileEnv = loadEnvFile(this.envFile);
-    
-    const defaults = {
+    // Hardcoded defaults for Docker - no .env files
+    return {
       HIVE_HOST: "0.0.0.0",
-      HIVE_PORT: String(PORTS.GATEWAY),
+      HIVE_PORT: String(PORTS.GATEWAY),  // "8787"
       OLLAMA_HOST: "http://host.docker.internal:11434",
       NO_BROWSER: "1",
       HIVE_PUBLIC_URL: "",
+      NODE_ENV: "production",
     };
-
-    return mergeEnv(defaults, fileEnv, process.env);
   }
 
   /**
@@ -278,11 +276,11 @@ export class DockerAdapter implements InstallationAdapter {
     const running = await this.isRunning();
     if (running) {
       info.push("Hive container is running");
-      
+
       // Check health endpoint
       const config = await this.getConfig();
-      const healthy = await waitForHttpPort(config.gateway.port, "/health", 5000);
-      
+      const healthy = await waitForHttpPort(config.gateway.port, "/", 5000);
+
       if (healthy) {
         info.push("Hive health check passed");
       } else {

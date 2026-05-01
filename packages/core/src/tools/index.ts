@@ -23,6 +23,8 @@ export { buscarEnHiveLearnTool } from './search/buscar-en-hivelearn.tool'
 export { revisarProgramaTool } from './coordinator/revisar-programa.tool'
 export { delegarEnjambreTool } from './coordinator/delegar-enjambre.tool'
 export { createEvaluarRespuestaTool } from './coordinator/evaluar-respuesta.tool'
+export { crearProgramaTool, crearProgramaHandler } from './coordinator/crear-programa.tool'
+export { verificarProgramaTool, verificarProgramaHandler } from './coordinator/verificar-programa.tool'
 
 // ─── LLMToolDef groups por rol de agente ─────────────────────────────────────
 

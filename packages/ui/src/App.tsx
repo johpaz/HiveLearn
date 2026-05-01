@@ -16,6 +16,8 @@ const ChatOnboardingScreen = lazy(() => import("@/pages/ChatOnboardingScreen").t
 const A2UILessonScreen = lazy(() => import("@/pages/A2UILessonScreen").then(m => ({ default: m.A2UILessonScreen })));
 const EvaluationScreen = lazy(() => import("@/pages/EvaluationScreen").then(m => ({ default: m.EvaluationScreen })));
 const ResultScreen = lazy(() => import("@/pages/ResultScreen").then(m => ({ default: m.ResultScreen })));
+const MundoWorldPage = lazy(() => import("@/pages/MundoWorldPage").then(m => ({ default: m.MundoWorldPage })));
+const HiveLearnSwarmPage = lazy(() => import("@/pages/HiveLearnSwarmPage").then(m => ({ default: m.HiveLearnSwarmPage })));
 
 const queryClient = new QueryClient();
 
@@ -80,7 +82,9 @@ function App() {
               {/* Layout para el Módulo de Aprendizaje (Enfoque) */}
               <Route element={<LearningLayout><Outlet /></LearningLayout>}>
                 <Route path="/onboarding" element={<ChatOnboardingScreen />} />
+                <Route path="/hivelearn-swarm" element={<HiveLearnSwarmPage />} />
                 <Route path="/lesson" element={<A2UILessonScreen />} />
+                <Route path="/mundo" element={<MundoWorldPage />} />
                 <Route path="/evaluation" element={<EvaluationScreen />} />
                 <Route path="/result" element={<ResultScreen />} />
               </Route>

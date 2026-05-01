@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useLessonStore } from "@/store/lessonStore";
 import {
   RefreshCw, Settings2, Crown, Shield, Bot, Terminal,
-  Wifi, WifiOff, Zap, Eye, Grid3X3,
+  Wifi, WifiOff, Zap, Eye, Grid3X3, Rocket, Clock,
 } from "lucide-react";
 import { useHiveLearnLive, type AgentLiveStatus } from "@/hooks/useHiveLearnLive";
 import { AgentConfigDialog } from "@/modules/hivelearn/AgentConfigDialog";
 import { apiClient } from "@/lib/api";
-import { LaboratoryWorld } from "@/pixi/LaboratoryWorld";
-import type { AgentStatus } from "@/pixi/constants";
+import { LaboratoryWorld } from "@/canvaslearn/mundo1/LaboratoryWorld";
+import type { AgentStatus } from "@/canvaslearn/mundo1/constants";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface HLAgent {
@@ -386,14 +388,30 @@ function StatusPill({ status }: { status: AgentState["status"] }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function HiveLearnSwarmPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { program, setProgram, perfil: storedPerfil, meta: storedMeta } = useLessonStore();
+
+  // Navigation state from ChatOnboardingScreen
+  const navState = location.state as { perfil?: any; meta?: string } | null;
+  const perfil = navState?.perfil ?? storedPerfil;
+  const meta   = navState?.meta   ?? storedMeta;
+
   const [dbAgents, setDbAgents] = useState<HLAgent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [agentStates, setAgentStates] = useState<Record<string, AgentState>>({});
   const [viewMode, setViewMode] = useState<'world' | 'grid'>('world');
   const [isMuted, setIsMuted] = useState(false);
+  const [showTransition, setShowTransition] = useState(false);
+  const [countdown, setCountdown] = useState(15);
+  const [generationTriggered, setGenerationTriggered] = useState(false);
 
-  const { isConnected, isGenerating, agentStatuses, currentAgentId } = useHiveLearnLive();
+  const transitionTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { isConnected, isGenerating: liveGenerating, agentStatuses, currentAgentId } = useHiveLearnLive();
+  const isGenerating = liveGenerating || generationTriggered;
 
   // Convert agentStatuses to AgentStatus type for PixiSwarmWorld
   const pixiAgentStatuses: Record<string, AgentStatus> = {}
@@ -423,6 +441,55 @@ export function HiveLearnSwarmPage() {
   };
 
   useEffect(() => { fetchAgents(); }, []);
+
+  // Trigger generation if we arrived here from onboarding with perfil+meta
+  useEffect(() => {
+    if (!perfil || !meta || generationTriggered || program) return;
+    setGenerationTriggered(true);
+
+    const trigger = async () => {
+      try {
+        const { getInstanceId } = await import('@/store/lessonStore');
+        const instanceId = await getInstanceId();
+        const db = await fetch('/api/hivelearn/config').then(r => r.json()).catch(() => ({}));
+        const providerId = db.providerId ?? 'ollama';
+        const modelId    = db.modelId    ?? 'gemma2:9b';
+
+        // POST triggers SSE stream; we don't consume it here — useHiveLearnLive handles WS events
+        fetch('/api/hivelearn/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ perfil, meta, providerId, modelId }),
+        }).then(async res => {
+          const reader = res.body?.getReader();
+          const decoder = new TextDecoder();
+          if (!reader) return;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            for (const line of chunk.split('\n')) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const msg = JSON.parse(line.slice(6));
+                if (msg.type === 'complete') {
+                  setProgram(msg.payload);
+                  setGenerationTriggered(false);
+                }
+              } catch {}
+            }
+          }
+        }).catch(e => {
+          console.error('[SwarmPage] generation error', e);
+          setGenerationTriggered(false);
+        });
+      } catch (e) {
+        console.error('[SwarmPage] trigger error', e);
+        setGenerationTriggered(false);
+      }
+    };
+    trigger();
+  }, [perfil, meta, generationTriggered, program, setProgram]);
 
   // Derive agent states
   useEffect(() => {
@@ -468,6 +535,46 @@ export function HiveLearnSwarmPage() {
 
   const completedCount = Object.values(agentStates).filter(s => s.status === "completed").length;
 
+  // ─── Transición automática al Mundo de Aprendizaje ─────────────────────────
+  
+  // Detectar cuando todos los agentes están completados
+  const allAgentsCompleted = completedCount >= 16 && !isGenerating;
+
+  useEffect(() => {
+    if (allAgentsCompleted && !showTransition) {
+      // Iniciar transición
+      setShowTransition(true);
+      
+      // Countdown de 15 segundos
+      countdownTimerRef.current = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      // Navegar después de 15 segundos
+      transitionTimerRef.current = setTimeout(() => {
+        navigate('/mundo');
+      }, 15000);
+    }
+    
+    return () => {
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    };
+  }, [allAgentsCompleted, showTransition, navigate]);
+
+  const handleIrAlMundo = () => {
+    // Navegar inmediatamente al mundo
+    if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    navigate('/mundo');
+  };
+
   return (
     <>
       {/* ── Ambient Glow Blobs (Obsidian Observatory) ── */}
@@ -475,9 +582,8 @@ export function HiveLearnSwarmPage() {
       <div className="ambient-blob-blue w-[400px] h-[400px] top-0 right-0 translate-x-1/3 -translate-y-1/3 -z-10" />
 
       <div className="relative z-10 space-y-6">
-
-      {/* ── Header ─ */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-2">
             <span className="text-[10px] font-black tracking-[0.3em] text-amber-500 uppercase">Internal Protocol</span>
@@ -535,7 +641,7 @@ export function HiveLearnSwarmPage() {
 
       {/* ── PixiJS Laboratory World View ── */}
       {viewMode === 'world' && (
-        <div className="rounded-2xl border border-border/50 overflow-hidden glass-card">
+        <div className="relative rounded-2xl border border-border/50 overflow-hidden glass-card w-full">
           <LaboratoryWorld
             agentStatuses={pixiAgentStatuses}
             currentAgentId={currentAgentId}
@@ -544,20 +650,64 @@ export function HiveLearnSwarmPage() {
             soundEnabled={!isMuted}
             volume={0.3}
           />
+          
+          {/* Botón Comenzar Aventura (solo cuando generación completa) */}
+          {allAgentsCompleted && !showTransition && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <button
+                onClick={handleIrAlMundo}
+                className="group relative px-8 py-4 bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl font-black text-lg shadow-2xl hover:shadow-amber-500/50 transition-all hover:scale-105 animate-pulse"
+              >
+                <span className="flex items-center gap-3 text-white">
+                  <Rocket className="h-6 w-6 group-hover:rotate-12 transition-transform" />
+                  🚀 COMENZAR AVENTURA
+                  <Rocket className="h-6 w-6 group-hover:-rotate-12 transition-transform" />
+                </span>
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity blur-xl" />
+              </button>
+            </div>
+          )}
+          
+          {/* Overlay de Transición */}
+          {showTransition && countdown > 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/80 to-amber-900/80 backdrop-blur-md">
+              <div className="text-center space-y-6">
+                <div className="text-6xl mb-4 animate-bounce">🚀</div>
+                <h3 className="text-3xl font-black text-white">
+                  ¡Programa Listo!
+                </h3>
+                <p className="text-xl text-amber-200">
+                  Tu aventura de aprendizaje comienza en...
+                </p>
+                <div className="text-7xl font-black text-amber-400 animate-pulse">
+                  {countdown}
+                </div>
+                <p className="text-sm text-white/70">
+                  O haz click para ir ahora
+                </p>
+                <button
+                  onClick={handleIrAlMundo}
+                  className="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all hover:scale-105"
+                >
+                  Ir Ahora →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ── Coordinator & Workers Grid View ── */}
       {viewMode === 'grid' && (
-        <>
-      {/* ── Coordinator (prominent, first) ── */}
-      <CoordinatorCard
-        coordinator={coordinator}
-        agentState={agentStates["hl-coordinator-agent"] ?? { status: "idle" }}
-        isConnected={isConnected}
-        isGenerating={isGenerating}
-        onConfigSuccess={handleConfigSuccess}
-      />
+        <div className="space-y-6">
+          {/* ── Coordinator (prominent, first) ── */}
+          <CoordinatorCard
+            coordinator={coordinator}
+            agentState={agentStates["hl-coordinator-agent"] ?? { status: "idle" }}
+            isConnected={isConnected}
+            isGenerating={isGenerating}
+            onConfigSuccess={handleConfigSuccess}
+          />
 
       {/* ── Workers ── */}
       <div>
@@ -636,9 +786,9 @@ export function HiveLearnSwarmPage() {
         onOpenChange={setCoordinatorConfigOpen}
         onSuccess={handleConfigSuccess}
       />
-      </div>
-        </>
+        </div>
       )}
+      </div>
     </>
   );
 }

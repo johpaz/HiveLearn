@@ -178,6 +178,23 @@ const log = logger.child("seed");
 
 
 
+export function seedIfEmpty(): void {
+  const db = getDb()
+
+  log.info("[seed] 🌱 Checking if seed is needed...")
+
+  // Check if providers exist
+  const providerCount = db.query('SELECT COUNT(*) as count FROM providers').get() as { count: number }
+  
+  if (providerCount.count > 0) {
+    log.info(`[seed] ⏭️  Skipping seed - ${providerCount.count} providers already exist`)
+    return
+  }
+
+  log.info("[seed] 🌱 No providers found, seeding default data...")
+  seedAllData()
+}
+
 export function seedAllData(): void {
   const db = getDb()
 

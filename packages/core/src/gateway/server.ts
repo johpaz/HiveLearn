@@ -1,20 +1,36 @@
 /**
  * HiveLearn HTTP Server + WebSocket
- * 
+ *
  * Gateway independiente con rutas API, WebSocket y serving de UI
  */
 import { getDb } from '../storage/sqlite'
 import { LessonPersistence, HiveLearnSwarm, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
-import { logger } from '../utils/logger'
+import { obtenerPrograma, crearPrograma } from '../skills/gestionar-programas.skill'
+import { logger, redact } from '../utils/logger'
 import {
   storeProviderApiKey,
   getProviderApiKey,
   hasProviderApiKey,
   deleteProviderApiKey
 } from '../secrets/provider-secrets'
-import type { ServerWebSocket } from 'bun'
+import {
+  startHeartbeat,
+  handleWebSocketOpen,
+  handleWebSocketClose,
+  isWebSocketRoute,
+  handleOnboardingInit,
+  handleOnboardingUserMessage,
+  type WebSocketSessionManager
+} from '../websocket'
+import { getOrGenerateCorrelationId } from '../utils/correlation-id'
+import type { ServerWebSocket, Server } from 'bun'
 import { join } from 'path'
 import { existsSync } from 'fs'
+
+type WebSocketData = {
+  sessionId: string | null
+  pathname: string
+}
 
 type UIBundle = Map<string, { data: Buffer; mime: string }>
 let embeddedUIBundle: UIBundle | null = null
@@ -24,17 +40,41 @@ export function registerEmbeddedUI(bundle: UIBundle): void {
 }
 
 const log = logger.child('server')
-
 const isDev = process.env.NODE_ENV === 'development'
 
-interface Server {
-  fetch: (req: Request) => Response | Promise<Response>
-  websocket: {
-    open: (ws: ServerWebSocket<undefined>) => void
-    message: (ws: ServerWebSocket<undefined>, message: string | ArrayBuffer | Buffer) => void
-    close: (ws: ServerWebSocket<undefined>, code: number, reason: string) => void
+// WebSocket session manager
+const sessions: WebSocketSessionManager = {
+  onboardingSessions: new Map<string, ServerWebSocket<any>>(),
+  lessonSessions: new Map<string, ServerWebSocket<any>>(),
+  eventSubscribers: new Set<ServerWebSocket<any>>(),
+}
+
+// Start heartbeat
+startHeartbeat(sessions)
+
+// ── Bridge: hlSwarmEmitter → WebSocket eventSubscribers ───────────────────
+function broadcastToSubscribers(msg: object): void {
+  const payload = JSON.stringify(msg)
+  for (const ws of sessions.eventSubscribers) {
+    try { ws.send(payload) } catch { sessions.eventSubscribers.delete(ws) }
   }
 }
+
+hlSwarmEmitter.on('swarm:started', (e: any) => {
+  broadcastToSubscribers({ type: 'swarm_started', swarmId: e.swarmId, totalTasks: e.totalTasks })
+})
+hlSwarmEmitter.on('worker:task_started', (e: any) => {
+  broadcastToSubscribers({ type: 'agent_started', agentId: e.workerId, agentName: e.workerName, swarmId: e.swarmId })
+})
+hlSwarmEmitter.on('worker:task_completed', (e: any) => {
+  broadcastToSubscribers({ type: 'agent_completed', agentId: e.workerId, agentName: e.workerName, progress: e.progress, swarmId: e.swarmId })
+})
+hlSwarmEmitter.on('worker:task_failed', (e: any) => {
+  broadcastToSubscribers({ type: 'agent_failed', agentId: e.workerId, agentName: e.workerName, error: e.error, swarmId: e.swarmId })
+})
+hlSwarmEmitter.on('swarm:completed', (e: any) => {
+  broadcastToSubscribers({ type: 'swarm_completed', swarmId: e.swarmId, success: e.success, completedCount: e.completedCount, failedCount: e.failedCount, totalDurationMs: e.totalDurationMs })
+})
 
 // CORS headers helper
 function corsHeaders(req: Request): Record<string, string> {
@@ -53,36 +93,6 @@ function addCorsHeaders(response: Response, req: Request): Response {
     response.headers.set(key, value as string)
   }
   return response
-}
-
-// WebSocket sessions maps
-const onboardingSessions = new Map<string, ServerWebSocket<undefined>>()
-const lessonSessions = new Map<string, ServerWebSocket<undefined>>()
-const eventSubscribers = new Set<ServerWebSocket<undefined>>()
-
-// Helper para enviar mensajes por WebSocket
-function wsSend(ws: ServerWebSocket<undefined>, data: unknown): void {
-  try {
-    ws.send(JSON.stringify(data))
-  } catch (e) {
-    log.warn('WebSocket send failed', { error: (e as Error).message })
-  }
-}
-
-// WebSocket message handler
-function handleWsMessage(ws: ServerWebSocket<undefined>, message: string | ArrayBuffer | Buffer): void {
-  try {
-    const data = JSON.parse(message.toString())
-    log.debug('[ws] Message', data)
-    
-    // Handle ping/pong
-    if (data?.type === 'ping') {
-      wsSend(ws, { type: 'pong' })
-      return
-    }
-  } catch {
-    log.warn('[ws] Malformed message')
-  }
 }
 
 // Helper para servir archivos estáticos de la UI
@@ -104,6 +114,7 @@ async function serveUIFile(pathname: string): Promise<Response | null> {
 
   // Fallback to disk — try multiple locations
   const candidates = [
+    join(process.cwd(), 'dist/ui'),
     join(process.cwd(), 'packages/ui/dist'),
     join(__dirname, '../../../ui/dist'),
     join(__dirname, '../../ui'),
@@ -128,11 +139,27 @@ async function serveUIFile(pathname: string): Promise<Response | null> {
   return null
 }
 
-export function createServer(): Server {
+export function createServer(): any {
   return {
-    fetch: async (req: Request) => {
+    fetch: async (req: Request, server: Server<WebSocketData>) => {
       const url = new URL(req.url)
-      
+
+      // ── WebSocket upgrade: debe ser lo primero, sin ningún await previo ──
+      if (req.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+        if (url.pathname.includes('hivelearn-onboarding') ||
+            url.pathname.includes('hivelearn-lesson') ||
+            url.pathname.includes('hivelearn-events')) {
+          const upgraded = server.upgrade(req, {
+            data: {
+              sessionId: url.searchParams.get('sessionId'),
+              pathname: url.pathname,
+            },
+          })
+          if (upgraded) return undefined
+          return new Response('WebSocket upgrade failed', { status: 400 })
+        }
+      }
+
       // Handle CORS preflight
       if (req.method === 'OPTIONS') {
         return new Response(null, {
@@ -142,19 +169,39 @@ export function createServer(): Server {
       }
 
       // ── Health check ───────────────────────────────────────────────────
-      if (url.pathname === '/health') {
-        return new Response(JSON.stringify({ status: 'ok' }), {
-          headers: { 'Content-Type': 'application/json' },
+      if (url.pathname === '/health' && req.method === 'GET') {
+        const correlationId = getOrGenerateCorrelationId(req)
+        log.info('[health] Health check', { correlationId })
+
+        const healthData = {
+          status: 'ok',
+          uptime: process.uptime(),
+          timestamp: new Date().toISOString(),
+          pid: process.pid,
+          memory: {
+            heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
+            heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB',
+          },
+        }
+
+        log.debug('[health] Health check response', { ...healthData, correlationId })
+
+        return new Response(JSON.stringify(healthData), {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Correlation-ID': correlationId,
+          },
         })
+      }
+
+      // ── Production: serve UI for all non-API routes ────────────────────
+      if (!isDev && !url.pathname.startsWith('/api') && !url.pathname.startsWith('/ws')) {
+        const uiResponse = await serveUIFile(url.pathname)
+        if (uiResponse) return uiResponse
       }
 
       // ── Dev Mode: Proxy to Vite ────────────────────────────────────────
       if (isDev) {
-        const upgrade = req.headers.get('Upgrade')
-        if (upgrade === 'websocket') {
-          return new Response('WebSocket upgrade required', { status: 426 })
-        }
-
         if (!url.pathname.startsWith('/api')) {
           const ports = [5173, 5174]
           for (const port of ports) {
@@ -172,12 +219,6 @@ export function createServer(): Server {
             { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
           )
         }
-      }
-
-      // ── Production: serve UI for all non-API routes ────────────────────
-      if (!isDev && !url.pathname.startsWith('/api') && !url.pathname.startsWith('/ws')) {
-        const uiResponse = await serveUIFile(url.pathname)
-        if (uiResponse) return uiResponse
       }
 
       // ── API Routes ─────────────────────────────────────────────────────
@@ -240,22 +281,50 @@ export function createServer(): Server {
 
       // GET /api/providers/:id/api-key - Verificar si tiene API key
       if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/api-key') && req.method === 'GET') {
+        const correlationId = getOrGenerateCorrelationId(req)
+        const providerId = url.pathname.split('/')[3]
+        const startTime = Date.now()
+        
+        log.info('[GET /api/providers/:id/api-key]', { providerId, correlationId })
+        
         try {
-          const providerId = url.pathname.split('/')[3]
           const hasKey = await hasProviderApiKey(providerId)
+          const duration = Date.now() - startTime
+          
+          log.debug('[GET /api/providers/:id/api-key] Success', { 
+            providerId, 
+            hasApiKey: hasKey, 
+            duration,
+            correlationId 
+          })
+          
           return addCorsHeaders(
             new Response(JSON.stringify({ hasApiKey: hasKey }), {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
             }),
             req
           )
         } catch (e) {
-          log.error('[providers/api-key] Error', { error: (e as Error).message })
+          const duration = Date.now() - startTime
+          log.error('[GET /api/providers/:id/api-key] Error', { 
+            providerId,
+            error: (e as Error).message,
+            stack: (e as Error).stack,
+            duration,
+            correlationId,
+          })
+          
           return addCorsHeaders(
             new Response(JSON.stringify({ error: (e as Error).message }), {
               status: 500,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
             }),
             req
           )
@@ -264,32 +333,78 @@ export function createServer(): Server {
 
       // POST /api/providers/:id/api-key - Guardar API key
       if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/api-key') && req.method === 'POST') {
+        const correlationId = getOrGenerateCorrelationId(req)
+        const providerId = url.pathname.split('/')[3]
+        const startTime = Date.now()
+        
+        log.info('[POST /api/providers/:id/api-key]', { providerId, correlationId })
+        
         try {
-          const providerId = url.pathname.split('/')[3]
           const body = await req.json() as { apiKey: string }
+          
+          log.debug('[POST /api/providers/:id/api-key] Request body', {
+            providerId,
+            hasApiKey: !!body.apiKey,
+            keyLength: body.apiKey?.length,
+            correlationId,
+          })
+          
           if (!body.apiKey) {
+            log.warn('[POST /api/providers/:id/api-key] Missing API key', { providerId, correlationId })
             return addCorsHeaders(
               new Response(JSON.stringify({ error: 'apiKey es requerido' }), {
                 status: 400,
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'X-Correlation-ID': correlationId,
+                },
               }),
               req
             )
           }
+          
+          log.debug('[POST /api/providers/:id/api-key] Calling storeProviderApiKey', { 
+            providerId, 
+            correlationId 
+          })
+          
           await storeProviderApiKey(providerId, body.apiKey)
+          
+          const duration = Date.now() - startTime
+          log.info('[POST /api/providers/:id/api-key] Success', { 
+            providerId, 
+            duration,
+            correlationId 
+          })
+          
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true }), {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
             }),
             req
           )
         } catch (e) {
-          log.error('[providers/api-key] Error', { error: (e as Error).message })
+          const duration = Date.now() - startTime
+          log.error('[POST /api/providers/:id/api-key] Error', { 
+            providerId,
+            error: (e as Error).message,
+            stack: (e as Error).stack,
+            duration,
+            correlationId,
+            code: (e as any).code,
+          })
+          
           return addCorsHeaders(
             new Response(JSON.stringify({ error: (e as Error).message }), {
               status: 500,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
             }),
             req
           )
@@ -298,22 +413,49 @@ export function createServer(): Server {
 
       // DELETE /api/providers/:id/api-key - Eliminar API key
       if (url.pathname.startsWith('/api/providers/') && url.pathname.endsWith('/api-key') && req.method === 'DELETE') {
+        const correlationId = getOrGenerateCorrelationId(req)
+        const providerId = url.pathname.split('/')[3]
+        const startTime = Date.now()
+        
+        log.info('[DELETE /api/providers/:id/api-key]', { providerId, correlationId })
+        
         try {
-          const providerId = url.pathname.split('/')[3]
           await deleteProviderApiKey(providerId)
+          
+          const duration = Date.now() - startTime
+          log.info('[DELETE /api/providers/:id/api-key] Success', { 
+            providerId, 
+            duration,
+            correlationId 
+          })
+          
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true }), {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
             }),
             req
           )
         } catch (e) {
-          log.error('[providers/api-key] Error', { error: (e as Error).message })
+          const duration = Date.now() - startTime
+          log.error('[DELETE /api/providers/:id/api-key] Error', { 
+            providerId,
+            error: (e as Error).message,
+            stack: (e as Error).stack,
+            duration,
+            correlationId,
+          })
+          
           return addCorsHeaders(
             new Response(JSON.stringify({ error: (e as Error).message }), {
               status: 500,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
             }),
             req
           )
@@ -529,7 +671,9 @@ export function createServer(): Server {
       if (url.pathname === '/api/hivelearn/sessions' && req.method === 'GET') {
         try {
           const persistence = new LessonPersistence()
-          const sessions = persistence.getSessionsByAlumno('*')
+          const q = url.searchParams.get('q') ?? undefined
+          const nickname = url.searchParams.get('nickname') ?? undefined
+          const sessions = persistence.getAllSessions({ q: q, nickname: nickname })
           return addCorsHeaders(
             new Response(JSON.stringify({ sessions }), {
               status: 200,
@@ -613,6 +757,244 @@ export function createServer(): Server {
         }
       }
 
+      // ── Instancia Única ───────────────────────────────────────────────────
+      // GET /api/hivelearn/instance - Obtener instancia por UUID
+      if (url.pathname === '/api/hivelearn/instance' && req.method === 'GET') {
+        try {
+          const instanceId = url.searchParams.get('instanceId')
+          if (!instanceId) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'instanceId es requerido' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+          
+          const db = getDb()
+          const instance = db.query(
+            'SELECT instance_id, provider_id, model_id, created_at FROM hl_instances WHERE instance_id = ?'
+          ).get(instanceId) as any
+          
+          if (!instance) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ 
+                error: 'Instancia no encontrada',
+                configured: false 
+              }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+          
+          return addCorsHeaders(
+            new Response(JSON.stringify({ 
+              configured: true,
+              instanceId: instance.instance_id,
+              providerId: instance.provider_id,
+              modelId: instance.model_id,
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[hivelearn/instance GET] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // POST /api/hivelearn/instance - Registrar nueva instancia
+      if (url.pathname === '/api/hivelearn/instance' && req.method === 'POST') {
+        try {
+          const body = await req.json() as { 
+            instanceId: string
+            providerId?: string
+            modelId?: string
+          }
+          
+          if (!body.instanceId) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'instanceId es requerido' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+          
+          const db = getDb()
+          const providerId = body.providerId || 'ollama'
+          const modelId = body.modelId || 'gemma2:9b'
+          
+          // Insertar o actualizar instancia
+          db.query(`
+            INSERT OR REPLACE INTO hl_instances (instance_id, provider_id, model_id, updated_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+          `).run(body.instanceId, providerId, modelId)
+          
+          return addCorsHeaders(
+            new Response(JSON.stringify({ 
+              ok: true,
+              instanceId: body.instanceId,
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[hivelearn/instance POST] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // GET /api/hivelearn/metrics - Obtener métricas de sesiones
+      if (url.pathname === '/api/hivelearn/metrics' && req.method === 'GET') {
+        const correlationId = getOrGenerateCorrelationId(req)
+        const startTime = Date.now()
+        
+        log.info('[GET /api/hivelearn/metrics]', { correlationId })
+        
+        try {
+          const db = getDb();
+
+          // Total de sesiones
+          const totalSessionsRow = db.query('SELECT COUNT(*) as count FROM hl_sessions').get() as { count: number };
+          const totalSessions = totalSessionsRow.count;
+
+          // Sesiones completadas
+          const completedRow = db.query('SELECT COUNT(*) as count FROM hl_sessions WHERE completada = 1').get() as { count: number };
+          const completedSessions = completedRow.count;
+
+          // XP total
+          const xpRow = db.query('SELECT COALESCE(SUM(xp_total), 0) as total FROM hl_sessions').get() as { total: number };
+          const totalXp = xpRow.total;
+
+          // Score promedio (usando rating como proxy)
+          const scoreRow = db.query('SELECT COALESCE(AVG(rating), 0) as avg FROM hl_sessions WHERE rating IS NOT NULL').get() as { avg: number };
+          const avgScore = scoreRow.avg;
+
+          // Tasa de completación
+          const completionRate = totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0;
+
+          const metrics = {
+            total_xp: totalXp || 0,
+            avg_score: Math.round(avgScore * 10) / 10,
+            completion_rate: Math.round(completionRate * 10) / 10,
+            total_sessions: totalSessions,
+            completed_sessions: completedSessions,
+          };
+          
+          const duration = Date.now() - startTime
+          log.debug('[GET /api/hivelearn/metrics] Success', {
+            metrics,
+            duration,
+            correlationId,
+          })
+
+          return addCorsHeaders(
+            new Response(JSON.stringify(metrics), {
+              status: 200,
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
+            }),
+            req
+          );
+        } catch (e) {
+          const duration = Date.now() - startTime
+          log.error('[hivelearn/metrics] Error', { 
+            error: (e as Error).message,
+            stack: (e as Error).stack,
+            duration,
+            correlationId,
+          })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-Correlation-ID': correlationId,
+              },
+            }),
+            req
+          );
+        }
+      }
+
+      // GET /api/hivelearn/programs/:id
+      if (url.pathname.startsWith('/api/hivelearn/programs/') && req.method === 'GET') {
+        const programId = url.pathname.split('/')[4]
+        try {
+          const program = await obtenerPrograma(programId)
+          if (!program) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'Program not found' }), {
+                status: 404,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+          return addCorsHeaders(
+            new Response(JSON.stringify({ program }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // POST /api/hivelearn/programs
+      if (url.pathname === '/api/hivelearn/programs' && req.method === 'POST') {
+        try {
+          const body = await req.json() as any
+          const result = await crearPrograma(body)
+          return addCorsHeaders(
+            new Response(JSON.stringify(result), {
+              status: 201,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
       // Default: 404
       return addCorsHeaders(
         new Response(JSON.stringify({ error: 'Not found' }), {
@@ -624,28 +1006,43 @@ export function createServer(): Server {
     },
 
     websocket: {
-      open(ws) {
-        log.info('[ws] Client connected')
+      async open(ws: any) {
+        const { sessionId, pathname } = (ws.data ?? {}) as { sessionId: string | null; pathname: string }
+        await handleWebSocketOpen(ws, sessionId, pathname, sessions)
+        if (sessionId) ws._sessionId = sessionId
+        ws._isOnboarding = (pathname ?? '').includes('hivelearn-onboarding')
       },
 
-      message: handleWsMessage,
+      message(ws: any, message: any) {
+        try {
+          const data = JSON.parse(message.toString())
+          if (data?.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }))
+            return
+          }
+          // Route onboarding messages
+          const sessionId = ws._sessionId as string | undefined
+          const isOnboarding = ws._isOnboarding as boolean | undefined
+          if (isOnboarding && sessionId) {
+            if (data?.type === 'init') {
+              handleOnboardingInit(ws, sessionId).catch((e: Error) =>
+                log.error('[ws] onboarding init error', { error: e.message })
+              )
+            } else if (data?.type === 'user_message' && data.content) {
+              handleOnboardingUserMessage(ws, sessionId, String(data.content)).catch((e: Error) =>
+                log.error('[ws] onboarding user_message error', { error: e.message })
+              )
+            }
+          }
+        } catch {
+          log.debug('[ws] Malformed message')
+        }
+      },
 
-      close(ws, code, reason) {
-        log.info(`[ws] Client disconnected: ${code} ${reason}`)
-        
-        // Clean up sessions
-        for (const [sessionId, sessionWs] of onboardingSessions.entries()) {
-          if (sessionWs === ws) {
-            onboardingSessions.delete(sessionId)
-          }
-        }
-        for (const [sessionId, sessionWs] of lessonSessions.entries()) {
-          if (sessionWs === ws) {
-            lessonSessions.delete(sessionId)
-          }
-        }
-        eventSubscribers.delete(ws)
+      close(ws: any, code: any, reason: any) {
+        handleWebSocketClose(ws, code, reason, sessions)
       },
     },
+
   }
 }

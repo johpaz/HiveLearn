@@ -68,7 +68,7 @@ export class LessonDeliverySession {
         `FECHA Y HORA ACTUAL: ${now.toISOString()} (${now.toLocaleString('es-CO', { timeZone: 'America/Bogota', hour12: true })})`,
         ``,
         `PERFIL DEL ALUMNO:`,
-        `- apodo: ${profile?.apodo ?? 'Alumno'}`,
+        `- nickname: ${profile?.nickname ?? 'Alumno'}`,
         `- meta: "${full.metaAlumno}"`,
         `- sessionId: "${this.sessionId}"`,
         ``,

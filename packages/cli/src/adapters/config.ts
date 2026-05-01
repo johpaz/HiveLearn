@@ -199,26 +199,26 @@ export async function waitForPort(
  */
 export async function waitForHttpPort(
   port: number,
-  path: string = "/health",
+  path: string = "/",
   timeout: number = 30000
 ): Promise<boolean> {
-  const start = Date.now();
-  
+  const start = Date.now()
+
   while (Date.now() - start < timeout) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}${path}`, {
         signal: AbortSignal.timeout(1000),
-      });
+      })
       if (response.ok) {
-        return true;
+        return true
       }
     } catch {
       // Port not ready yet
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500))
   }
-  
-  return false;
+
+  return false
 }
 
 /**

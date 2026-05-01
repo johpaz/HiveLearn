@@ -1,3 +1,6 @@
 export { GESTIONAR_CONTENIDO_SKILL } from './gestionar-contenido-educativo.skill'
 export { BUSQUEDA_HIVELEARN_SKILL } from './busqueda-hivelearn.skill'
-export { SEED_INICIAL_SKILL } from './seed-inicial.skill'
+// export { SEED_INICIAL_SKILL } from './seed-inicial.skill'
+export { GESTIONAR_INSTANCIA_SKILL } from './gestionar-instancia.skill'
+export { GESTIONAR_PROGRAMAS_SKILL } from './gestionar-programas.skill'
+export { GESTIONAR_ALUMNOS_SKILL } from './gestionar-alumnos.skill'
