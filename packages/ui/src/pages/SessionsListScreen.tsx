@@ -155,7 +155,7 @@ function timeAgo(dateStr: string): string {
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export function SessionsListScreen() {
-  const { reset, setScreen, restoreSession, selectedModelId } = useLessonStore()
+  const { reset, restoreSession, selectedModelId } = useLessonStore()
   const navigate = useNavigate()
   
   const [sessions, setSessions] = useState<SessionRow[]>([])
@@ -187,7 +187,6 @@ export function SessionsListScreen() {
 
   const handleNew = () => { 
     reset()
-    setScreen('chat-onboarding') 
     navigate('/onboarding')
   }
 
@@ -223,7 +222,6 @@ export function SessionsListScreen() {
       })
 
       if (session.completada) {
-        setScreen('result')
         navigate('/result')
       } else {
         navigate('/lesson')

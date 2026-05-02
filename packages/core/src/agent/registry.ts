@@ -26,6 +26,8 @@ import { EVALUATION_PROMPT } from './prompts/evaluation.prompt'
 import { FEEDBACK_PROMPT } from './prompts/feedback.prompt'
 import { AUDIO_PROMPT } from './prompts/audio.prompt'
 import { ONBOARDING_PROMPT } from './prompts/onboarding.prompt'
+import { MONITOR_PROMPT } from './prompts/monitor.prompt'
+import { VISION_PEDAGOGICA_PROMPT } from './prompts/vision-pedagogica.prompt'
 
 export const AGENT_IDS = {
   coordinator: 'hl-coordinator-agent',
@@ -45,6 +47,8 @@ export const AGENT_IDS = {
   gamification: 'hl-gamification-agent',
   evaluation: 'hl-evaluation-agent',
   feedback: 'hl-feedback-agent',
+  monitor: 'hl-monitor-agent',
+  visionPedagogica: 'hl-vision-pedagogica-agent',
 } as const
 
 interface AgentDef {
@@ -73,6 +77,8 @@ const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.evaluation, name: 'EvaluationAgent', description: 'Genera 5 preguntas de evaluación final', systemPrompt: EVALUATION_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.feedback, name: 'FeedbackAgent', description: 'Feedback motivador on-demand por respuesta del alumno', systemPrompt: FEEDBACK_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.audio, name: 'AudioAgent', description: 'Genera script de narración educativa (Web Speech API)', systemPrompt: AUDIO_PROMPT, maxIterations: 3 },
+  { id: AGENT_IDS.monitor, name: 'MonitorAgent', description: 'Monitorea la atención del alumno vía análisis de frame de webcam', systemPrompt: MONITOR_PROMPT, maxIterations: 1 },
+  { id: AGENT_IDS.visionPedagogica, name: 'VisionPedagogicaAgent', description: 'Analiza objetos mostrados a la cámara y genera preguntas pedagógicas', systemPrompt: VISION_PEDAGOGICA_PROMPT, maxIterations: 1 },
 ]
 
 export function registerHiveLearnAgents(db: Database): void {

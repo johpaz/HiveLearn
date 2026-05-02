@@ -28,6 +28,7 @@ import { createCompletarLeccionTool } from '../tools/coordinator/completar-lecci
 import { createEvaluarRespuestaTool } from '../tools/coordinator/evaluar-respuesta.tool'
 import { logger } from '../utils/logger'
 import type { NodoLesson } from '../types'
+import { activateMonitor, deactivateMonitor } from './monitor-handler'
 
 const log = logger.child('lesson-ws')
 
@@ -89,6 +90,7 @@ export function closeLessonSession(sessionId: string): void {
   if (session) {
     session.cancel()
     activeSessions.delete(sessionId)
+    deactivateMonitor(sessionId)
     log.info('[lesson] Session closed', { sessionId })
   }
 }
@@ -122,7 +124,10 @@ async function runDelivery(
 
   const profile = persistence.getStudentProfile(full.alumnoId)
 
-  // 1. Enviar bienvenida al mundo — desbloquea zona 0
+  // 1. Activar monitor (silencioso si el perfil lo desactiva)
+  activateMonitor(sessionId, profile?.edad ?? 12)
+
+  // 2. Enviar bienvenida al mundo — desbloquea zona 0
   send({
     tipo: 'bienvenida',
     session_id: sessionId,

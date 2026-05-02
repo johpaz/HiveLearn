@@ -222,3 +222,33 @@ CREATE TABLE IF NOT EXISTS hl_onboarding_progress (
 CREATE INDEX IF NOT EXISTS idx_hop_session ON hl_onboarding_progress(session_id);
 CREATE INDEX IF NOT EXISTS idx_hop_alumno ON hl_onboarding_progress(alumno_id);
 `;
+
+/** Schema v6 — Tabla hl_curricula (faltaba en V1) + hl_monitor_frames */
+export const HIVELEARN_SCHEMA_V6 = `
+-- HiveLearn Schema v6
+-- hl_curricula: currículos generados por sesión (referenciado por hl_sessions y hl_session_metrics)
+CREATE TABLE IF NOT EXISTS hl_curricula (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id  TEXT    NOT NULL,
+  topic_slug  TEXT    DEFAULT NULL,
+  meta_alumno TEXT    NOT NULL DEFAULT '',
+  nodos_json  TEXT    NOT NULL DEFAULT '[]',
+  total_nodos INTEGER DEFAULT 0,
+  rango_edad  TEXT    DEFAULT NULL,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hcurricula_session ON hl_curricula(session_id);
+
+-- hl_monitor_frames: trazabilidad del monitor de atención por sesión
+CREATE TABLE IF NOT EXISTS hl_monitor_frames (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id    TEXT    NOT NULL,
+  frame_id      TEXT    NOT NULL,
+  estado        TEXT    NOT NULL,
+  nivel         TEXT    NOT NULL DEFAULT 'info',
+  accion        TEXT    NOT NULL DEFAULT 'ninguna',
+  segundos_dist INTEGER DEFAULT 0,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hmf_session ON hl_monitor_frames(session_id);
+`;

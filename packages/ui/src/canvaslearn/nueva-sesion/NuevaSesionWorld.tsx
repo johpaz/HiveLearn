@@ -77,7 +77,7 @@ export function NuevaSesionWorld({ onLaunch }: Props) {
   }
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-[#0a0e27]">
+    <div className="relative w-full h-screen overflow-hidden bg-[#0a0e27]">
       {/* Pixi canvas — fondo con portal de misión */}
       <div
         ref={containerRef}

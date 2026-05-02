@@ -57,19 +57,6 @@ export async function getInstanceId(): Promise<string> {
   return newInstanceId
 }
 
-export type Screen =
-  | 'landing'
-  | 'dashboard'
-  | 'provider-select'
-  | 'sessions'
-  | 'chat-onboarding'
-  | 'loading'
-  | 'lesson'
-  | 'evaluation'
-  | 'result'
-  | 'how-to-use'
-  | 'config'
-
 export interface XpFloat {
   nodeId: string
   xp: number
@@ -77,9 +64,6 @@ export interface XpFloat {
 }
 
 interface LessonState {
-  // Navegación
-  screen: Screen
-
   // Instancia única (UUID por instalación)
   instanceId: string | null
 
@@ -135,7 +119,6 @@ interface LessonState {
 
   // Acciones base
   setInstanceId: (instanceId: string) => void
-  setScreen: (screen: Screen) => void
   setSelectedProvider: (providerId: string) => void
   setSelectedModel: (modelId: string | null) => void
   setPerfil: (perfil: StudentProfile) => void
@@ -173,7 +156,6 @@ interface LessonState {
 }
 
 const initialState = {
-  screen: 'sessions' as Screen,
   instanceId: null,
   perfil: null,
   meta: '',
@@ -214,7 +196,6 @@ export const useLessonStore = create<LessonState>()(persist((set, get) => ({
   ...initialState,
 
   setInstanceId: (instanceId) => set({ instanceId }),
-  setScreen: (screen) => set({ screen }),
   setSelectedProvider: (selectedProviderId) => set({ selectedProviderId }),
   setSelectedModel: (selectedModelId) => set({ selectedModelId }),
   setPerfil: (perfil) => set({ perfil }),
@@ -290,7 +271,6 @@ export const useLessonStore = create<LessonState>()(persist((set, get) => ({
       nodoActualId: sessionData.lastNodeId ?? program.nodos[0]?.id ?? null,
       sessionRestored: true,
       sessionPausedAt: sessionData.paused_at ?? null,
-      screen: 'lesson',
     })
   },
   setOnboardingSessionId: (onboardingSessionId) => set({ onboardingSessionId }),
@@ -317,7 +297,6 @@ export const useLessonStore = create<LessonState>()(persist((set, get) => ({
   storage: createJSONStorage(() => localStorage),
   // Solo persistir los campos necesarios para restaurar la sesión
   partialize: (state) => ({
-    screen: (state.screen === 'lesson' || state.screen === 'loading') ? 'sessions' : state.screen,
     program: state.program,
     sessionId: state.sessionId,
     curriculoId: state.curriculoId,

@@ -15,7 +15,7 @@ export function ResultScreen() {
   const navigate = useNavigate()
   const {
     program, puntajeEvaluacion, xpTotal,
-    logrosDesbloqueados, nodosCompletados, tiempoInicioSesion, reset, setScreen
+    logrosDesbloqueados, nodosCompletados, tiempoInicioSesion, reset
   } = useLessonStore()
   const { nivelActual, formatXP } = useGamification()
   const [showRating, setShowRating] = useState(false)

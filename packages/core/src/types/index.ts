@@ -1,4 +1,7 @@
 /** Tipos compartidos entre backend y UI de HiveLearn */
+export type { MonitorEstado, NivelAlerta, AccionMonitor, EstiloIntervencion, MonitorProfile, MonitorEvent, MonitorFrameContext } from './monitor.types'
+export { getDefaultMonitorProfile } from './monitor.types'
+
 
 export type TipoPedagogico = 'concept' | 'exercise' | 'quiz' | 'challenge' | 'milestone' | 'evaluation'
 export type TipoVisual = 'text_card' | 'code_block' | 'svg_diagram' | 'gif_guide' | 'infographic' | 'chart' | 'animated_card' | 'image_ai' | 'audio_ai'

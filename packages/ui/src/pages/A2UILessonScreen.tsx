@@ -26,7 +26,7 @@ export function A2UILessonScreen() {
   const [searchParams] = useSearchParams()
   const {
     sessionId: storeSessionId, program, xpTotal,
-    setScreen, setSessionId, showXpFloat, incrementarRacha, resetRacha, perderVida,
+    setSessionId, showXpFloat, incrementarRacha, resetRacha, perderVida,
     desbloquearLogro,
   } = useLessonStore()
 
@@ -120,7 +120,6 @@ export function A2UILessonScreen() {
         useLessonStore.setState({
           xpTotal: msg.xpTotal ?? xpTotal,
           logrosDesbloqueados: (msg.logros ?? []).map((l: any) => l.id).filter(Boolean),
-          screen: 'result',
         })
         navigate('/result')
         return

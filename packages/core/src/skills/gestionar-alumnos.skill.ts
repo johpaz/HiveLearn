@@ -30,7 +30,7 @@ export async function crearAlumno(perfil: StudentProfile): Promise<{ ok: boolean
   try {
     db.query(`
       INSERT INTO hl_student_profiles (alumno_id, nombre, nickname, apodo, avatar, edad, estado, sesiones_total, xp_acumulado, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run(
       perfil.alumnoId,
       perfil.nombre,

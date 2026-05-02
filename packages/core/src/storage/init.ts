@@ -4,7 +4,7 @@
  * Es idempotente: todos los DDL usan IF NOT EXISTS.
  */
 import type { Database } from 'bun:sqlite'
-import { HIVELEARN_SCHEMA_V1, HIVELEARN_SCHEMA_V2, HIVELEARN_SCHEMA_V3, HIVELEARN_SCHEMA_V4, HIVELEARN_SCHEMA_V5 } from './hivelearn-schema'
+import { HIVELEARN_SCHEMA_V1, HIVELEARN_SCHEMA_V2, HIVELEARN_SCHEMA_V3, HIVELEARN_SCHEMA_V4, HIVELEARN_SCHEMA_V5, HIVELEARN_SCHEMA_V6 } from './hivelearn-schema'
 import { registerHiveLearnAgents } from '../agent/registry'
 import { seedIfEmpty } from './seed'
 
@@ -50,9 +50,11 @@ export function initHiveLearnStorage(db: Database): void {
   db.exec(HIVELEARN_SCHEMA_V1)
 
   // V1 migrations: columnas añadidas después de la creación inicial de la tabla
+  ensureColumn(db, 'hl_student_profiles', 'alumno_id', 'TEXT DEFAULT NULL')
   ensureColumn(db, 'hl_student_profiles', 'apodo', "TEXT NOT NULL DEFAULT ''")
   ensureColumn(db, 'hl_student_profiles', 'nombre', "TEXT NOT NULL DEFAULT ''")
   ensureColumn(db, 'hl_student_profiles', 'nickname', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'hl_student_profiles', 'avatar', "TEXT NOT NULL DEFAULT '👤'")
 
   // V2: CREATE TABLE y CREATE INDEX (sin ALTER TABLE)
   try {
@@ -93,6 +95,24 @@ export function initHiveLearnStorage(db: Database): void {
     const msg = (e as Error).message ?? ''
     if (!msg.includes('already exists')) throw e
   }
+
+  // V6: tabla hl_curricula (faltaba en V1) + hl_monitor_frames
+  try {
+    db.exec(HIVELEARN_SCHEMA_V6)
+  } catch (e) {
+    const msg = (e as Error).message ?? ''
+    if (!msg.includes('already exists')) throw e
+  }
+
+  // V6 columnas: curriculo_id en hl_sessions + campos de monitor en hl_student_profiles
+  ensureColumn(db, 'hl_sessions', 'curriculo_id', 'INTEGER DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'nodos_completados', 'INTEGER DEFAULT 0')
+  ensureColumn(db, 'hl_student_profiles', 'ritmo_atencion', "TEXT DEFAULT 'normal'")
+  ensureColumn(db, 'hl_student_profiles', 'estilo_aprendizaje', "TEXT DEFAULT 'mixto'")
+  ensureColumn(db, 'hl_student_profiles', 'necesidades_esp', 'INTEGER DEFAULT 0')
+  ensureColumn(db, 'hl_student_profiles', 'monitor_activo', 'INTEGER DEFAULT 1')
+  ensureColumn(db, 'hl_student_profiles', 'intervalo_custom', 'INTEGER DEFAULT NULL')
+  ensureColumn(db, 'hl_student_profiles', 'umbral_custom', 'INTEGER DEFAULT NULL')
 
   registerHiveLearnAgents(db)
   seedIfEmpty()  // Seed solo si la BD está vacía

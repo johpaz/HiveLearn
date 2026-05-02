@@ -6,7 +6,7 @@ import { fetchWithAuth } from '../lib/fetchWithAuth'
 
 export function useEvaluation() {
   const navigate = useNavigate()
-  const { program, responderEvaluacion, respuestasEvaluacion, setPuntajeEvaluacion, setScreen, sessionId, xpTotal, logrosDesbloqueados } = useLessonStore()
+  const { program, responderEvaluacion, respuestasEvaluacion, setPuntajeEvaluacion, sessionId, xpTotal, logrosDesbloqueados } = useLessonStore()
   const [preguntaActual, setPreguntaActual] = useState(0)
   const [enviando, setEnviando] = useState(false)
 
@@ -47,12 +47,11 @@ export function useEvaluation() {
         }).catch(() => { /* non-critical */ })
       }
 
-      setScreen('result')
       navigate('/result')
     } finally {
       setEnviando(false)
     }
-  }, [preguntas, respuestasEvaluacion, total, setPuntajeEvaluacion, setScreen, navigate, sessionId, xpTotal, logrosDesbloqueados])
+  }, [preguntas, respuestasEvaluacion, total, setPuntajeEvaluacion, navigate, sessionId, xpTotal, logrosDesbloqueados])
 
   return {
     preguntas,

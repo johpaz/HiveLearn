@@ -26,6 +26,7 @@ import {
   cleanupProgramSession,
   startLessonSession,
   handleLessonMessage,
+  handleMonitorFrame,
   type WebSocketSessionManager
 } from '../websocket'
 import { getOrGenerateCorrelationId } from '../utils/correlation-id'
@@ -1127,6 +1128,9 @@ export function createServer(): any {
           if (isLesson && sessionId) {
             if (data?.tipo === 'iniciar_sesion') {
               startLessonSession(sessionId, ws)
+            } else if (data?.tipo === 'monitor:frame' && data.frame) {
+              handleMonitorFrame(sessionId, String(data.frame), data.context ?? {}, ws)
+                .catch((e: Error) => log.error('[monitor] frame error', { error: e.message }))
             } else {
               handleLessonMessage(sessionId, data)
             }
