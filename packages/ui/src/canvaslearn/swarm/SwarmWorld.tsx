@@ -68,8 +68,8 @@ export function SwarmWorld() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#0a0e27] flex items-center justify-center">
-      {/* Pixi Canvas */}
-      <div ref={containerRef} className="w-full h-full max-w-[1000px] max-h-[700px]" />
+      {/* Pixi Canvas — full screen */}
+      <div ref={containerRef} className="w-full h-full" />
 
       {/* Overlay UI */}
       <div className="absolute top-8 left-8 flex flex-col gap-2">
@@ -97,7 +97,7 @@ export function SwarmWorld() {
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
             <p className="text-xs font-bold text-amber-500/50 uppercase tracking-widest">
-              Iniciando sistemas robóticos...
+              Activando la colmena...
             </p>
           </div>
         </div>
