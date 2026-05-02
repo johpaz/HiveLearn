@@ -80,11 +80,13 @@ function App() {
                 <Route path="/config" element={<ProviderSelectScreen />} />
               </Route>
 
+              {/* Standalone: SwarmWorld ocupa toda la pantalla sin layout */}
+              <Route path="/hivelearn-swarm" element={<SwarmWorld />} />
+
               {/* Layout para el Módulo de Aprendizaje (Enfoque) */}
               <Route element={<LearningLayout><Outlet /></LearningLayout>}>
                 <Route path="/onboarding" element={<OnboardWorldPage />} />
                 <Route path="/nueva-sesion" element={<NuevaSesionWorldPage />} />
-                <Route path="/hivelearn-swarm" element={<SwarmWorld />} />
                 <Route path="/lesson" element={<A2UILessonScreen />} />
                 <Route path="/mundo" element={<MundoWorldPage />} />
                 <Route path="/evaluation" element={<EvaluationScreen />} />

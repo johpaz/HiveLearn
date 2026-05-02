@@ -325,10 +325,20 @@ export async function start(flags: string[]): Promise<void> {
   // Set environment
   process.env.HIVELEARN_PORT = PORT.toString();
   process.env.HIVELEARN_HOST = HOST;
-  process.env.NODE_ENV = 'production';
 
-  // Start gateway directly with embedded UI
-  registerEmbeddedUI(embeddedUI);
+  // Si corremos desde el código fuente, reconstruir UI y servir desde disco
+  const isRunningFromSource = existsSync(path.join(process.cwd(), 'packages/ui/package.json'))
+  if (isRunningFromSource) {
+    process.env.NODE_ENV = 'development'
+    console.log('🔨 Construyendo UI...')
+    const { $ } = await import('bun')
+    await $`bun run --cwd packages/ui build`.quiet()
+    console.log('✅ UI lista')
+    // embeddedUIBundle queda null → server.ts usa packages/ui/dist como fallback
+  } else {
+    process.env.NODE_ENV = 'production'
+    registerEmbeddedUI(embeddedUI)
+  }
   const coreConfig = await loadConfig();
   
   logger.info('Starting HiveLearn Gateway', { port: PORT, host: HOST });

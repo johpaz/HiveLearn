@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { apiClient } from "@/lib/api";
-import { Settings2, Brain, GitBranch, Zap, Database, Bot, Server, Hexagon, Loader2 } from "lucide-react";
+import { Settings2, Brain, GitBranch, Zap, Database, Bot, Server, Hexagon, Loader2, Mic2, Download, CheckCircle2, AlertTriangle } from "lucide-react";
 import {
   ProviderSelector,
   ModelSelector,
@@ -13,7 +13,7 @@ import {
 } from "@/modules/hivelearn/config";
 import type { ProviderOption, ModelOption, FullProvider } from "@/modules/hivelearn/config";
 
-type ConfigTab = "swarm" | "proveedores" | "visualizar";
+type ConfigTab = "swarm" | "proveedores" | "visualizar" | "tts";
 
 interface HiveLearnConfig {
   configured: boolean;
@@ -59,6 +59,11 @@ export function HiveLearnConfigPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error" | "loading">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [agentCount, setAgentCount] = useState(0);
+  const [ttsStatus, setTtsStatus] = useState<{ installed: boolean; piper: boolean; voices: string[] } | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<Array<{ id: string, name: string, description?: string, quality?: string, size?: string }>>([]);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>("es_MX-claude-14947-epoch-high");
+  const [isInstallingTTS, setIsInstallingTTS] = useState(false);
+  const [ttsError, setTtsError] = useState<string | null>(null);
 
   // Load data from real API. silent=true para refresh sin mostrar skeleton.
   const loadData = useCallback(async (silent = false) => {
@@ -143,7 +148,6 @@ export function HiveLearnConfigPage() {
       setModels(activeModels);
       setAgentCount((agentsData.agents ?? []).length || 16);
 
-      // Restore saved config if exists
       if (configData.configured && configData.providerId) {
         setSelectedProviderId(configData.providerId);
         setSelectedModelId(configData.modelId);
@@ -155,7 +159,22 @@ export function HiveLearnConfigPage() {
     }
   }, []);
 
+  // Separate TTS data loading
+  const loadTTSData = useCallback(async () => {
+    try {
+      const [tts, available] = await Promise.all([
+        apiClient<any>("/api/tts/status", { showError: false }),
+        apiClient<any>("/api/tts/available-voices", { showError: false }),
+      ]);
+      setTtsStatus(tts);
+      setAvailableVoices(available.voices ?? []);
+    } catch (e) {
+      console.error("Fallo al cargar datos de TTS:", e);
+    }
+  }, []);
+
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadTTSData(); }, [loadTTSData]);
 
   useEffect(() => {
     document.title = "HiveLearn | Configuración del Enjambre";
@@ -186,6 +205,26 @@ export function HiveLearnConfigPage() {
       setIsSaving(false);
     }
   }, [selectedProviderId, selectedModelId]);
+
+  const handleInstallTTS = async () => {
+    setIsInstallingTTS(true);
+    setTtsError(null);
+    try {
+      const res = await apiClient<any>("/api/tts/install", { 
+        method: "POST",
+        body: { voice: selectedVoiceId }
+      });
+      if (res.success) {
+        setTtsStatus(res.status);
+      } else {
+        setTtsError(res.error || "Fallo en la instalación de TTS");
+      }
+    } catch (e) {
+      setTtsError("Error de red al instalar TTS");
+    } finally {
+      setIsInstallingTTS(false);
+    }
+  };
 
   const selectedProviderName = providers.find(p => p.id === selectedProviderId)?.name ?? "";
   const selectedModelName = models.find(m => m.id === selectedModelId)?.name ?? "";
@@ -254,9 +293,9 @@ export function HiveLearnConfigPage() {
         ) : (
           <div className="space-y-16">
             {/* ── Tab Navigation — NO LINES ──────────────────────────── */}
-            <nav className="flex gap-2 p-1.5 rounded-[1.5rem] bg-white/[0.02] w-fit backdrop-blur-3xl">
-              {(["swarm", "proveedores", "visualizar"] as const).map((tab) => {
-                const Icon = tab === "swarm" ? Brain : tab === "proveedores" ? Server : Hexagon;
+            <nav className="flex flex-wrap gap-2 p-1.5 rounded-[1.5rem] bg-white/[0.02] w-fit backdrop-blur-3xl">
+              {(["swarm", "proveedores", "visualizar", "tts"] as const).map((tab) => {
+                const Icon = tab === "swarm" ? Brain : tab === "proveedores" ? Server : tab === "visualizar" ? Hexagon : Mic2;
                 const isActive = activeTab === tab;
                 return (
                   <button
@@ -269,7 +308,7 @@ export function HiveLearnConfigPage() {
                       }`}
                   >
                     <Icon className={`h-4 w-4 ${isActive ? "text-hive-amber" : "opacity-30"}`} />
-                    {tab === "swarm" ? "Motor del Enjambre" : tab === "proveedores" ? "Proveedores" : "Enjambre"}
+                    {tab === "swarm" ? "Motor del Enjambre" : tab === "proveedores" ? "Proveedores" : tab === "visualizar" ? "Enjambre" : "Voz Local"}
                   </button>
                 );
               })}
@@ -278,12 +317,18 @@ export function HiveLearnConfigPage() {
             {/* ── Tab Content ────────────────────────────────────────── */}
             <main className="animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
               {activeTab === "swarm" && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-                  {/* Left Column: Configuration */}
-                  <div className="lg:col-span-8 space-y-12">
-                    <section 
-                      className="rounded-[2.5rem] bg-card/60 backdrop-blur-3xl p-10 md:p-14 space-y-14 shadow-[0_64px_128px_-24px_rgba(0,0,0,0.8)]"
-                    >
+                <div className="max-w-5xl mx-auto space-y-12">
+                  <section 
+                    className="rounded-[2.5rem] bg-card/60 backdrop-blur-3xl p-10 md:p-14 space-y-14 shadow-[0_64px_128px_-24px_rgba(0,0,0,0.8)] border border-white/5"
+                  >
+                    <div className="space-y-4">
+                      <h2 className="text-3xl font-black tracking-tight text-white uppercase">Inteligencia_del_Enjambre</h2>
+                      <p className="text-white/40 leading-relaxed max-w-2xl text-sm">
+                        Configura el motor de lenguaje (LLM) que orquestará el razonamiento de todos los agentes del enjambre.
+                      </p>
+                    </div>
+
+                    <div className="space-y-14">
                       {/* Provider Selection */}
                       <div className="space-y-8">
                         <div className="flex items-center gap-6">
@@ -319,78 +364,52 @@ export function HiveLearnConfigPage() {
                           />
                         </div>
                       )}
-
-                      {/* Action Area */}
-                      <div className="pt-8 space-y-10">
-                        {selectedProviderId && selectedModelId && (
-                          <div className="animate-in zoom-in-98 duration-700">
-                            <ConfigSummary
-                              providerName={selectedProviderName}
-                              modelName={selectedModelName}
-                              agentCount={agentCount}
-                            />
-                          </div>
-                        )}
-
-                        <button
-                          onClick={handleSave}
-                          disabled={!selectedProviderId || !selectedModelId || isSaving}
-                          className="group relative w-full py-6 rounded-[1.5rem] overflow-hidden transition-all duration-700 disabled:opacity-20 active:scale-[0.98] shadow-[0_30px_60px_-15px_rgba(245,158,11,0.25)]"
-                        >
-                          <div 
-                            className="absolute inset-0 bg-gradient-to-br from-hive-amber via-[#f59e0b] to-[#ffb95f] transition-transform duration-700 group-hover:scale-110" 
-                          />
-                          <div className="relative z-10 flex items-center justify-center gap-4 text-base font-black uppercase tracking-[0.3em] text-[#2a1700]">
-                            {isSaving ? (
-                              <Loader2 className="h-6 w-6 animate-spin" />
-                            ) : (
-                              <Zap className="h-6 w-6" fill="currentColor" />
-                            )}
-                            {isSaving ? "DESPLEGANDO_SISTEMA..." : "INICIAR_MUTACIÓN_HIVE"}
-                          </div>
-                        </button>
-
-                        {saveStatus !== "idle" && (
-                          <div className="pt-4">
-                            <StatusMessage
-                              type={saveStatus === "loading" ? "loading" : saveStatus === "success" ? "success" : "error"}
-                              message={
-                                saveStatus === "success"
-                                  ? `Protocolo completado. El enjambre ha mutado a ${selectedModelName} con éxito.`
-                                  : saveError ?? "Fallo en la sincronización de red"
-                              }
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  </div>
-
-                  {/* Right Column: Insights & Pipeline */}
-                  <div className="lg:col-span-4 space-y-10">
-                    <SwarmPipelinePreview agentCount={agentCount} />
-
-                    <div className="grid grid-cols-1 gap-6">
-                      <ConfigInsightCard
-                        icon={GitBranch}
-                        title="ARQUITECTURA_ENJAMBRE"
-                        description="Orquestación determinística de agentes mediante grafos acíclicos de alta fidelidad."
-                        theme="blue"
-                      />
-                      <ConfigInsightCard
-                        icon={Zap}
-                        title="EJECUCIÓN_ULTRA"
-                        description="Procesamiento en paralelo con latencia sub-100ms para inferencia masiva."
-                        theme="cyan"
-                      />
-                      <ConfigInsightCard
-                        icon={Database}
-                        title="CACHE_SEMÁNTICO"
-                        description="Memoria de largo plazo integrada para la optimización de tokens y razonamiento."
-                        theme="purple"
-                      />
                     </div>
-                  </div>
+
+                    {/* Action Area */}
+                    <div className="pt-8 space-y-10">
+                      {selectedProviderId && selectedModelId && (
+                        <div className="animate-in zoom-in-98 duration-700">
+                          <ConfigSummary
+                            providerName={selectedProviderName}
+                            modelName={selectedModelName}
+                            agentCount={agentCount}
+                          />
+                        </div>
+                      )}
+
+                      <button
+                        onClick={handleSave}
+                        disabled={!selectedProviderId || !selectedModelId || isSaving}
+                        className="group relative w-full py-6 rounded-[1.5rem] overflow-hidden transition-all duration-700 disabled:opacity-20 active:scale-[0.98] shadow-[0_30px_60px_-15px_rgba(245,158,11,0.25)]"
+                      >
+                        <div 
+                          className="absolute inset-0 bg-gradient-to-br from-hive-amber via-[#f59e0b] to-[#ffb95f] transition-transform duration-700 group-hover:scale-110" 
+                        />
+                        <div className="relative z-10 flex items-center justify-center gap-4 text-base font-black uppercase tracking-[0.3em] text-[#2a1700]">
+                          {isSaving ? (
+                            <Loader2 className="h-6 w-6 animate-spin" />
+                          ) : (
+                            <Zap className="h-6 w-6" fill="currentColor" />
+                          )}
+                          {isSaving ? "DESPLEGANDO_SISTEMA..." : "INICIAR_MUTACIÓN_HIVE"}
+                        </div>
+                      </button>
+
+                      {saveStatus !== "idle" && (
+                        <div className="pt-4">
+                          <StatusMessage
+                            type={saveStatus === "loading" ? "loading" : saveStatus === "success" ? "success" : "error"}
+                            message={
+                              saveStatus === "success"
+                                ? `Protocolo completado. El enjambre ha mutado a ${selectedModelName} con éxito.`
+                                : saveError ?? "Fallo en la sincronización de red"
+                            }
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </section>
                 </div>
               )}
 
@@ -409,6 +428,176 @@ export function HiveLearnConfigPage() {
                 <div className="animate-in fade-in slide-in-from-bottom-8 duration-1000">
                   <div className="rounded-[2.5rem] bg-card/60 backdrop-blur-3xl p-10 md:p-14 shadow-[0_64px_128px_-24px_rgba(0,0,0,0.8)]">
                     <SwarmVisualizer />
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "tts" && (
+                <div className="animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                    <div className="lg:col-span-8">
+                      <section className="rounded-[2.5rem] bg-card/60 backdrop-blur-3xl p-10 md:p-14 space-y-12 shadow-[0_64px_128px_-24px_rgba(0,0,0,0.8)]">
+                        <div className="space-y-4">
+                          <h2 className="text-3xl font-black tracking-tight text-white">Síntesis de Voz Local</h2>
+                          <p className="text-white/40 leading-relaxed max-w-xl">
+                            Configura el motor de voz offline Piper para permitir que los agentes se comuniquen verbalmente sin depender de la nube.
+                          </p>
+                        </div>
+
+                        <div className="space-y-10">
+                          <div className="flex items-center gap-6">
+                            <label className="text-[11px] font-black uppercase tracking-[0.4em] text-white/10 whitespace-nowrap">
+                              Estado_del_Motor
+                            </label>
+                            <div className="h-px flex-1 bg-gradient-to-r from-white/5 to-transparent" />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="p-8 rounded-[1.5rem] bg-white/[0.03] border border-white/5 flex flex-col gap-6">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-white/30">Binario Piper</span>
+                                {ttsStatus?.piper ? (
+                                  <CheckCircle2 className="h-5 w-5 text-hive-connected" />
+                                ) : (
+                                  <AlertTriangle className="h-5 w-5 text-hive-amber" />
+                                )}
+                              </div>
+                              <div className="text-sm font-medium text-white/60">
+                                {ttsStatus?.piper ? "Motor instalado y optimizado para el sistema." : "El motor de síntesis no ha sido descargado."}
+                              </div>
+                            </div>
+
+                            <div className="p-8 rounded-[1.5rem] bg-white/[0.03] border border-white/5 flex flex-col gap-6">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-white/30">Voces Instaladas</span>
+                                {ttsStatus?.voices && ttsStatus.voices.length > 0 ? (
+                                  <CheckCircle2 className="h-5 w-5 text-hive-connected" />
+                                ) : (
+                                  <AlertTriangle className="h-5 w-5 text-hive-amber" />
+                                )}
+                              </div>
+                              <div className="text-sm font-medium text-white/60">
+                                {ttsStatus?.voices && ttsStatus.voices.length > 0 
+                                  ? `${ttsStatus.voices.length} modelos disponibles localmente.` 
+                                  : "Ningún modelo de voz ha sido descargado."}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-8">
+                            <div className="flex items-center gap-6">
+                              <label className="text-[11px] font-black uppercase tracking-[0.4em] text-white/10 whitespace-nowrap">
+                                Seleccionar_Modelo
+                              </label>
+                              <div className="h-px flex-1 bg-gradient-to-r from-white/5 to-transparent" />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              {availableVoices.length === 0 ? (
+                                <div className="col-span-full p-12 rounded-[1.5rem] bg-white/[0.02] border border-dashed border-white/10 flex flex-col items-center justify-center gap-4 text-white/20">
+                                  <Loader2 className="h-6 w-6 animate-spin" />
+                                  <span className="text-xs font-black uppercase tracking-widest">Cargando modelos disponibles...</span>
+                                </div>
+                              ) : (
+                                availableVoices.map((voice) => {
+                                  const isInstalled = ttsStatus?.voices.includes(voice.id);
+                                  const isSelected = selectedVoiceId === voice.id;
+                                  return (
+                                    <button
+                                      key={voice.id}
+                                      onClick={() => setSelectedVoiceId(voice.id)}
+                                      className={`p-6 rounded-[1.5rem] text-left transition-all duration-500 border-2 flex flex-col gap-4 relative overflow-hidden group
+                                        ${isSelected 
+                                          ? "bg-hive-amber/10 border-hive-amber shadow-[0_20px_40px_-10px_rgba(245,158,11,0.2)]" 
+                                          : "bg-white/[0.02] border-white/5 hover:bg-white/[0.04] hover:border-white/10"
+                                        }`}
+                                    >
+                                      <div className="flex items-center justify-between relative z-10">
+                                        <span className={`text-xs font-black uppercase tracking-widest ${isSelected ? "text-hive-amber" : "text-white/40"}`}>
+                                          {voice.name}
+                                        </span>
+                                        {isInstalled && (
+                                          <CheckCircle2 className="h-4 w-4 text-hive-connected" />
+                                        )}
+                                      </div>
+                                      <p className={`text-[11px] leading-relaxed relative z-10 ${isSelected ? "text-white/70" : "text-white/20"}`}>
+                                        {voice.description || `${voice.quality} Quality • ${voice.size}`}
+                                      </p>
+                                      {isSelected && (
+                                        <div className="absolute top-0 right-0 p-2">
+                                          <div className="h-1.5 w-1.5 rounded-full bg-hive-amber animate-pulse" />
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-6">
+                            {ttsStatus?.voices.includes(selectedVoiceId) ? (
+                              <div className="p-8 rounded-[2rem] bg-hive-connected/5 border border-hive-connected/20 flex items-center gap-6">
+                                <div className="p-4 rounded-2xl bg-hive-connected/10">
+                                  <CheckCircle2 className="h-8 w-8 text-hive-connected" />
+                                </div>
+                                <div>
+                                  <h3 className="text-lg font-bold text-white mb-1">Voz Activada</h3>
+                                  <p className="text-sm text-white/40">El gateway de HiveLearn ahora puede procesar peticiones de voz localmente.</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={handleInstallTTS}
+                                disabled={isInstallingTTS}
+                                className="group relative w-full py-8 rounded-[1.5rem] overflow-hidden transition-all duration-700 disabled:opacity-50 shadow-[0_30px_60px_-15px_rgba(245,158,11,0.15)]"
+                              >
+                                <div className="absolute inset-0 bg-gradient-to-br from-hive-amber/20 to-hive-amber/5 group-hover:from-hive-amber/30 transition-all duration-700" />
+                                <div className="relative z-10 flex flex-col items-center gap-4">
+                                  {isInstallingTTS ? (
+                                    <>
+                                      <Loader2 className="h-8 w-8 text-hive-amber animate-spin" />
+                                      <span className="text-xs font-black uppercase tracking-[0.4em] text-hive-amber">
+                                        DESCARGANDO_RECURSOS_RED...
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Download className="h-8 w-8 text-hive-amber group-hover:scale-110 transition-transform duration-500" />
+                                      <span className="text-xs font-black uppercase tracking-[0.4em] text-hive-amber">
+                                        DESCARGAR_E_INSTALAR_VOZ_LOCAL
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </button>
+                            )}
+                          </div>
+
+                          {ttsError && (
+                            <div className="p-6 rounded-2xl bg-hive-red/10 border border-hive-red/20 text-hive-red text-sm font-medium flex items-center gap-4 animate-in zoom-in-95">
+                              <AlertTriangle className="h-5 w-5" />
+                              {ttsError}
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    </div>
+
+                    <div className="lg:col-span-4 space-y-8">
+                      <ConfigInsightCard
+                        icon={Mic2}
+                        title="OFFLINE_VOICE"
+                        description="Privacidad total. La síntesis de voz se realiza íntegramente en tu hardware sin enviar datos a la nube."
+                        theme="amber"
+                      />
+                      <ConfigInsightCard
+                        icon={Zap}
+                        title="LATENCIA_CERO"
+                        description="Optimizado con ONNX Runtime para una respuesta vocal instantánea en arquitecturas ARM y x64."
+                        theme="cyan"
+                      />
+                    </div>
                   </div>
                 </div>
               )}

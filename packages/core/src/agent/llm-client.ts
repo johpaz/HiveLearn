@@ -136,6 +136,13 @@ export async function callLLM(
   // Determinar endpoint según el provider
   let url = options.baseUrl || config.baseUrl || 'http://localhost:11434/api/chat'
 
+  // Local LLM (hive-cli)
+  if (providerId === 'local-llama' || config.provider === 'local-llama') {
+    const { LocalLlamaProvider } = await import('./llm-providers/local-llama')
+    const provider = new LocalLlamaProvider()
+    return provider.call(options)
+  }
+
   // Ollama
   if (providerId === 'ollama' || config.provider === 'ollama') {
     const response = await fetch(url, {

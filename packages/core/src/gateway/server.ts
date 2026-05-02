@@ -30,9 +30,14 @@ import {
   type WebSocketSessionManager
 } from '../websocket'
 import { getOrGenerateCorrelationId } from '../utils/correlation-id'
+import { runSwarmGeneration } from '../swarm/swarm-generator'
 import type { ServerWebSocket, Server } from 'bun'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { handleLLMWebSocket, handleLLMStatus } from './llm-local'
+import { checkTTSInstallation, installPiper, installVoice, ensureTTSDirs } from './tts/install'
+import { synthesize, listVoices } from './tts/logic'
+import { AVAILABLE_VOICES } from './tts/detect'
 
 type WebSocketData = {
   sessionId: string | null
@@ -154,6 +159,13 @@ export function createServer(): any {
 
       // ── WebSocket upgrade: debe ser lo primero, sin ningún await previo ──
       if (req.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+        if (url.pathname === '/ws/llm') {
+          const upgraded = server.upgrade(req, {
+            data: { sessionId: 'llm-local', pathname: '/ws/llm' },
+          })
+          if (upgraded) return undefined
+          return new Response('WebSocket upgrade failed', { status: 400 })
+        }
         if (url.pathname.includes('hivelearn-onboarding') ||
             url.pathname.includes('hivelearn-lesson') ||
             url.pathname.includes('hivelearn-events')) {
@@ -290,6 +302,37 @@ export function createServer(): any {
               headers: { 'Content-Type': 'application/json' },
             }),
             req
+          )
+        }
+      }
+
+      // ── Local LLM Routes ───────────────────────────────────────────────
+      // GET /api/llm/status
+      if (url.pathname === '/api/llm/status' && req.method === 'GET') {
+        return handleLLMStatus()
+      }
+
+      // GET /api/llm/models
+      if (url.pathname === '/api/llm/models' && req.method === 'GET') {
+        const { listLocalModels } = await import('./llm-local')
+        return Response.json({ models: listLocalModels() })
+      }
+
+      // POST /api/llm/download
+      if (url.pathname === '/api/llm/download' && req.method === 'POST') {
+        const body = await req.json().catch(() => ({}))
+        const { model } = body as { model?: string }
+        if (!model) {
+          return Response.json({ error: "Modelo requerido" }, { status: 400 })
+        }
+        try {
+          const { downloadModel } = await import('./llm-local')
+          const path = await downloadModel(model as any)
+          return Response.json({ ok: true, path })
+        } catch (err) {
+          return Response.json(
+            { error: err instanceof Error ? err.message : "Error descargando" },
+            { status: 500 }
           )
         }
       }
@@ -667,15 +710,39 @@ export function createServer(): any {
         }
       }
 
-      // POST /api/hivelearn/generate
+      // POST /api/hivelearn/generate — inicia la generación del programa via swarm
       if (url.pathname === '/api/hivelearn/generate' && req.method === 'POST') {
-        return addCorsHeaders(
-          new Response(JSON.stringify({ error: 'Generación vía swarm en reconstrucción. Use el flujo A2UI dinámico.' }), {
-            status: 501,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-          req
-        )
+        try {
+          const body = await req.json() as { perfil: any; meta: string; sessionId?: string }
+          if (!body.perfil || !body.meta) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'perfil y meta son requeridos' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+          const swarmId = body.sessionId ?? `swarm-${Date.now()}`
+          // Lanzar en background — responde inmediatamente, eventos via WebSocket
+          runSwarmGeneration(body.perfil, body.meta, swarmId).catch(
+            (e: Error) => log.error('Swarm generation failed', { swarmId, error: e.message })
+          )
+          return addCorsHeaders(
+            new Response(JSON.stringify({ ok: true, swarmId }), {
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
       }
 
       // POST /api/hivelearn/student-profile — crea perfil desde formulario Pixi
@@ -1092,6 +1159,55 @@ export function createServer(): any {
           )
         }
       }
+      // ── TTS Endpoints ──────────────────────────────────────────────────────
+
+      // GET /api/tts/status
+      if (url.pathname === '/api/tts/status' && req.method === 'GET') {
+        const status = checkTTSInstallation()
+        log.info('[tts] status check', status)
+        return addCorsHeaders(Response.json(status), req)
+      }
+
+      // POST /api/tts/install
+      if (url.pathname === '/api/tts/install' && req.method === 'POST') {
+        try {
+          const { voice } = await req.json() as { voice?: string }
+          ensureTTSDirs()
+          await installPiper()
+          await installVoice(voice)
+          return addCorsHeaders(Response.json({ success: true, status: checkTTSInstallation() }), req)
+        } catch (e) {
+          log.error('[tts] install error', { error: (e as Error).message })
+          return addCorsHeaders(Response.json({ error: (e as Error).message }, { status: 500 }), req)
+        }
+      }
+
+      // POST /api/tts/synthesize
+      if (url.pathname === '/api/tts/synthesize' && req.method === 'POST') {
+        try {
+          const { text, voice } = await req.json() as { text: string; voice?: string }
+          if (!text) return addCorsHeaders(Response.json({ error: 'Text required' }, { status: 400 }), req)
+          
+          const audio = await synthesize(text, voice)
+          return addCorsHeaders(new Response(audio, {
+            headers: { 'Content-Type': 'audio/wav', 'Content-Length': String(audio.byteLength) }
+          }), req)
+        } catch (e) {
+          log.error('[tts] synthesize error', { error: (e as Error).message })
+          return addCorsHeaders(Response.json({ error: (e as Error).message }, { status: 500 }), req)
+        }
+      }
+
+      // GET /api/tts/voices
+      if (url.pathname === '/api/tts/voices' && req.method === 'GET') {
+        return addCorsHeaders(Response.json({ voices: listVoices() }), req)
+      }
+
+      // GET /api/tts/available-voices
+      if (url.pathname === '/api/tts/available-voices' && req.method === 'GET') {
+        log.info('[tts] listing available voices', { count: AVAILABLE_VOICES.length })
+        return addCorsHeaders(Response.json({ voices: AVAILABLE_VOICES }), req)
+      }
 
       // Default: 404
       return addCorsHeaders(
@@ -1163,6 +1279,10 @@ export function createServer(): any {
                 log.error('[ws] onboarding user_message error', { error: e.message })
               )
             }
+          } else if ((ws.data as any)?.pathname === '/ws/llm') {
+            handleLLMWebSocket(ws, message.toString()).catch((e: Error) =>
+              log.error('[ws] llm-local error', { error: e.message })
+            )
           }
         } catch {
           log.debug('[ws] Malformed message')
