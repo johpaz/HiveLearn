@@ -8,9 +8,7 @@ export {
   withRequestLogging,
   logRequestStart,
   logRequestSuccess,
-  logRequestError,
   logRequestBody,
-  apiLogger,
 } from './request-logger';
 
 export {

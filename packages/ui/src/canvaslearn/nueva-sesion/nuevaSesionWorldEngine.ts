@@ -239,6 +239,28 @@ export async function initNuevaSesionWorld(
   missionLabel.alpha = 0.65
   portal.addChild(missionLabel)
 
+  // ── Portal Animation Logic ────────────────────────────────────────────────
+  function drawPortal(t: number, lt: number, dt: number) {
+    const isLaunching = lt > 0
+    portalRings.forEach((ring, ri) => {
+      ring.c.rotation += dt * ring.def.dir * (1 + ri * 0.4)
+      ring.c.alpha = ring.def.alphaBase * (1 + Math.sin(t * 2 + ri) * 0.2)
+      if (isLaunching) {
+        ring.c.scale.set(1 + lt * 1.5)
+        ring.c.alpha *= (1 - lt)
+      }
+    })
+    portalCore.alpha = 0.75 + Math.sin(t * 4) * 0.1
+    if (isLaunching) {
+      portalCore.scale.set(1 + lt * 3)
+      portalCore.alpha *= (1 - lt)
+      
+      burstWave.clear()
+      burstWave.circle(0, 0, lt * 150)
+      burstWave.stroke({ color: C.white, width: 2, alpha: (1 - lt) * 0.5 })
+    }
+  }
+
   // Honey threads from bee to portal
   const threads = new Graphics()
   worldL.addChildAt(threads, 0)
@@ -327,13 +349,12 @@ export async function initNuevaSesionWorld(
   // State
   let time = 0
   let beeJumpT  = -1
-  let beeBaseX  = 215
-  let beeBaseY  = 278
+  const beeBaseY = 278
   let launching = false
   let launchT   = 0
 
-  app.ticker.add((ticker) => {
-    const dt = ticker.deltaTime / 60
+  app.ticker.add((tick) => {
+    const dt = tick.deltaTime / 60
     time += dt
 
     stars.forEach(s => {
@@ -379,7 +400,7 @@ export async function initNuevaSesionWorld(
 
     // Portal draw
     const lt = launching ? launchT : 0
-    drawPortal(time, lt)
+    drawPortal(time, lt, dt)
 
     if (launching) {
       launchT += dt * 1.0

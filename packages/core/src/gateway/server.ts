@@ -6,6 +6,7 @@
 import { getDb } from '../storage/sqlite'
 import { LessonPersistence, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
 import { obtenerPrograma, crearPrograma } from '../skills/gestionar-programas.skill'
+import { crearAlumno } from '../skills/gestionar-alumnos.skill'
 import { logger, redact } from '../utils/logger'
 import {
   storeProviderApiKey,
@@ -674,6 +675,93 @@ export function createServer(): any {
           }),
           req
         )
+      }
+
+      // POST /api/hivelearn/student-profile — crea perfil desde formulario Pixi
+      if (url.pathname === '/api/hivelearn/student-profile' && req.method === 'POST') {
+        try {
+          const body = await req.json() as { nombre: string; nickname: string; edad: number }
+          const alumnoId = crypto.randomUUID()
+          const avatar = body.edad <= 12 ? '🧒' : body.edad <= 17 ? '🧑' : '👤'
+          const result = await crearAlumno({
+            alumnoId,
+            nombre: body.nombre.trim(),
+            nickname: body.nickname.trim(),
+            avatar,
+            edad: Number(body.edad),
+            estado: 'activo',
+            sesionesTotal: 0,
+            xpAcumulado: 0,
+          })
+          if (!result.ok) throw new Error('No se pudo crear el perfil')
+          const perfil = {
+            alumnoId,
+            nombre: body.nombre.trim(),
+            nickname: body.nickname.trim(),
+            avatar,
+            edad: Number(body.edad),
+            estado: 'activo' as const,
+            sesionesTotal: 0,
+            xpAcumulado: 0,
+            creadoEn: new Date().toISOString(),
+            ultimoAcceso: new Date().toISOString(),
+          }
+          return addCorsHeaders(
+            new Response(JSON.stringify({ alumnoId, perfil }), {
+              status: 201,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // GET /api/hivelearn/student-profile/search?q=<nombre_o_nick>
+      if (url.pathname === '/api/hivelearn/student-profile/search' && req.method === 'GET') {
+        try {
+          const q = (url.searchParams.get('q') ?? '').trim()
+          const db = getDb()
+          const rows = db.query(`
+            SELECT alumno_id, nombre, nickname, apodo, avatar, edad, estado, sesiones_total, xp_acumulado
+            FROM hl_student_profiles
+            WHERE nombre LIKE ? OR nickname LIKE ? OR apodo LIKE ?
+            ORDER BY ultimo_acceso DESC
+            LIMIT 10
+          `).all(`%${q}%`, `%${q}%`, `%${q}%`) as Record<string, unknown>[]
+          const profiles = rows.map(r => ({
+            alumnoId:      r.alumno_id,
+            nombre:        r.nombre,
+            nickname:      r.nickname || r.apodo,
+            avatar:        r.avatar,
+            edad:          r.edad,
+            estado:        r.estado,
+            sesionesTotal: r.sesiones_total,
+            xpAcumulado:   r.xp_acumulado,
+          }))
+          return addCorsHeaders(
+            new Response(JSON.stringify({ profiles }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
       }
 
       // GET /api/hivelearn/sessions

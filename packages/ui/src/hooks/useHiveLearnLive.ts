@@ -20,6 +20,7 @@ export interface HiveLearnLiveState {
   isGenerating: boolean;
   agentStatuses: Record<string, AgentLiveStatus>;
   currentAgentId: string | null;
+  lastMessage: any | null;
 }
 
 const PING_INTERVAL_MS  = 25_000;  // client ping every 25s
@@ -40,6 +41,7 @@ export function useHiveLearnLive(): HiveLearnLiveState {
   const [isGenerating,   setIsGenerating]   = useState(false);
   const [agentStatuses,  setAgentStatuses]  = useState<Record<string, AgentLiveStatus>>({});
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null);
+  const [lastMessage,    setLastMessage]    = useState<any | null>(null);
 
   const wsRef             = useRef<WebSocket | null>(null);
   const pingTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -114,6 +116,7 @@ export function useHiveLearnLive(): HiveLearnLiveState {
               break;
             }
           }
+          setLastMessage(msg);
         } catch { /* malformed JSON — ignore */ }
       };
 
@@ -149,5 +152,5 @@ export function useHiveLearnLive(): HiveLearnLiveState {
     };
   }, [connect, clearTimers]);
 
-  return { isConnected, isGenerating, agentStatuses, currentAgentId };
+  return { isConnected, isGenerating, agentStatuses, currentAgentId, lastMessage };
 }

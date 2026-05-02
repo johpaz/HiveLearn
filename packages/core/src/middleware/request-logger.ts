@@ -9,51 +9,12 @@
  * - Errores
  */
 
-import { logger } from '../utils/logger';
+import { logger, redact } from '../utils/logger';
 import { getOrGenerateCorrelationId, generateCorrelationId } from '../utils/correlation-id';
 
 const log = logger.child('request-logger');
 
-const SENSITIVE_PATTERNS = [
-  /api[_-]?key/i,
-  /token/i,
-  /secret/i,
-  /password/i,
-  /credential/i,
-  /auth/i,
-];
 
-/**
- * Redacta datos sensibles de un objeto
- */
-function redact(obj: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-
-  if (seen.has(obj as object)) {
-    return '[Circular]';
-  }
-
-  seen.add(obj as object);
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => redact(item, seen));
-  }
-
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-    const isSensitive = SENSITIVE_PATTERNS.some((p) => p.test(key));
-    if (isSensitive) {
-      result[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null) {
-      result[key] = redact(value, seen);
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
 
 interface RequestLogMeta {
   method: string;
@@ -162,34 +123,6 @@ export function logRequestSuccess(
 }
 
 /**
- * Log de error en request
- */
-export function logRequestError(
-  startTime: number,
-  correlationId: string,
-  path: string,
-  error: Error,
-  statusCode?: number
-): void {
-  const duration = Date.now() - startTime;
-
-  const meta: RequestLogMeta = {
-    method: 'GET',
-    url: path,
-    path,
-    correlationId,
-    duration,
-    statusCode: statusCode || 500,
-    error: error.message,
-  };
-
-  log.error('✗ Request failed', {
-    ...meta,
-    stack: error.stack,
-  });
-}
-
-/**
  * Log de body de request (redactado si es sensible)
  */
 export async function logRequestBody(
@@ -265,79 +198,12 @@ export function withRequestLogging<T extends (req: Request) => Promise<Response>
       await logRequestBody(req, correlationId);
     }
 
-    try {
-      const response = await handler(req);
-      
-      logRequestSuccess(startTime, correlationId, path, response.status);
-      
-      return response;
-    } catch (error) {
-      const statusCode = (error as any)?.statusCode || 500;
-      logRequestError(startTime, correlationId, path, error as Error, statusCode);
-      throw error;
-    }
+    const response = await handler(req);
+    
+    logRequestSuccess(startTime, correlationId, path, response.status);
+    
+    return response;
   }) as T;
 }
 
-/**
- * Logger específico para endpoints de API
- */
-export const apiLogger = {
-  /**
-   * Log de entrada a endpoint
-   */
-  endpointHit(
-    method: string,
-    path: string,
-    correlationId: string,
-    params?: Record<string, unknown>
-  ): void {
-    log.info('API endpoint hit', {
-      method,
-      path,
-      correlationId,
-      params: params ? redact(params) : undefined,
-    });
-  },
 
-  /**
-   * Log de respuesta exitosa
-   */
-  endpointSuccess(
-    path: string,
-    correlationId: string,
-    duration: number,
-    statusCode: number = 200
-  ): void {
-    const meta = { path, correlationId, duration, statusCode };
-    
-    if (duration > slowThresholdMs) {
-      log.warn('API endpoint slow', meta);
-    } else {
-      log.debug('API endpoint success', meta);
-    }
-  },
-
-  /**
-   * Log de error en endpoint
-   */
-  endpointError(
-    path: string,
-    correlationId: string,
-    error: Error,
-    duration: number,
-    statusCode: number = 500
-  ): void {
-    log.error('API endpoint error', {
-      path,
-      correlationId,
-      duration,
-      statusCode,
-      error: error.message,
-      stack: error.stack,
-      code: (error as any).code,
-    });
-  },
-};
-
-const slowThresholdMs = 1000;

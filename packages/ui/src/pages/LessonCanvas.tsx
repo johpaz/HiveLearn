@@ -3,7 +3,6 @@ import { useLessonStore } from '../store/lessonStore'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
 import { ProviderSelectScreen } from './ProviderSelectScreen'
 import { SessionsListScreen } from './SessionsListScreen'
-import { ChatOnboardingScreen } from './ChatOnboardingScreen'
 import { SwarmCanvas } from '../canvaslearn/mundo2/swarm-canvas/SwarmCanvas'
 import { A2UILessonScreen } from './A2UILessonScreen'
 import { EvaluationScreen } from './EvaluationScreen'
@@ -79,7 +78,6 @@ export function LessonCanvas() {
 
       {safeScreen === 'provider-select' && <ProviderSelectScreen />}
       {safeScreen === 'sessions' && <SessionsListScreen />}
-      {safeScreen === 'chat-onboarding' && <ChatOnboardingScreen />}
       {safeScreen === 'loading' && <SwarmCanvas />}
       {safeScreen === 'lesson' && <A2UILessonScreen />}
       {safeScreen === 'evaluation' && <EvaluationScreen />}

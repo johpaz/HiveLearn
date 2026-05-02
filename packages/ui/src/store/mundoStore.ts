@@ -178,6 +178,7 @@ export interface MundoStore extends MundoState {
   
   // Inicialización
   inicializarMundo: (programaUuid: string, sessionId: string, alumnoId: string, tema: string) => void
+  setProgramaUuid: (uuid: string) => void
   cargarDesdeGuardado: (estado: Partial<MundoState>) => void
   
   // XP y nivel
@@ -389,6 +390,8 @@ export const useMundoStore = create<MundoStore>()(persist((set, get) => ({
     mundoListo: false,
     bienvenidaMostrada: false,
   }),
+  
+  setProgramaUuid: (programaUuid) => set({ programaUuid }),
 
   cargarDesdeGuardado: (estado) => set((state) => ({
     ...state,

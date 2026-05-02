@@ -12,12 +12,13 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(m => ({ de
 const HowToUsePage = lazy(() => import("@/pages/HowToUsePage").then(m => ({ default: m.HowToUsePage })));
 const ProviderSelectScreen = lazy(() => import("@/pages/HiveLearnConfigPage").then(m => ({ default: m.HiveLearnConfigPage })));
 const SessionsListScreen = lazy(() => import("@/pages/SessionsListScreen").then(m => ({ default: m.SessionsListScreen })));
-const ChatOnboardingScreen = lazy(() => import("@/pages/ChatOnboardingScreen").then(m => ({ default: m.ChatOnboardingScreen })));
+const OnboardWorldPage = lazy(() => import("@/pages/OnboardWorldPage").then(m => ({ default: m.OnboardWorldPage })));
+const NuevaSesionWorldPage = lazy(() => import("@/pages/NuevaSesionWorldPage").then(m => ({ default: m.NuevaSesionWorldPage })));
 const A2UILessonScreen = lazy(() => import("@/pages/A2UILessonScreen").then(m => ({ default: m.A2UILessonScreen })));
 const EvaluationScreen = lazy(() => import("@/pages/EvaluationScreen").then(m => ({ default: m.EvaluationScreen })));
 const ResultScreen = lazy(() => import("@/pages/ResultScreen").then(m => ({ default: m.ResultScreen })));
 const MundoWorldPage = lazy(() => import("@/pages/MundoWorldPage").then(m => ({ default: m.MundoWorldPage })));
-const HiveLearnSwarmPage = lazy(() => import("@/pages/HiveLearnSwarmPage").then(m => ({ default: m.HiveLearnSwarmPage })));
+const SwarmWorld = lazy(() => import("@/canvaslearn/swarm").then(m => ({ default: m.SwarmWorld })));
 
 const queryClient = new QueryClient();
 
@@ -81,8 +82,9 @@ function App() {
 
               {/* Layout para el Módulo de Aprendizaje (Enfoque) */}
               <Route element={<LearningLayout><Outlet /></LearningLayout>}>
-                <Route path="/onboarding" element={<ChatOnboardingScreen />} />
-                <Route path="/hivelearn-swarm" element={<HiveLearnSwarmPage />} />
+                <Route path="/onboarding" element={<OnboardWorldPage />} />
+                <Route path="/nueva-sesion" element={<NuevaSesionWorldPage />} />
+                <Route path="/hivelearn-swarm" element={<SwarmWorld />} />
                 <Route path="/lesson" element={<A2UILessonScreen />} />
                 <Route path="/mundo" element={<MundoWorldPage />} />
                 <Route path="/evaluation" element={<EvaluationScreen />} />
