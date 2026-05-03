@@ -1,6 +1,6 @@
 {
   "name": "@johpaz/hivelearn-cli",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "HiveLearn CLI — Command line interface for the HiveLearn AI Gateway",
   "type": "module",
   "bin": {

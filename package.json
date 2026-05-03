@@ -1,6 +1,6 @@
 {
   "name": "@johpaz/hivelearn",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "HiveLearn — Plataforma de aprendizaje adaptativo con IA",
   "type": "module",
   "bin": {
