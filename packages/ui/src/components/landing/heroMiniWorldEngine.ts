@@ -7,7 +7,10 @@
  */
 
 import { Application, Container, Graphics, Text } from 'pixi.js'
-import { randomRange, lerp } from '../../canvaslearn/mundo2/constants'
+
+// ─── Utilidades locales ───────────────────────────────────────────────────────
+const randomRange = (min: number, max: number) => Math.random() * (max - min) + min
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 
 // ─── Constantes del mini-mundo ───────────────────────────────────────────────
 
@@ -667,8 +670,8 @@ export async function initHeroMiniWorld(
 
   const rect = container.getBoundingClientRect()
   const initialScale = Math.min(rect.width / WORLD_W, rect.height / WORLD_H, 1)
-  ;(app.canvas as HTMLCanvasElement).style.width = `${WORLD_W * initialScale}px`
-  ;(app.canvas as HTMLCanvasElement).style.height = `${WORLD_H * initialScale}px`
+    ; (app.canvas as HTMLCanvasElement).style.width = `${WORLD_W * initialScale}px`
+    ; (app.canvas as HTMLCanvasElement).style.height = `${WORLD_H * initialScale}px`
 
   // ─── Game Loop ─────────────────────────────────────────────────────────────
 
