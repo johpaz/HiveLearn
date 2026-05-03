@@ -3,7 +3,7 @@
  * Gestión de rutas y configuración de modelos
  */
 
-import { join } from "path"
+
 import { existsSync } from "fs"
 import { MODELS_DIR, getModelPath, type ModelId } from "./downloader"
 
@@ -97,14 +97,14 @@ export function buildHiveCLIArgs(config: ModelConfig, options: {
 export function getRecommendedModel(mode: "text" | "image" | "audio" | "all"): ModelId {
   switch (mode) {
     case "text":
-      return "e2b_iq3"
+      return "e2b_Q4_K_XL"
     case "image":
-      return "e4b_iq3"
+      return "e2b_Q4_K_XL"
     case "audio":
-      return "e2b_iq3"
+      return "e2b_Q4_K_XL"
     case "all":
-      return "e4b_iq3"
+      return "e4b_Q4_K_XL"
     default:
-      return "e2b_iq3"
+      return "e2b_Q4_K_XL"
   }
 }

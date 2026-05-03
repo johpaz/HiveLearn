@@ -161,6 +161,29 @@ export class LessonPersistence {
     `).run(sessionId, alumnoId, curriculoId)
   }
 
+  saveProgram(programaId: string, alumnoId: string, sessionId: string, schemaJson: string, totalNodos: number): void {
+    const studentRow = this.db.query(
+      'SELECT id FROM hl_student_profiles WHERE alumno_id = ? LIMIT 1'
+    ).get(alumnoId) as { id: number } | undefined
+
+    const instanceRow = this.db.query(
+      'SELECT instance_id FROM hl_instances LIMIT 1'
+    ).get() as { instance_id: string } | undefined
+
+    this.db.query(`
+      INSERT OR IGNORE INTO hl_programs
+        (id, instance_id, student_id, session_id, topic_slug, schema_json, total_nodos)
+      VALUES (?, ?, ?, ?, NULL, ?, ?)
+    `).run(
+      programaId,
+      instanceRow?.instance_id ?? null,
+      studentRow?.id ?? null,
+      sessionId,
+      schemaJson,
+      totalNodos,
+    )
+  }
+
   /** Crea sesión temprana (durante onboarding, sin currículo aún) */
   createEarlySession(sessionId: string, alumnoId: string): void {
     this.db.query(`
@@ -168,6 +191,12 @@ export class LessonPersistence {
         (session_id, alumno_id, curriculo_id, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
       VALUES (?, ?, NULL, 0, 'Aprendiz', '[]', 0, NULL, 0)
     `).run(sessionId, alumnoId)
+  }
+
+  updateSessionCurriculum(sessionId: string, curriculoId: number): void {
+    this.db.query(
+      'UPDATE hl_sessions SET curriculo_id = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?'
+    ).run(curriculoId, sessionId)
   }
 
   updateSessionProgress(sessionId: string, nodosCompletados: number, xpTotal: number): void {

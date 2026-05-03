@@ -71,12 +71,17 @@ export async function runSwarmGeneration(
   log.info('[swarm-gen] Starting', { swarmId, total, alumno: perfil.nombre })
   hlSwarmEmitter.emit('swarm:started', { swarmId, totalTasks: total })
 
+  // Crear sesión temprana para que los outputs de cada agente tengan dónde guardarse
+  const persistence = new LessonPersistence()
+  persistence.createEarlySession(swarmId, perfil.alumnoId)
+
   let structureCtx = ''
 
   for (const agentId of WORKER_AGENTS) {
     hlSwarmEmitter.emit('worker:task_started', { workerId: agentId, workerName: agentId, swarmId })
     log.info(`[swarm-gen] → ${agentId}`)
 
+    const t1 = Date.now()
     try {
       const output = await runHiveLearnAgent({
         agentId,
@@ -85,6 +90,8 @@ export async function runSwarmGeneration(
         tools: [],
         threadId: swarmId,
       })
+
+      persistence.saveAgentOutput(swarmId, agentId, agentId, JSON.stringify({ output }), Date.now() - t1)
 
       // After structure: persist curriculum and expose context to subsequent agents
       if (agentId === AGENT_IDS.structure) {
@@ -95,7 +102,6 @@ export async function runSwarmGeneration(
           structureCtx = `\nEstructura del programa: ${jsonStr.slice(0, 400)}`
 
           const rangoEdad = perfil.edad <= 12 ? 'ninos' : perfil.edad <= 17 ? 'jovenes' : 'adulto'
-          const persistence = new LessonPersistence()
           const curriculoId = persistence.saveCurriculum(
             swarmId,
             JSON.stringify(perfil),
@@ -104,7 +110,8 @@ export async function runSwarmGeneration(
             rangoEdad,
             null,
           )
-          persistence.createSession(swarmId, perfil.alumnoId, curriculoId, rangoEdad)
+          persistence.updateSessionCurriculum(swarmId, curriculoId)
+          persistence.saveProgram(swarmId, perfil.alumnoId, swarmId, jsonStr, estructura.zonas?.length ?? 0)
           log.info('[swarm-gen] Curriculum saved', { swarmId, zonas: estructura.zonas?.length })
         } catch (parseErr) {
           log.warn('[swarm-gen] Could not parse structure', { error: (parseErr as Error).message })
@@ -120,6 +127,7 @@ export async function runSwarmGeneration(
       })
     } catch (e) {
       failed++
+      persistence.saveAgentOutput(swarmId, agentId, agentId, JSON.stringify({ error: (e as Error).message }), Date.now() - t1, 'failed')
       log.error(`[swarm-gen] ${agentId} failed`, { error: (e as Error).message })
       hlSwarmEmitter.emit('worker:task_failed', {
         workerId: agentId,

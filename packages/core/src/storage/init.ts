@@ -51,6 +51,8 @@ export function initHiveLearnStorage(db: Database): void {
 
   // V1 migrations: columnas añadidas después de la creación inicial de la tabla
   ensureColumn(db, 'hl_student_profiles', 'alumno_id', 'TEXT DEFAULT NULL')
+  // FK en hl_sessions/hl_session_metrics referencia alumno_id — SQLite exige UNIQUE index
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_hl_student_alumno_id ON hl_student_profiles(alumno_id)')
   ensureColumn(db, 'hl_student_profiles', 'apodo', "TEXT NOT NULL DEFAULT ''")
   ensureColumn(db, 'hl_student_profiles', 'nombre', "TEXT NOT NULL DEFAULT ''")
   ensureColumn(db, 'hl_student_profiles', 'nickname', "TEXT NOT NULL DEFAULT ''")

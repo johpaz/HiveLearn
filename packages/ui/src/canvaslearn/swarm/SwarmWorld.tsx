@@ -54,10 +54,8 @@ export function SwarmWorld() {
     })
     if (lastMessage?.type === 'swarm_completed' || lastMessage?.type === 'session:completed') {
       const programaUuid = lastMessage.swarmId || lastMessage.data?.id
-      if (programaUuid) {
-        setProgramaUuid(programaUuid)
-        setTimeout(() => navigate('/mundo'), 2200)
-      }
+      if (programaUuid) setProgramaUuid(programaUuid)
+      setTimeout(() => navigate('/mundo'), 2200)
     }
   }, [agentStatuses, lastMessage, navigate, setProgramaUuid])
 

@@ -18,21 +18,17 @@ mkdirSync(MODELS_DIR, { recursive: true })
 
 /** URLs de modelos en HuggingFace */
 export const HF_MODEL_URLS = {
-  mmproj: "https://huggingface.co/johpaz/hive-cli/resolve/main/mmproj-BF16.gguf",
-  e2b_iq3: "https://huggingface.co/johpaz/hive-cli/resolve/main/gemma-4-E2B-it-UD-IQ3_XXS.gguf",
-  e4b_iq3: "https://huggingface.co/johpaz/hive-cli/resolve/main/gemma-4-E4B-it-UD-IQ3_XXS.gguf",
-  e2b_q8: "https://huggingface.co/johpaz/hive-cli/resolve/main/gemma-4-E2B-it-UD-Q8_K_XL.gguf",
-  e4b_q8: "https://huggingface.co/johpaz/hive-cli/resolve/main/gemma-4-E4B-it-UD-Q8_K_XL.gguf",
+  mmproj: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/blob/main/mmproj-BF16.gguf",
+  e2b_Q4_K_XL: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/main/gemma-4-E2B-it-UD-Q4_K_XL.gguf",
+  e4b_Q4_K_XL: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/blob/main/gemma-4-E4B-it-UD-Q4_K_XL.gguf",
 }
 
-export type ModelId = "mmproj" | "e2b_iq3" | "e4b_iq3" | "e2b_q8" | "e4b_q8"
+export type ModelId = "mmproj" | "e2b_Q4_K_XL" | "e4b_Q4_K_XL"
 
 export const MODEL_FILES: Record<ModelId, string> = {
   mmproj: "mmproj-BF16.gguf",
-  e2b_iq3: "gemma-4-E2B-it-UD-IQ3_XXS.gguf",
-  e4b_iq3: "gemma-4-E4B-it-UD-IQ3_XXS.gguf",
-  e2b_q8: "gemma-4-E2B-it-UD-Q8_K_XL.gguf",
-  e4b_q8: "gemma-4-E4B-it-UD-Q8_K_XL.gguf",
+  e2b_Q4_K_XL: "gemma-4-E2B-it-UD-Q4_K_XL.gguf",
+  e4b_Q4_K_XL: "gemma-4-E4B-it-UD-Q4_K_XL.gguf",
 }
 
 export function getModelPath(modelId: ModelId): string {
@@ -131,11 +127,11 @@ export async function installMMProj(): Promise<string> {
 
 /** Lista modelos disponibles localmente */
 export function listLocalModels(): { id: ModelId; name: string; size: string; downloaded: boolean }[] {
-  const models: ModelId[] = ["e2b_iq3", "e4b_iq3", "e2b_q8", "e4b_q8"]
+  const models: ModelId[] = ["mmproj", "e2b_Q4_K_XL", "e4b_Q4_K_XL"]
   return models.map((id) => ({
     id,
     name: MODEL_FILES[id],
-    size: id.includes("q8") ? "~5-8 GB" : "~2-3 GB",
+    size: id.includes("Q4_K_XL") ? "~5-8 GB" : "~2-3 GB",
     downloaded: isModelDownloaded(id),
   }))
 }
