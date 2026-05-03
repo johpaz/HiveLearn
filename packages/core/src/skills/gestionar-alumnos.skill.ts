@@ -176,6 +176,41 @@ export async function obtenerOCrearAlumno(alumnoId: string, defaults: Partial<St
   return perfil
 }
 
+/**
+ * Buscar alumno por nickname
+ */
+export async function buscarAlumnoPorNickname(nickname: string): Promise<StudentProfile | null> {
+  const db = getDb()
+  
+  try {
+    const student = db.query(
+      'SELECT * FROM hl_student_profiles WHERE LOWER(nickname) = LOWER(?) OR LOWER(apodo) = LOWER(?) ORDER BY updated_at DESC LIMIT 1'
+    ).get(nickname, nickname) as any
+    
+    if (!student) {
+      return null
+    }
+    
+    return {
+      id: student.id,
+      alumnoId: student.alumno_id,
+      nombre: student.nombre,
+      nickname: student.nickname || student.apodo,
+      avatar: student.avatar,
+      edad: student.edad,
+      estado: student.estado,
+      sesionesTotal: student.sesiones_total,
+      xpAcumulado: student.xp_acumulado,
+    }
+  } catch (error) {
+    log.error('[gestionar-alumnos] Error al buscar alumno por nickname', {
+      error: (error as Error).message,
+      nickname,
+    })
+    return null
+  }
+}
+
 // Export como skill
 export const GESTIONAR_ALUMNOS_SKILL = {
   name: 'gestionar_alumnos',
@@ -185,5 +220,6 @@ export const GESTIONAR_ALUMNOS_SKILL = {
     obtenerAlumno,
     actualizarAlumno,
     obtenerOCrearAlumno,
+    buscarAlumnoPorNickname,
   },
 }

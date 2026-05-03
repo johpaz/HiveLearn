@@ -19,31 +19,31 @@ import type { Zona } from '../canvaslearn/mundo2/types'
 export function MundoWorldPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  
+
   // Estado de carga
   const [isConnected, setIsConnected] = useState(false)
   const [wsError, setWsError] = useState<string | null>(null)
-  
+
   // Stores
-  const { 
-    programaUuid, 
-    sessionId, 
-    alumnoId, 
+  const {
+    programaUuid,
+    sessionId,
+    alumnoId,
     tema,
     inicializarMundo,
     setMundoListo,
   } = useMundoStore()
-  
+
   const { perfil, program } = useLessonStore()
-  
+
   // Referencias a managers
   const wsManagerRef = React.useRef<WebSocketManager | null>(null)
   const bridgeRef = React.useRef<A2UIBridge | null>(null)
-  
+
   // Datos del alumno
   const nickname = perfil?.nickname || 'Alumno'
   const avatar = perfil?.avatar || ''
-  
+
   // Tema del programa
   const temaPrograma = tema || program?.tema || 'Aprendizaje'
 
@@ -51,14 +51,14 @@ export function MundoWorldPage() {
 
   useEffect(() => {
     if (!programaUuid) {
-      navigate('/onboarding', { replace: true })
+      navigate('/rio', { replace: true })
       return
     }
     fetch(`/api/hivelearn/programs/${programaUuid}`)
       .then(async r => {
         if (r.status === 404) {
           if (!program) {
-            navigate('/onboarding', { replace: true })
+            navigate('/nueva-sesion', { replace: true })
             return
           }
           const { getInstanceId } = await import('@/store/lessonStore')
@@ -88,7 +88,7 @@ export function MundoWorldPage() {
 
     // Configurar WebSocket Manager
     const wsUrl = import.meta.env.VITE_WS_URL || `ws://localhost:3000/ws`
-    
+
     const wsManager = new WebSocketManager({
       wsUrl,
       sessionId,
@@ -101,7 +101,7 @@ export function MundoWorldPage() {
     wsManager.onStateChange = (state) => {
       console.log('[WebSocket] Estado:', state)
       setIsConnected(state === 'connected')
-      
+
       if (state === 'error') {
         setWsError('Error de conexión. Reconectando...')
       } else if (state === 'connected') {
@@ -117,7 +117,7 @@ export function MundoWorldPage() {
     // Suscribirse a eventos del mundo
     wsManager.on('mundo:*', (message) => {
       console.log('[MundoWorldPage] Evento del mundo:', message)
-      
+
       // Procesar evento en el bridge
       if (bridgeRef.current) {
         bridgeRef.current.procesarMensajeServidor(message)
@@ -164,19 +164,19 @@ export function MundoWorldPage() {
 
   const handleZoneInteract = useCallback((zona: Zona) => {
     console.log('[MundoWorldPage] Interacción con zona:', zona)
-    
+
     // Enviar evento de interacción
     if (bridgeRef.current) {
       bridgeRef.current.enviarInteraccionZona(zona.numero, 'entrar')
     }
-    
+
     // TODO: Mostrar contenido A2UI de la zona
     // navigate(`/lesson?zona=${zona.numero}&modulo=${zona.moduloUuid}`)
   }, [])
 
   const handleAnswer = useCallback((moduloUuid: string, respuesta: any) => {
     console.log('[MundoWorldPage] Respuesta del alumno:', { moduloUuid, respuesta })
-    
+
     // Enviar respuesta vía WebSocket
     if (bridgeRef.current && sessionId) {
       bridgeRef.current.enviarRespuesta(
@@ -220,11 +220,10 @@ export function MundoWorldPage() {
 
       {/* Overlay de estado de conexión */}
       <div className="absolute top-4 right-4 pointer-events-none">
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-sm ${
-          isConnected 
-            ? 'bg-[#22c55e]/20 border border-[#22c55e]/40 text-[#22c55e]' 
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-sm ${isConnected
+            ? 'bg-[#22c55e]/20 border border-[#22c55e]/40 text-[#22c55e]'
             : 'bg-[#ef4444]/20 border border-[#ef4444]/40 text-[#ef4444]'
-        }`}>
+          }`}>
           {isConnected ? (
             <>
               <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />

@@ -745,6 +745,51 @@ export function createServer(): any {
         }
       }
 
+      // GET /api/hivelearn/student-by-nickname — busca alumno por nickname para login
+      if (url.pathname === '/api/hivelearn/student-by-nickname' && req.method === 'GET') {
+        try {
+          const { buscarAlumnoPorNickname } = await import('../skills/gestionar-alumnos.skill')
+          const { obtenerAlumno } = await import('../skills/gestionar-alumnos.skill')
+          const nickname = url.searchParams.get('nickname')?.trim()
+          if (!nickname) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'Nickname requerido' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+
+          const profile = await buscarAlumnoPorNickname(nickname)
+          if (!profile) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ found: false }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+
+          return addCorsHeaders(
+            new Response(JSON.stringify({ found: true, profile }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
       // POST /api/hivelearn/student-profile — crea perfil desde formulario Pixi
       if (url.pathname === '/api/hivelearn/student-profile' && req.method === 'POST') {
         try {

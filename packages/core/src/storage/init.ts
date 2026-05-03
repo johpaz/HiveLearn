@@ -75,6 +75,9 @@ export function initHiveLearnStorage(db: Database): void {
   // Casillas de cada agente: JSON acumulativo que se construye durante el swarm
   ensureColumn(db, 'hl_sessions', 'agentes_json', "TEXT NOT NULL DEFAULT '{}'")
 
+  // hl_topics: tabla referenciada por hl_programs.topic_slug — stub para satisfacer la FK
+  db.exec('CREATE TABLE IF NOT EXISTS hl_topics (slug TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT \'\')')
+
   // V3: tabla hl_onboarding_messages + columnas de pausa/restauración de sesión
   try {
     db.exec(HIVELEARN_SCHEMA_V3)

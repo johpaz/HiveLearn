@@ -78,7 +78,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           </div>
           <Button
             variant="default"
-            onClick={() => onNavigate('/onboarding')}
+            onClick={() => onNavigate('/rio')}
             className="font-bold shadow-amber-glow active:scale-95"
             style={{ background: 'linear-gradient(135deg, #f59e0b, #ffc174)', color: '#2a1700' }}
           >
@@ -153,7 +153,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 <div className="text-center py-8">
                   <div className="text-4xl mb-3">📚</div>
                   <p className="text-gray-400 mb-4">No tienes sesiones aún</p>
-                  <Button variant="default" onClick={() => onNavigate('sessions')} className="bg-hive-amber text-primary-foreground hover:bg-hive-amber/90 shadow-honey">
+                  <Button variant="default" onClick={() => onNavigate('/rio')} className="bg-hive-amber text-primary-foreground hover:bg-hive-amber/90 shadow-honey">
                     Crear Primera Sesión
                   </Button>
 
@@ -202,7 +202,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <Button
                 variant="secondary"
                 className="w-full justify-start"
-                onClick={() => onNavigate('/onboarding')}
+                onClick={() => onNavigate('/rio')}
               >
                 🐝 Iniciar Onboarding
               </Button>
@@ -234,7 +234,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button
-                  onClick={() => onNavigate('sessions')}
+                  onClick={() => onNavigate('/sessions')}
                   className="p-4 rounded-xl bg-accent/30 border border-border hover:border-hive-amber/50 transition-all text-left group"
                 >
                   <div className="text-3xl mb-2">📚</div>
@@ -246,7 +246,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
 
                 <button
-                  onClick={() => onNavigate('how-to-use')}
+                  onClick={() => onNavigate('/how-to-use')}
                   className="p-4 rounded-xl bg-accent/30 border border-border hover:border-hive-amber/50 transition-all text-left group"
                 >
                   <div className="text-3xl mb-2">📖</div>
@@ -258,7 +258,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
 
                 <button
-                  onClick={() => onNavigate('config')}
+                  onClick={() => onNavigate('/config')}
                   className="p-4 rounded-xl bg-accent/30 border border-border hover:border-hive-amber/50 transition-all text-left group"
                 >
                   <div className="text-3xl mb-2">⚙️</div>

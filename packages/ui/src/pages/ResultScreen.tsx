@@ -99,7 +99,7 @@ export function ResultScreen() {
         {/* Acciones */}
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
           <button
-            onClick={() => { reset(); navigate('/onboarding') }}
+            onClick={() => { reset(); navigate('/rio')}}
             className="flex-1 rounded-xl bg-hive-amber py-4 text-sm font-black text-primary-foreground hover:bg-hive-amber/90 shadow-honey transition-all active:scale-[0.98]"
           >
             🐝 Nueva lección

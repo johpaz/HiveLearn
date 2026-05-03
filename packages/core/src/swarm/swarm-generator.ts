@@ -93,7 +93,9 @@ export async function runSwarmGeneration(
         threadId: swarmId,
       })
 
+      const agentKey = agentId.replace('hl-', '').replace('-agent', '')
       persistence.saveAgentOutput(swarmId, agentId, agentId, JSON.stringify({ output }), Date.now() - t1)
+      persistence.updateSessionAgentSlot(swarmId, agentKey, output)
 
       // After structure: persist curriculum and expose context to subsequent agents
       if (agentId === AGENT_IDS.structure) {
@@ -142,8 +144,12 @@ export async function runSwarmGeneration(
   }
 
   // Crear programa de formación con la estructura completa al terminar todos los agentes
-  persistence.saveProgram(swarmId, perfil.alumnoId, swarmId, capturedStructureJson, capturedTotalZonas)
-  log.info('[swarm-gen] Program saved', { swarmId })
+  try {
+    persistence.saveProgram(swarmId, perfil.alumnoId, swarmId, capturedStructureJson, capturedTotalZonas)
+    log.info('[swarm-gen] Program saved', { swarmId })
+  } catch (e) {
+    log.warn('[swarm-gen] Could not save program', { swarmId, error: (e as Error).message })
+  }
 
   hlSwarmEmitter.emit('swarm:completed', {
     swarmId,

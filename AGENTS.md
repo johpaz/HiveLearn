@@ -45,3 +45,46 @@ Antes de iniciar una tarea compleja, define en voz alta qué significa completar
 - Transforma instrucciones vagas en criterios verificables. "Mejora esto" no es ejecutable. "Esto estará listo cuando cumpla X, Y y Z" sí lo es.
 - Para tareas de múltiples pasos, enuncia el plan brevemente y verifica cada paso antes de avanzar al siguiente.
 - No declares una tarea completa hasta que los criterios definidos al inicio estén cumplidos.
+
+---
+
+## Arquitectura: Flujo de Navegacion
+
+El flujo principal de la aplicacion es unificado a traves del mundo rio isometrico. Ya no existen pantallas separadas de swarm, lecciones, o onboarding.
+
+```
+Landing (/) → Nueva Sesion (/nueva-sesion) → Rio (/rio)
+```
+
+### `/nueva-sesion`
+- Pantalla completa, sin layout.
+- NuevaSesionWorld (PixiJS): el estudiante elige tema y objetivo.
+- Al completar: guarda sesion via `/api/hivelearn/session`, navega a `/rio`.
+
+### `/rio` — MUNDO PRINCIPAL
+- Pantalla completa, sin layout. Todo el aprendizaje ocurre aqui.
+- Componente: `RioMundo` dentro de `RioMundoPage`.
+- Flujos internos:
+  1. **Login**: nickname lookup → avatar select → entering_world
+  2. **Onboarding bee**: conversacion guiada nombre/edad/tema/objetivo/estilo (eso reemplaza la pagina `/onboarding` que ya no existe)
+  3. **Exploracion libre**: WASD para caminar, Shift para correr
+  4. **Interaccion con portales**: pararse sobre tile `portal_zona` → "Presiona E" → zoom in → overlay A2UI con contenido de la zona
+  5. **Respuestas**: el overlay A2UI envia respuestas via `RioA2UIBridge` → WS → servidor
+  6. **Progreso del swarm**: los tributarios se activan (agua fluye) conforme los agentes completan modulos via WS
+
+### Rutas eliminadas
+- `/onboarding` — eliminada. Onboarding ahora es interno al rio via la abeja.
+- `/hivelearn-swarm` — eliminada. El swarm ahora se visualiza en el mundo rio.
+- `/lesson`, `/mundo`, `/evaluation`, `/result` — sin ruta activa. El contenido pasa por A2UI dentro del portal overlay del rio.
+
+### Store unificado
+- `rioMundoStore.ts` (Zustand + persist) maneja TODO el estado: login, onboarding, mapa, jugador, camara, XP, vidas, tributarios, portales, WS, A2UI.
+- `lessonStore.ts` y `mundoStore.ts` existen pero son legado. No agregar funcionalidad nueva ahi.
+
+### Key files
+- `packages/ui/src/canvaslearn/rio/` — mundo rio isometrico completo
+- `packages/ui/src/store/rioMundoStore.ts` — store unificado
+- `packages/ui/src/pages/RioMundoPage.tsx` — pagina orquestadora (WS, bridge, sesion)
+- `packages/ui/src/canvaslearn/rio/portal/PortalOverlay.tsx` — overlay de contenido al entrar a zona
+- `packages/ui/src/hooks/useRioLive.ts` — hook WS para eventos del swarm
+- `packages/ui/src/hooks/useTTSSpeak.ts` — TTS con Piper + fallback navegador

@@ -108,7 +108,7 @@ function ModelConfigPopover({ onClose }: { onClose: () => void }) {
         <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Motor Hive</span>
         {saving && <div className="h-1 w-12 bg-amber-500 animate-pulse rounded-full" />}
       </div>
-      
+
       <div className="space-y-4">
         {loading ? (
           <div className="py-8 flex justify-center"><div className="w-4 h-4 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" /></div>
@@ -121,11 +121,10 @@ function ModelConfigPopover({ onClose }: { onClose: () => void }) {
                   <button
                     key={m.id}
                     onClick={() => handleSave(p.id, m.id)}
-                    className={`text-left px-3 py-2 rounded-lg text-[11px] transition-all border ${
-                      selectedModelId === m.id 
-                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
+                    className={`text-left px-3 py-2 rounded-lg text-[11px] transition-all border ${selectedModelId === m.id
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
                         : 'bg-white/5 border-transparent text-white/60 hover:bg-white/10'
-                    }`}
+                      }`}
                   >
                     {m.name}
                   </button>
@@ -157,7 +156,7 @@ function timeAgo(dateStr: string): string {
 export function SessionsListScreen() {
   const { reset, restoreSession, selectedModelId } = useLessonStore()
   const navigate = useNavigate()
-  
+
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [metrics, setMetrics] = useState<HLMetrics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -174,7 +173,7 @@ export function SessionsListScreen() {
       ])
       const sData = await sRes.json()
       setSessions(Array.isArray(sData.sessions) ? sData.sessions : [])
-      
+
       if (mRes) {
         const mData = await mRes.json()
         setMetrics(mData)
@@ -185,9 +184,9 @@ export function SessionsListScreen() {
 
   useEffect(() => { fetchData() }, [])
 
-  const handleNew = () => { 
+  const handleNew = () => {
     reset()
-    navigate('/onboarding')
+    navigate('/rio')
   }
 
   const handleContinue = async (session: SessionRow) => {
@@ -196,15 +195,15 @@ export function SessionsListScreen() {
       const res = await fetchWithAuth(`/api/hivelearn/sessions/${session.session_id}`)
       const data = await res.json()
       const nodos = JSON.parse(data.nodos_json || '[]')
-      
+
       const program: LessonProgram = {
         sessionId: data.session_id,
         alumnoId: data.alumno_id,
         tema: data.meta ?? '',
         topicSlug: data.topic_slug ?? null,
         nodos,
-        gamificacion: { 
-          logros: [], 
+        gamificacion: {
+          logros: [],
           mensajeCelebracion: '¡Excelente progreso!',
           xpRecompensa: 0
         },
@@ -222,9 +221,9 @@ export function SessionsListScreen() {
       })
 
       if (session.completada) {
-        navigate('/result')
+        navigate('/rio')
       } else {
-        navigate('/lesson')
+        navigate('/rio')
       }
     } catch { }
     setRestoring(null)
@@ -257,7 +256,7 @@ export function SessionsListScreen() {
       <div className="hive-glow-blob hive-glow-blob--purple w-[500px] h-[500px] bottom-0 -right-40 opacity-10" />
 
       <div className="hive-page-container relative z-10 py-12">
-        
+
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
           <div className="space-y-4">
@@ -274,22 +273,22 @@ export function SessionsListScreen() {
           </div>
 
           <div className="flex items-center gap-4">
-             <div className="relative">
-                <Button 
-                  variant="ghost" 
-                  onClick={() => setShowModelConfig(!showModelConfig)}
-                  className="h-14 px-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/60 hover:text-white transition-all gap-3"
-                >
-                  <Settings className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{selectedModelId ? 'Config' : 'Motor'}</span>
-                </Button>
-                {showModelConfig && <ModelConfigPopover onClose={() => setShowModelConfig(false)} />}
-             </div>
-             
-             <Button onClick={handleNew} className="hive-btn--primary h-14 px-8 group">
-               <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform" />
-               <span className="uppercase font-black tracking-tight">Nueva Lección</span>
-             </Button>
+            <div className="relative">
+              <Button
+                variant="ghost"
+                onClick={() => setShowModelConfig(!showModelConfig)}
+                className="h-14 px-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/60 hover:text-white transition-all gap-3"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">{selectedModelId ? 'Config' : 'Motor'}</span>
+              </Button>
+              {showModelConfig && <ModelConfigPopover onClose={() => setShowModelConfig(false)} />}
+            </div>
+
+            <Button onClick={handleNew} className="hive-btn--primary h-14 px-8 group">
+              <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform" />
+              <span className="uppercase font-black tracking-tight">Nueva Lección</span>
+            </Button>
           </div>
         </div>
 
@@ -328,7 +327,7 @@ export function SessionsListScreen() {
                 className="w-full h-16 pl-16 pr-10 border-0 bg-transparent text-xl focus:ring-0 placeholder:text-white/5 text-white font-medium"
               />
               {searchTerm && (
-                <button 
+                <button
                   onClick={() => setSearchTerm('')}
                   className="absolute right-2 w-8 h-8 flex items-center justify-center rounded-full bg-white/5 text-white/40 hover:bg-white/10 hover:text-white transition-all"
                 >
@@ -336,7 +335,7 @@ export function SessionsListScreen() {
                 </button>
               )}
             </div>
-            <Button 
+            <Button
               onClick={() => fetchData()}
               className="h-14 px-8 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 font-bold uppercase tracking-widest text-[10px] transition-all active:scale-95"
             >
@@ -348,14 +347,14 @@ export function SessionsListScreen() {
         {/* Grid Content */}
         {loading ? (
           <div className="py-24 flex flex-col items-center">
-             <div className="text-7xl animate-pulse grayscale opacity-50">🐝</div>
-             <p className="mt-8 text-[10px] font-black uppercase tracking-[0.4em] text-white/20 animate-pulse">Sincronizando Enjambre</p>
+            <div className="text-7xl animate-pulse grayscale opacity-50">🐝</div>
+            <p className="mt-8 text-[10px] font-black uppercase tracking-[0.4em] text-white/20 animate-pulse">Sincronizando Enjambre</p>
           </div>
         ) : filteredSessions.length === 0 ? (
           <div className="py-32 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
-             <div className="text-6xl mb-6 opacity-10">📂</div>
-             <h3 className="text-2xl font-black text-white/20 uppercase tracking-tighter">Sin resultados</h3>
-             <p className="text-white/10 text-sm mt-2">No encontramos nada que coincida con tu búsqueda.</p>
+            <div className="text-6xl mb-6 opacity-10">📂</div>
+            <h3 className="text-2xl font-black text-white/20 uppercase tracking-tighter">Sin resultados</h3>
+            <p className="text-white/10 text-sm mt-2">No encontramos nada que coincida con tu búsqueda.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -367,14 +366,13 @@ export function SessionsListScreen() {
 
               return (
                 <div key={session.session_id} className="group relative bg-white/[0.02] border border-white/5 rounded-[2rem] p-8 flex flex-col min-h-[360px] hover:bg-white/[0.04] hover:border-white/10 transition-all">
-                  
+
                   {/* Status & Date */}
                   <div className="flex items-center justify-between mb-8">
-                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest ${
-                      isCompleted ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                      isPaused ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
-                      'bg-blue-500/10 border-blue-500/20 text-blue-400'
-                    }`}>
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest ${isCompleted ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                        isPaused ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
+                          'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                      }`}>
                       {isCompleted ? <CheckCircle2 className="w-3 h-3" /> : isPaused ? <PauseCircle className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                       {isCompleted ? 'Completada' : isPaused ? 'Pausada' : 'En Vivo'}
                     </div>
@@ -399,13 +397,13 @@ export function SessionsListScreen() {
                   <div className="mt-8 space-y-4">
                     <div className="flex justify-between items-end">
                       <div className="flex flex-col">
-                         <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Progreso</span>
-                         <span className="text-xs font-black text-white/80">{session.nodos_completados} / {session.total_nodos}</span>
+                        <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Progreso</span>
+                        <span className="text-xs font-black text-white/80">{session.nodos_completados} / {session.total_nodos}</span>
                       </div>
                       <span className="text-xl font-black text-white tracking-tighter">{progress}%</span>
                     </div>
                     <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className={`h-full transition-all duration-1000 ${isCompleted ? 'bg-emerald-500' : 'bg-amber-500'}`}
                         style={{ width: `${progress}%` }}
                       />
@@ -417,10 +415,9 @@ export function SessionsListScreen() {
                     <Button
                       onClick={() => handleContinue(session)}
                       disabled={isBusy}
-                      className={`flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all ${
-                        isCompleted ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20' : 
-                        'bg-white/5 hover:bg-white/10 text-white border-white/10'
-                      }`}
+                      className={`flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all ${isCompleted ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20' :
+                          'bg-white/5 hover:bg-white/10 text-white border-white/10'
+                        }`}
                     >
                       {restoring === session.session_id ? 'Cargando...' : isCompleted ? 'Revisar' : 'Continuar'}
                     </Button>

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { Outlet } from "react-router-dom";
-import { Navbar, Footer, LandingLayout, AppLayout, LearningLayout } from "@/components";
+import { Navbar, LandingLayout, AppLayout } from "@/components";
 
 // Lazy load pages con named exports
 const LandingPage = lazy(() => import("@/pages/LandingPage").then(m => ({ default: m.LandingPage })));
@@ -12,13 +12,7 @@ const DashboardPage = lazy(() => import("@/pages/DashboardPage").then(m => ({ de
 const HowToUsePage = lazy(() => import("@/pages/HowToUsePage").then(m => ({ default: m.HowToUsePage })));
 const ProviderSelectScreen = lazy(() => import("@/pages/HiveLearnConfigPage").then(m => ({ default: m.HiveLearnConfigPage })));
 const SessionsListScreen = lazy(() => import("@/pages/SessionsListScreen").then(m => ({ default: m.SessionsListScreen })));
-const OnboardWorldPage = lazy(() => import("@/pages/OnboardWorldPage").then(m => ({ default: m.OnboardWorldPage })));
-const NuevaSesionWorldPage = lazy(() => import("@/pages/NuevaSesionWorldPage").then(m => ({ default: m.NuevaSesionWorldPage })));
-const A2UILessonScreen = lazy(() => import("@/pages/A2UILessonScreen").then(m => ({ default: m.A2UILessonScreen })));
-const EvaluationScreen = lazy(() => import("@/pages/EvaluationScreen").then(m => ({ default: m.EvaluationScreen })));
-const ResultScreen = lazy(() => import("@/pages/ResultScreen").then(m => ({ default: m.ResultScreen })));
-const MundoWorldPage = lazy(() => import("@/pages/MundoWorldPage").then(m => ({ default: m.MundoWorldPage })));
-const SwarmWorld = lazy(() => import("@/canvaslearn/swarm").then(m => ({ default: m.SwarmWorld })));
+const RioMundoPage = lazy(() => import("@/pages/RioMundoPage").then(m => ({ default: m.RioMundoPage })));
 
 const queryClient = new QueryClient();
 
@@ -28,7 +22,7 @@ function LandingPageWrapper() {
 
   return (
     <LandingPage
-      onStart={() => navigate('/sessions')}
+      onStart={() => navigate('/rio')}
       onSessions={() => navigate('/sessions')}
       onHowToUse={() => navigate('/how-to-use')}
     />
@@ -47,7 +41,7 @@ function HowToUsePageWrapper() {
   return (
     <HowToUsePage
       onBack={() => navigate(-1)}
-      onStart={() => navigate('/sessions')}
+      onStart={() => navigate('/rio')}
     />
   );
 }
@@ -73,25 +67,15 @@ function App() {
                 <Route path="/how-to-use" element={<HowToUsePageWrapper />} />
               </Route>
 
-              {/* Layout para la Aplicación (Dashboard, Sesiones, Config) */}
+{/* Layout para la Aplicación (Dashboard, Sesiones, Config) */}
               <Route element={<AppLayout><Outlet /></AppLayout>}>
                 <Route path="/dashboard" element={<DashboardPageWrapper />} />
                 <Route path="/sessions" element={<SessionsListScreen />} />
                 <Route path="/config" element={<ProviderSelectScreen />} />
               </Route>
 
-              {/* Standalone: SwarmWorld ocupa toda la pantalla sin layout */}
-              <Route path="/hivelearn-swarm" element={<SwarmWorld />} />
-
-              {/* Layout para el Módulo de Aprendizaje (Enfoque) */}
-              <Route element={<LearningLayout><Outlet /></LearningLayout>}>
-                <Route path="/onboarding" element={<OnboardWorldPage />} />
-                <Route path="/nueva-sesion" element={<NuevaSesionWorldPage />} />
-                <Route path="/lesson" element={<A2UILessonScreen />} />
-                <Route path="/mundo" element={<MundoWorldPage />} />
-                <Route path="/evaluation" element={<EvaluationScreen />} />
-                <Route path="/result" element={<ResultScreen />} />
-              </Route>
+              {/* Standalone: Rio mundo — pantalla completa sin layout */}
+              <Route path="/rio" element={<RioMundoPage />} />
 
               {/* 404 */}
               <Route path="*" element={<Navigate to="/" replace />} />
