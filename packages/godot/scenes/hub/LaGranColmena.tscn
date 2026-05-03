@@ -1,0 +1,255 @@
+[gd_scene load_steps=3 format=3 uid="uid://hub_colmena"]
+
+[ext_resource type="Script" path="res://scenes/hub/LaGranColmena.gd" id="1_hub"]
+[ext_resource type="Script" path="res://scripts/HubAnimado.gd" id="2_anim"]
+
+[node name="LaGranColmena" type="Node2D"]
+
+[node name="Background" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.0392157, 0.0705882, 0.117647, 1)
+
+[node name="Starfield" type="Node2D" parent="."]
+position = Vector2(640, 360)
+
+[node name="ColmenaContainer" type="Node2D" parent="."]
+position = Vector2(640, 350)
+script = ExtResource("2_anim")
+
+[node name="HexCentro" type="Polygon2D" parent="ColmenaContainer"]
+color = Color(0.95, 0.75, 0.15, 1)
+
+[node name="HexCapa1" type="Node2D" parent="ColmenaContainer"]
+
+[node name="AnilloInterior" type="Node2D" parent="ColmenaContainer/HexCapa1"]
+
+[node name="Zona1" type="Button" parent="ColmenaContainer/HexCapa1/AnilloInterior"]
+offset_left = -50.0
+offset_top = -80.0
+offset_right = 50.0
+offset_bottom = -10.0
+text = "🌿 SELVA"
+
+[node name="Zona2" type="Button" parent="ColmenaContainer/HexCapa1/AnilloInterior"]
+offset_left = 50.0
+offset_top = -80.0
+offset_right = 150.0
+offset_bottom = -10.0
+text = "🏔️ ANDES"
+
+[node name="Zona3" type="Button" parent="ColmenaContainer/HexCapa1/AnilloInterior"]
+offset_left = -150.0
+offset_top = 10.0
+offset_right = -50.0
+offset_bottom = 80.0
+text = "🌊 CENOTES"
+
+[node name="Zona4" type="Button" parent="ColmenaContainer/HexCapa1/AnilloInterior"]
+offset_left = -50.0
+offset_top = 10.0
+offset_right = 50.0
+offset_bottom = 80.0
+text = "🦙 INCA"
+
+[node name="Zona5" type="Button" parent="ColmenaContainer/HexCapa1/AnilloInterior"]
+offset_left = 50.0
+offset_top = 10.0
+offset_right = 150.0
+offset_bottom = 80.0
+text = "🐆 CHIBCHA"
+
+[node name="Zona6" type="Button" parent="ColmenaContainer/HexCapa1/AnilloInterior"]
+offset_left = -50.0
+offset_top = -160.0
+offset_right = 50.0
+offset_bottom = -90.0
+text = "🦙 AYMARA"
+
+[node name="AnilloExterior" type="Node2D" parent="ColmenaContainer/HexCapa1"]
+
+[node name="Zona7" type="Button" parent="ColmenaContainer/HexCapa1/AnilloExterior"]
+offset_left = -230.0
+offset_top = -180.0
+offset_right = -110.0
+offset_bottom = -100.0
+text = "🐬 ORINOCO"
+
+[node name="Zona8" type="Button" parent="ColmenaContainer/HexCapa1/AnilloExterior"]
+offset_left = -110.0
+offset_top = -180.0
+offset_right = 10.0
+offset_bottom = -100.0
+text = "🐦 QUITO"
+
+[node name="Zona9" type="Button" parent="ColmenaContainer/HexCapa1/AnilloExterior"]
+offset_left = 10.0
+offset_top = -180.0
+offset_right = 130.0
+offset_bottom = -100.0
+text = "🦜 BRASIL"
+
+[node name="Zona10" type="Button" parent="ColmenaContainer/HexCapa1/AnilloExterior"]
+offset_left = 130.0
+offset_top = -180.0
+offset_right = 250.0
+offset_bottom = -100.0
+text = "🐧 CHILE"
+
+[node name="Zona11" type="Button" parent="ColmenaContainer/HexCapa1/AnilloExterior"]
+offset_left = -80.0
+offset_top = 110.0
+offset_right = 80.0
+offset_bottom = 190.0
+text = "🐒 TIKAL"
+
+[node name="Zona12" type="Button" parent="ColmenaContainer/HexCapa1/AnilloExterior"]
+offset_left = -80.0
+offset_top = -260.0
+offset_right = 80.0
+offset_bottom = -180.0
+text = "🤖 GALAXIA"
+
+[node name="Player" type="Node2D" parent="ColmenaContainer"]
+position = Vector2(0, 0)
+
+[node name="Cuerpo" type="Polygon2D" parent="ColmenaContainer/Player"]
+position = Vector2(0, 10)
+color = Color(1, 0.85, 0.2, 1)
+
+[node name="Alas" type="Polygon2D" parent="ColmenaContainer/Player"]
+color = Color(1, 1, 1, 0.5)
+
+[node name="Ojos" type="Node2D" parent="ColmenaContainer/Player"]
+position = Vector2(0, 10)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+layer = 100
+
+[node name="TopBar" type="PanelContainer" parent="HUD"]
+anchor_right = 1.0
+offset_bottom = 60.0
+grow_horizontal = 0
+
+[node name="HBox" type="HBoxContainer" parent="HUD/TopBar"]
+offset_left = 20.0
+offset_top = 15.0
+offset_right = 400.0
+offset_bottom = 45.0
+
+[node name="Icono" type="Label" parent="HUD/TopBar/HBox"]
+text = "🐝"
+
+[node name="Nickname" type="Label" parent="HUD/TopBar/HBox"]
+text = "Jugador"
+
+[node name="Separator" type="Label" parent="HUD/TopBar/HBox"]
+text = " | "
+
+[node name="XP" type="Label" parent="HUD/TopBar/HBox"]
+text = "XP: 0"
+
+[node name="Nivel" type="Label" parent="HUD/TopBar/HBox"]
+text = "Nivel: 1"
+
+[node name="RightBar" type="VBoxContainer" parent="HUD/TopBar"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -180.0
+offset_top = 15.0
+offset_right = -20.0
+offset_bottom = 45.0
+alignment = 2
+
+[node name="Vidas" type="Label" parent="HUD/TopBar/RightBar"]
+text = "❤️❤️❤️"
+horizontal_alignment = 2
+
+[node name="VoiceButton" type="Button" parent="HUD/TopBar"]
+offset_left = 450.0
+offset_top = 10.0
+offset_right = 600.0
+offset_bottom = 50.0
+text = "🎤 Voz"
+
+[node name="AriaOverlay" type="PanelContainer" parent="."]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 0.9
+anchor_right = 0.5
+anchor_bottom = 0.9
+offset_left = -350.0
+offset_top = -60.0
+offset_right = 350.0
+
+[node name="Label" type="Label" parent="AriaOverlay"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "¡Explora la Gran Colmena! Cada celda es un mundo diferente."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ZonaInfo" type="PanelContainer" parent="."]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -100.0
+offset_right = 200.0
+offset_bottom = 100.0
+
+[node name="VBox" type="VBoxContainer" parent="ZonaInfo"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 380.0
+offset_bottom = 180.0
+
+[node name="TituloZona" type="Label" parent="ZonaInfo/VBox"]
+theme_override_colors/font_color = Color(1, 0.85, 0.2, 1)
+theme_override_font_sizes/font_size = 28
+text = "Nombre de Zona"
+horizontal_alignment = 1
+
+[node name="AgenteZona" type="Label" parent="ZonaInfo/VBox"]
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 18
+text = "Agente: Yara"
+horizontal_alignment = 1
+
+[node name="Descripcion" type="Label" parent="ZonaInfo/VBox"]
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_font_sizes/font_size = 16
+text = "Descripción de la zona..."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="EntrarBtn" type="Button" parent="ZonaInfo/VBox"]
+custom_minimum_size = Vector2(200, 50)
+theme_override_font_sizes/font_size = 20
+text = "ENTRAR"
+
+[node name="CerrarBtn" type="Button" parent="ZonaInfo/VBox"]
+custom_minimum_size = Vector2(100, 30)
+theme_override_font_sizes/font_size = 14
+text = "CERRAR"
+
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloInterior/Zona1" to="." method="_on_zona_pressed" binds= [1]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloInterior/Zona2" to="." method="_on_zona_pressed" binds= [2]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloInterior/Zona3" to="." method="_on_zona_pressed" binds= [3]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloInterior/Zona4" to="." method="_on_zona_pressed" binds= [4]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloInterior/Zona5" to="." method="_on_zona_pressed" binds= [5]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloInterior/Zona6" to="." method="_on_zona_pressed" binds= [6]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloExterior/Zona7" to="." method="_on_zona_pressed" binds= [7]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloExterior/Zona8" to="." method="_on_zona_pressed" binds= [8]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloExterior/Zona9" to="." method="_on_zona_pressed" binds= [9]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloExterior/Zona10" to="." method="_on_zona_pressed" binds= [10]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloExterior/Zona11" to="." method="_on_zona_pressed" binds= [11]]
+[connection signal="pressed" from="ColmenaContainer/HexCapa1/AnilloExterior/Zona12" to="." method="_on_zona_pressed" binds= [12]]
+[connection signal="pressed" from="ZonaInfo/VBox/EntrarBtn" to="." method="_on_entrar_pressed"]
+[connection signal="pressed" from="ZonaInfo/VBox/CerrarBtn" to="." method="_on_cerrar_pressed"]

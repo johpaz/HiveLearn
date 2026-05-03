@@ -1,0 +1,38 @@
+[gd_scene load_steps=3 format=3 uid="uid://ojo-colmena-001"]
+
+[ext_resource type="Script" path="res://scripts/PersonajeController.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/characters/ojo.png" id="2"]
+
+[node name="Ojo" type="Node2D"]
+script = ExtResource("1")
+personaje_id = "ojo"
+nombre_personaje = "Ojo"
+sprite_idle = ExtResource("2")
+color_burbuja = Color(0.2 0.2 0.2 1)
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2")
+scale = Vector2(2, 2)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+
+[node name="TimerDialogo" type="Timer" parent="."]
+wait_time = 3.0
+one_shot = true
+
+[node name="Burbuja" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="PanelContainer" parent="Burbuja"]
+offset_left = -120.0
+offset_top = -100.0
+offset_right = 120.0
+offset_bottom = -20.0
+
+[node name="VBox" type="VBoxContainer" parent="Burbuja/Panel"]
+
+[node name="Nombre" type="Label" parent="Burbuja/Panel/VBox"]
+text = "Ojo"
+horizontal_alignment = 1
+
+[node name="Texto" type="Label" parent="Burbuja/Panel/VBox"]
+autowrap_mode = 3

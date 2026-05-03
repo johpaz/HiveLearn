@@ -2,84 +2,114 @@ extends Node
 
 signal reproduccion_iniciada()
 signal reproduccion_terminada()
+signal captura_voz_iniciada()
+signal captura_voz_terminada(audio_data: PackedByteArray)
 
 var audio_stream_player: AudioStreamPlayer
-var audio_stream_generator: AudioStreamGenerator
-var audio_stream_generator_play: AudioStreamGeneratorPlayback
-var audio_queue: Array[PackedByteArray] = []
-var is_playing: bool = false
+var audio_stream_player_sfx: AudioStreamPlayer
 
 const SAMPLE_RATE = 22050
-const CHANNELS = 1
 
 func _ready() -> void:
 	audio_stream_player = AudioStreamPlayer.new()
+	audio_stream_player.bus = "Master"
 	add_child(audio_stream_player)
 	
-	audio_stream_generator = AudioStreamGenerator.new()
-	audio_stream_generator.mix_rate = SAMPLE_RATE
-	audio_stream_generator.buffer_length = 0.5
-	audio_stream_player.stream = audio_stream_generator
-	audio_stream_player.play()
-	audio_stream_generator_play = audio_stream_player.get_playback()
+	audio_stream_player_sfx = AudioStreamPlayer.new()
+	audio_stream_player_sfx.bus = "Master"
+	add_child(audio_stream_player_sfx)
 	
-	print("[AudioManager] Inicializado - Sample rate: ", SAMPLE_RATE)
+	print("[AudioManager] Inicializado")
 
 func reproducir_tts(audio_pcm: PackedByteArray) -> void:
 	if audio_pcm.size() == 0:
 		return
 	
-	print("[AudioManager] Reproduciendo audio TTS, tamanho: ", audio_pcm.size())
-	
-	var stream = AudioStreamMicrophone.new()
-	stream.format = AudioStreamMicrophone.FORMAT_IMA_ADPCM
-	stream.mix_rate = SAMPLE_RATE
-	
+	print("[AudioManager] Reproduciendo TTS: ", audio_pcm.size(), " bytes")
 	emit_signal("reproduccion_iniciada")
-	_process_pcm_audio(audio_pcm)
-
-func _process_pcm_audio(pcm_data: PackedByteArray) -> void:
-	var samples = _pcm_to_samples(pcm_data)
-	if samples.size() > 0:
-		audio_stream_generator_play.push_samples(samples)
-		emit_signal("reproduccion_terminada")
-
-func _pcm_to_samples(pcm_data: PackedByteArray) -> PackedVector2Array:
-	var samples = PackedVector2Array()
-	samples.resize(pcm_data.size() / 2)
 	
-	for i in range(0, pcm_data.size() - 1, 2):
-		if i + 1 < pcm_data.size():
-			var sample = pcm_data[i] | (pcm_data[i + 1] << 8)
-			if sample > 32767:
-				sample -= 65536
-			var normalized = float(sample) / 32768.0
-			samples[i / 2] = Vector2(normalized, normalized)
+	if _es_audio_wav(audio_pcm):
+		_reproducir_wav_directo(audio_pcm)
+	else:
+		_reproducir_pcm(audio_pcm)
+
+func _es_audio_wav(data: PackedByteArray) -> bool:
+	if data.size() < 44:
+		return false
+	var header = data.slice(0, 4).get_string_from_utf8()
+	return header == "RIFF"
+
+func _reproducir_wav_directo(data: PackedByteArray) -> void:
+	var stream = AudioStreamWAV.new()
+	stream.data = data.slice(44)
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = SAMPLE_RATE
+	stream.stereo = false
 	
-	return samples
+	audio_stream_player.stream = stream
+	audio_stream_player.play()
+	
+	await get_tree().create_timer(float(stream.data.size()) / 2.0 / float(SAMPLE_RATE)).timeout
+	emit_signal("reproduccion_terminada")
+
+func _reproducir_pcm(pcm_data: PackedByteArray) -> void:
+	var stream = AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = SAMPLE_RATE
+	stream.stereo = false
+	
+	var datos_16bits = _convertir_pcm_a_16bits(pcm_data)
+	stream.data = datos_16bits
+	
+	audio_stream_player.stream = stream
+	audio_stream_player.play()
+	
+	var duracion = float(datos_16bits.size()) / 2.0 / float(SAMPLE_RATE)
+	await get_tree().create_timer(duracion).timeout
+	emit_signal("reproduccion_terminada")
+
+func _convertir_pcm_a_16bits(pcm: PackedByteArray) -> PackedByteArray:
+	var resultado = PackedByteArray()
+	resultado.resize(pcm.size() * 2)
+	
+	for i in range(pcm.size()):
+		var sample = pcm[i]
+		if sample > 127:
+			sample -= 256
+		var valor_16 = sample * 256
+		resultado[i * 2] = valor_16 & 0xFF
+		resultado[i * 2 + 1] = (valor_16 >> 8) & 0xFF
+	
+	return resultado
+
+func reproducir_tts_base64(audio_base64: String) -> void:
+	var datos = Marshalls.base64_to_raw(audio_base64)
+	if datos.size() > 0:
+		reproducir_tts(datos)
 
 func esta_reproduciendo() -> bool:
 	return audio_stream_player.playing
 
 func detener() -> void:
 	audio_stream_player.stop()
-	audio_stream_generator_play.flush()
-	print("[AudioManager] Reproduccion detenida")
+	audio_stream_player_sfx.stop()
+	print("[AudioManager] Detenido")
 
 func reproducir_sfx(sfx_path: String) -> void:
 	if FileAccess.file_exists(sfx_path):
 		var stream = AudioStreamWAV.new()
 		stream.file_path = sfx_path
-		audio_stream_player.stream = stream
-		audio_stream_player.play()
+		audio_stream_player_sfx.stream = stream
+		audio_stream_player_sfx.play()
 	else:
 		print("[AudioManager] SFX no encontrado: ", sfx_path)
 
 func iniciar_captura_voz() -> void:
-	print("[AudioManager] Iniciando captura de voz...")
-	# AudioEffectCapture necesita implementarse en la escena
-	# por limitaciones de Godot en headless
-	pass
+	print("[AudioManager] Captura de voz - enviando peticion al backend")
+	emit_signal("captura_voz_iniciada")
 
-func get_audio_capture() -> AudioStreamGenerator:
-	return audio_stream_generator
+func procesar_audio_capturado(audio_data: PackedByteArray) -> void:
+	emit_signal("captura_voz_terminada", audio_data)
+
+func obtener_stream_generator() -> AudioStreamPlayer:
+	return audio_stream_player

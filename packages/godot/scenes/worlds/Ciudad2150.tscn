@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3 uid="uid://ciudad_2150"]
+
+[ext_resource type="Script" path="res://scenes/worlds/MiniMundoBase.gd" id="1"]
+
+[node name="Ciudad2150" type="Node2D"]
+script = ExtResource("1")
+nombre_zona = "Ciudad LATAM 2150"
+agente = "Nova"
+color_fondo = Color(0.2, 0.1, 0.25, 1)

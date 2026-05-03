@@ -29,7 +29,12 @@
     "typecheck": "bun run --filter '*' typecheck",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist",
     "migrate:api-keys": "bun run scripts/migrate-api-keys.ts",
-    "migrate:schema": "bun run scripts/migrate-schema.ts"
+    "migrate:schema": "bun run scripts/migrate-schema.ts",
+    "build:godot": "echo 'Abrir Godot Editor para exportar'",
+    "build:godot:html5": "godot --headless --export-release 'HTML5' packages/godot/export/html5/index.html",
+    "build:godot:linux": "godot --headless --export-release 'Linux' packages/godot/export/linux/HiveLearn",
+    "build:godot:windows": "godot --headless --export-release 'Windows' packages/godot/export/windows/HiveLearn.exe",
+    "build:godot:arm64": "godot --headless --export-release 'Linux ARM64' packages/godot/export/linux-arm64/HiveLearn"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

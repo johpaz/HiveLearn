@@ -14,6 +14,7 @@ import { OpenAICompatProvider } from '../agent/llm-providers/openai-compat'
 import { AnthropicProvider } from '../agent/llm-providers/anthropic'
 import { GeminiProvider } from '../agent/llm-providers/gemini'
 import { COORDINATOR_PROMPT } from '../agent/coordinator.prompt'
+import { ariaOnboarding } from '../agent/personas/index'
 import { getDb } from '../storage/sqlite'
 import { LessonPersistence } from '../storage/LessonPersistence'
 import { logger } from '../utils/logger'
@@ -101,7 +102,7 @@ async function callCoordinator(messages: LLMMessage[]): Promise<LLMResponse> {
     model:       modelId,
     apiKey,
     baseUrl,
-    messages:    [{ role: 'system', content: COORDINATOR_PROMPT }, ...messages],
+    messages:    [{ role: 'system', content: ariaOnboarding(COORDINATOR_PROMPT) }, ...messages],
     tools:       [SUBMIT_PROFILE_TOOL],
     maxTokens:   400,
     temperature: 0.7,
@@ -141,7 +142,7 @@ export async function handleOnboardingInit(
     const text = typeof response.content === 'string' ? response.content : ''
     if (text) {
       state.messages.push({ role: 'assistant', content: text })
-      send(ws, { type: 'agent_message', text })
+      send(ws, { type: 'agent_message', text, personaje: 'aria' })
     }
   } catch (err) {
     log.error('[onboarding init] LLM error', { error: (err as Error).message })
@@ -247,7 +248,7 @@ export async function handleOnboardingUserMessage(
       })
 
       // Send complete event — frontend will navigate to SwarmPage
-      send(ws, { type: 'complete', perfil, meta, alumnoId, sessionId })
+      send(ws, { type: 'complete', perfil, meta, alumnoId, sessionId, personaje: 'aria' })
 
       // Clean up session state
       convState.delete(sessionId)

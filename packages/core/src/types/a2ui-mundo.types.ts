@@ -280,15 +280,24 @@ export interface ClientMessage {
 }
 
 /**
+ * IDs de los personajes del juego (Abejas Maestras)
+ * Godot usa este campo para saber qué sprite/escena mostrar.
+ */
+export type PersonajeId = 'aria' | 'yara' | 'kimi' | 'ix' | 'nova' | 'chacho' | 'cosmo'
+
+/**
  * Mensaje del servidor (agentes) al cliente (alumno/mundo)
  */
 export interface ServerMessage {
   tipo: 'bienvenida' | 'contenido' | 'resultado' | 'evento' | 'error'
   session_id: string
   agente_id: string
+  /** Personaje que habla en Godot. Godot activa el sprite y burbuja correspondiente. */
+  personaje?: PersonajeId
   payload: {
     mundo_evento?: MundoEvento
     a2ui_messages?: A2UIMessage[]
+    personaje?: PersonajeId
     [key: string]: any
   }
   timestamp: string

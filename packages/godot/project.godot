@@ -1,14 +1,22 @@
 ; Engine configuration file.
 ; It's best edited using the editor UI and not directly,
-; but it can also be manually edited if needed.
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
+
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
 config/name="HiveLearn: La Gran Colmena"
 run/main_scene="res://scenes/main.tscn"
-config/features=PackedStringArray("4.3", "Forward+")
+config/features=PackedStringArray("4.3")
 config/icon="res://assets/ui/icon.svg"
 
 [autoload]
@@ -16,14 +24,18 @@ config/icon="res://assets/ui/icon.svg"
 NetworkManager="*res://scripts/NetworkManager.gd"
 AudioManager="*res://scripts/AudioManager.gd"
 GameState="*res://scripts/GameState.gd"
+VoiceInput="*res://scripts/VoiceInputManager.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
-window/size/resizable=true
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[dotnet]
+
+project/assembly_name="HiveLearn- La Gran Colmena"
 
 [rendering]
 

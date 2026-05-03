@@ -1,0 +1,116 @@
+[gd_scene load_steps=2 format=3 uid="uid://onboarding"]
+
+[ext_resource type="Script" path="res://scenes/onboarding/Onboarding.gd" id="1_onboarding"]
+
+[node name="Onboarding" type="Node2D"]
+
+[node name="Background" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.0392157, 0.0705882, 0.117647, 1)
+
+[node name="ParticleLayer" type="CanvasLayer" parent="."]
+layer = -1
+
+[node name="Particles" type="Node2D" parent="ParticleLayer"]
+
+[node name="AriaContainer" type="Node2D" parent="."]
+position = Vector2(150, 360)
+
+[node name="AriaBody" type="Polygon2D" parent="AriaContainer"]
+position = Vector2(0, 50)
+color = Color(1, 0.85, 0.2, 1)
+
+[node name="AriaCorona" type="Polygon2D" parent="AriaContainer"]
+position = Vector2(0, 30)
+color = Color(1, 0.7, 0.1, 1)
+
+[node name="AriaOjo1" type="ColorRect" parent="AriaContainer"]
+offset_left = -25.0
+offset_top = 20.0
+offset_right = -15.0
+offset_bottom = 30.0
+color = Color(0.1, 0.1, 0.1, 1)
+
+[node name="AriaOjo2" type="ColorRect" parent="AriaContainer"]
+offset_left = 15.0
+offset_top = 20.0
+offset_right = 25.0
+offset_bottom = 30.0
+color = Color(0.1, 0.1, 0.1, 1)
+
+[node name="AriaAlas" type="Polygon2D" parent="AriaContainer"]
+position = Vector2(0, 50)
+color = Color(1, 1, 1, 0.6)
+
+[node name="NombreLabel" type="Label" parent="AriaContainer"]
+offset_left = -60.0
+offset_top = 180.0
+offset_right = 60.0
+offset_bottom = 210.0
+theme_override_colors/font_color = Color(1, 0.9, 0.4, 1)
+theme_override_font_sizes/font_size = 20
+text = "Reina Aria"
+horizontal_alignment = 1
+
+[node name="DialogoPanel" type="PanelContainer" parent="."]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 0.7
+anchor_right = 0.5
+anchor_bottom = 0.7
+offset_left = -350.0
+offset_top = -80.0
+offset_right = 350.0
+offset_bottom = 40.0
+
+[node name="DialogoLabel" type="Label" parent="DialogoPanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "¡Bienvenido! La Gran Colmena te esperaba."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ContentContainer" type="Node2D" parent="."]
+position = Vector2(600, 300)
+
+[node name="ProgressDots" type="HBoxContainer" parent="."]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 0.15
+anchor_right = 0.5
+anchor_bottom = 0.15
+offset_left = -50.0
+offset_right = 50.0
+offset_bottom = 20.0
+alignment = 1
+
+[node name="Dot1" type="ColorRect" parent="ProgressDots"]
+custom_minimum_size = Vector2(20, 20)
+color = Color(1, 0.85, 0.2, 1)
+
+[node name="Dot2" type="ColorRect" parent="ProgressDots"]
+custom_minimum_size = Vector2(20, 20)
+offset_left = 30.0
+offset_right = 50.0
+color = Color(0.3, 0.3, 0.3, 1)
+
+[node name="Dot3" type="ColorRect" parent="ProgressDots"]
+custom_minimum_size = Vector2(20, 20)
+offset_left = 60.0
+offset_right = 80.0
+color = Color(0.3, 0.3, 0.3, 1)
+
+[node name="Titulo" type="Label" parent="."]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_top = 80.0
+offset_right = 200.0
+offset_bottom = 130.0
+theme_override_colors/font_color = Color(1, 0.85, 0.2, 1)
+theme_override_font_sizes/font_size = 36
+text = "Bienvenido"
+horizontal_alignment = 1

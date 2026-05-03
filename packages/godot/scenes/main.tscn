@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://main_scene"]
+[gd_scene load_steps=2 format=3 uid="uid://di57hlplyjtuj"]
 
 [ext_resource type="Script" path="res://scripts/Main.gd" id="1_main"]
 
@@ -14,6 +14,7 @@ layer = 100
 
 [node name="Transition" type="ColorRect" parent="UI"]
 visible = false
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0, 0, 0, 1)

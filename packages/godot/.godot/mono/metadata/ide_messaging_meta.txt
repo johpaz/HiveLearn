@@ -1,0 +1,2 @@
+﻿37977
+/app/bin/godot-bin

@@ -41,15 +41,17 @@ func _on_escena_finalizada(nombre_siguiente: String) -> void:
 	cargar_escena(nombre_siguiente)
 
 func transicion_fade(duracion: float = 0.5) -> void:
+	if not has_node("UI/Transition"):
+		return
 	var transition = $UI/Transition
 	transition.visible = true
 	transition.modulate.a = 0.0
 	
 	var tween = create_tween()
 	tween.tween_property(transition, "modulate:a", 1.0, duracion / 2.0)
-	tween.tween_callback(func():
-		pass
-	).tween_property(transition, "modulate:a", 0.0, duracion / 2.0)
-	tween.tween_callback(func():
-		transition.visible = false
-	)
+	tween.tween_property(transition, "modulate:a", 0.0, duracion / 2.0)
+	tween.tween_callback(_on_transicion_completada)
+
+func _on_transicion_completada() -> void:
+	if has_node("UI/Transition"):
+		$UI/Transition.visible = false

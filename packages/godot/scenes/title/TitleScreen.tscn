@@ -1,0 +1,153 @@
+[gd_scene load_steps=5 format=3 uid="uid://title_screen"]
+
+[ext_resource type="Script" path="res://scenes/title/TitleScreen.gd" id="1_title"]
+[ext_resource type="Script" path="res://scripts/ParticleHexagono.gd" id="2_particles"]
+[ext_resource type="Script" path="res://scripts/ColmenaAnimada.gd" id="3_colmena"]
+
+[node name="TitleScreen" type="Node2D"]
+script = ExtResource("1_title")
+
+[node name="Background" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.0392157, 0.0705882, 0.117647, 1)
+
+[node name="Particles" type="Node2D" parent="."]
+position = Vector2(640, 360)
+script = ExtResource("2_particles")
+color = Color(1, 0.768627, 0.2, 0.6)
+velocidad = 30.0
+rotacion_velocidad = 15.0
+tiempo_vida = 5.0
+cantidad_inicial = 40
+radio_origen = 150.0
+radio_destino = 500.0
+
+[node name="ColmenaCentral" type="Node2D" parent="."]
+position = Vector2(640, 200)
+script = ExtResource("3_colmena")
+
+[node name="HexagonoGrande" type="Polygon2D" parent="ColmenaCentral"]
+color = Color(0.95, 0.75, 0.15, 1)
+
+[node name="HexagonoMedio" type="Polygon2D" parent="ColmenaCentral"]
+scale = Vector2(0.7, 0.7)
+color = Color(0.85, 0.6, 0.1, 1)
+
+[node name="HexagonoChico" type="Polygon2D" parent="ColmenaCentral"]
+scale = Vector2(0.4, 0.4)
+color = Color(0.95, 0.75, 0.15, 1)
+
+[node name="Centro" type="Polygon2D" parent="ColmenaCentral"]
+scale = Vector2(0.2, 0.2)
+color = Color(1, 0.42, 0.21, 1)
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Logo" type="Label" parent="CanvasLayer"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -350.0
+offset_top = 60.0
+offset_right = 350.0
+offset_bottom = 140.0
+theme_override_colors/font_color = Color(1, 0.85, 0.2, 1)
+theme_override_font_sizes/font_size = 56
+text = "HiveLearn"
+horizontal_alignment = 1
+
+[node name="Titulo" type="Label" parent="CanvasLayer"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -300.0
+offset_top = 130.0
+offset_right = 300.0
+offset_bottom = 170.0
+theme_override_colors/font_color = Color(0.9, 0.7, 0.3, 1)
+theme_override_font_sizes/font_size = 32
+text = "La Gran Colmena"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="CanvasLayer"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -250.0
+offset_top = 180.0
+offset_right = 250.0
+offset_bottom = 220.0
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 18
+text = "Recupera las chispas del conocimiento"
+horizontal_alignment = 1
+
+[node name="BtnContainer" type="VBoxContainer" parent="CanvasLayer"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -130.0
+offset_top = 80.0
+offset_right = 130.0
+offset_bottom = 300.0
+theme_override_constants/separation = 15
+
+[node name="BtnNuevo" type="Button" parent="CanvasLayer/BtnContainer"]
+custom_minimum_size = Vector2(260, 60)
+theme_override_font_sizes/font_size = 26
+text = "NUEVO JUEGO"
+
+[node name="BtnContinuar" type="Button" parent="CanvasLayer/BtnContainer"]
+custom_minimum_size = Vector2(260, 50)
+theme_override_font_sizes/font_size = 20
+text = "CONTINUAR"
+
+[node name="BtnConfig" type="Button" parent="CanvasLayer/BtnContainer"]
+custom_minimum_size = Vector2(260, 40)
+theme_override_font_sizes/font_size = 16
+text = "CONFIGURACION"
+
+[node name="StatusLabel" type="Label" parent="CanvasLayer"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -200.0
+offset_top = -70.0
+offset_right = 200.0
+offset_bottom = -40.0
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+theme_override_font_sizes/font_size = 14
+text = "Conectando al servidor..."
+horizontal_alignment = 1
+
+[node name="AriaBubble" type="PanelContainer" parent="CanvasLayer"]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 0.85
+anchor_right = 0.5
+anchor_bottom = 0.85
+offset_left = -300.0
+offset_top = -50.0
+offset_right = 300.0
+offset_bottom = 10.0
+
+[node name="Label" type="Label" parent="CanvasLayer/AriaBubble"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "¡Bienvenido! La Gran Colmena te esperaba."
+horizontal_alignment = 1
+
+[node name="ConnectionTimer" type="Timer" parent="."]
+wait_time = 0.5
+
+[connection signal="pressed" from="CanvasLayer/BtnContainer/BtnNuevo" to="." method="_on_btn_nuevo_pressed"]
+[connection signal="pressed" from="CanvasLayer/BtnContainer/BtnContinuar" to="." method="_on_btn_continuar_pressed"]
+[connection signal="pressed" from="CanvasLayer/BtnContainer/BtnConfig" to="." method="_on_btn_config_pressed"]
+[connection signal="timeout" from="ConnectionTimer" to="." method="_on_connection_timer_timeout"]
