@@ -11,14 +11,24 @@ const log = logger.child('skill:gestionar-alumnos')
 
 export interface StudentProfile {
   id?: number
-  alumnoId: string  // UUID único del alumno
+  alumnoId: string
   nombre: string
   nickname: string
+  apodo: string
   avatar: string
   edad: number
   estado?: 'onboarding' | 'activo' | 'inactivo'
   sesionesTotal?: number
   xpAcumulado?: number
+  idioma?: string
+  intereses?: string[]
+  avatarConfigJson?: string | null
+  ritmoAtencion?: string
+  estiloAprendizaje?: string
+  necesidadesEsp?: number
+  accesibilidadJson?: string
+  creadoEn?: string
+  ultimoAcceso?: string
 }
 
 /**
@@ -64,26 +74,35 @@ export async function crearAlumno(perfil: StudentProfile): Promise<{ ok: boolean
  */
 export async function obtenerAlumno(alumnoId: string): Promise<StudentProfile | null> {
   const db = getDb()
-  
+
   try {
     const student = db.query(
       'SELECT * FROM hl_student_profiles WHERE alumno_id = ?'
     ).get(alumnoId) as any
-    
+
     if (!student) {
       return null
     }
-    
+
     return {
-      id: student.id,
       alumnoId: student.alumno_id,
       nombre: student.nombre,
       nickname: student.nickname || student.apodo,
+      apodo: student.apodo || '',
       avatar: student.avatar,
       edad: student.edad,
       estado: student.estado,
       sesionesTotal: student.sesiones_total,
       xpAcumulado: student.xp_acumulado,
+      idioma: student.idioma || 'es',
+      intereses: JSON.parse(student.intereses || '[]'),
+      avatarConfigJson: student.avatar_config_json ?? null,
+      ritmoAtencion: student.ritmo_atencion || 'normal',
+      estiloAprendizaje: student.estilo_aprendizaje || 'mixto',
+      necesidadesEsp: student.necesidades_esp ?? 0,
+      accesibilidadJson: student.accessibility_needs || '{}',
+      creadoEn: student.created_at,
+      ultimoAcceso: student.ultimo_acceso,
     }
   } catch (error) {
     log.error('[gestionar-alumnos] Error al obtener alumno', {
@@ -165,11 +184,18 @@ export async function obtenerOCrearAlumno(alumnoId: string, defaults: Partial<St
     alumnoId,
     nombre: defaults.nombre || 'Estudiante',
     nickname: defaults.nickname || 'Estudiante',
+    apodo: defaults.apodo || defaults.nickname || 'Estudiante',
     avatar: defaults.avatar || 'default',
     edad: defaults.edad || 18,
     estado: 'onboarding',
     sesionesTotal: 0,
     xpAcumulado: 0,
+    idioma: defaults.idioma || 'es',
+    intereses: defaults.intereses || [],
+    ritmoAtencion: defaults.ritmoAtencion || 'normal',
+    estiloAprendizaje: defaults.estiloAprendizaje || 'mixto',
+    necesidadesEsp: defaults.necesidadesEsp ?? 0,
+    accesibilidadJson: defaults.accesibilidadJson || '{}',
   }
   
   await crearAlumno(perfil)
@@ -192,15 +218,24 @@ export async function buscarAlumnoPorNickname(nickname: string): Promise<Student
     }
     
     return {
-      id: student.id,
       alumnoId: student.alumno_id,
       nombre: student.nombre,
       nickname: student.nickname || student.apodo,
+      apodo: student.apodo || '',
       avatar: student.avatar,
       edad: student.edad,
       estado: student.estado,
       sesionesTotal: student.sesiones_total,
       xpAcumulado: student.xp_acumulado,
+      idioma: student.idioma || 'es',
+      intereses: JSON.parse(student.intereses || '[]'),
+      avatarConfigJson: student.avatar_config_json ?? null,
+      ritmoAtencion: student.ritmo_atencion || 'normal',
+      estiloAprendizaje: student.estilo_aprendizaje || 'mixto',
+      necesidadesEsp: student.necesidades_esp ?? 0,
+      accesibilidadJson: student.accessibility_needs || '{}',
+      creadoEn: student.created_at,
+      ultimoAcceso: student.ultimo_acceso,
     }
   } catch (error) {
     log.error('[gestionar-alumnos] Error al buscar alumno por nickname', {

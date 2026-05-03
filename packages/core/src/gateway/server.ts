@@ -796,16 +796,26 @@ export function createServer(): any {
           const body = await req.json() as { nombre: string; nickname: string; edad: number }
           const alumnoId = crypto.randomUUID()
           const avatar = body.edad <= 12 ? '🧒' : body.edad <= 17 ? '🧑' : '👤'
-          const result = await crearAlumno({
-            alumnoId,
-            nombre: body.nombre.trim(),
-            nickname: body.nickname.trim(),
-            avatar,
-            edad: Number(body.edad),
-            estado: 'activo',
-            sesionesTotal: 0,
-            xpAcumulado: 0,
-          })
+        const result = await crearAlumno({
+          alumnoId,
+          nombre: body.nombre.trim(),
+          nickname: body.nickname.trim(),
+          apodo: body.nickname.trim(),
+          avatar,
+          edad: Number(body.edad),
+          estado: 'activo',
+          sesionesTotal: 0,
+          xpAcumulado: 0,
+          idioma: 'es',
+          intereses: [],
+          avatarConfigJson: null,
+          ritmoAtencion: 'normal',
+          estiloAprendizaje: 'mixto',
+          necesidadesEsp: 0,
+          accesibilidadJson: '{}',
+          creadoEn: new Date().toISOString(),
+          ultimoAcceso: new Date().toISOString(),
+        })
           if (!result.ok) throw new Error('No se pudo crear el perfil')
           const perfil = {
             alumnoId,
@@ -837,31 +847,84 @@ export function createServer(): any {
         }
       }
 
-      // POST /api/hivelearn/session — crea sesión + programa inicial al terminar el onboarding
-      if (url.pathname === '/api/hivelearn/session' && req.method === 'POST') {
-        try {
-          const body = await req.json() as { alumnoId: string; sessionId: string; tema: string; objetivo: string }
-          const persistence = new LessonPersistence()
-          persistence.createSessionWithMeta(body.sessionId, body.alumnoId, body.tema, body.objetivo)
-          // Crear programa inicial vacío — el swarm lo irá llenando agente a agente
-          persistence.saveProgram(body.sessionId, body.alumnoId, body.sessionId, '{}', 0)
-          return addCorsHeaders(
-            new Response(JSON.stringify({ ok: true, sessionId: body.sessionId, programa_uuid: body.sessionId }), {
-              status: 201,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-            req
-          )
-        } catch (e) {
-          return addCorsHeaders(
-            new Response(JSON.stringify({ error: (e as Error).message }), {
-              status: 500,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-            req
-          )
-        }
+  // POST /api/hivelearn/session — crea sesión + programa inicial al terminar el onboarding
+  if (url.pathname === '/api/hivelearn/session' && req.method === 'POST') {
+    try {
+      const body = await req.json() as { alumnoId: string; sessionId: string; tema: string; objetivo: string }
+      const persistence = new LessonPersistence()
+      persistence.createSessionWithMeta(body.sessionId, body.alumnoId, body.tema, body.objetivo)
+      // Crear programa inicial vacío — el swarm lo irá llenando agente a agente
+      persistence.saveProgram(body.sessionId, body.alumnoId, body.sessionId, '{}', 0)
+      return addCorsHeaders(
+        new Response(JSON.stringify({ ok: true, sessionId: body.sessionId, programa_uuid: body.sessionId }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        req
+      )
+    } catch (e) {
+      return addCorsHeaders(
+        new Response(JSON.stringify({ error: (e as Error).message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        req
+      )
+    }
+  }
+
+  // PUT /api/hivelearn/sync-progress — persiste progreso del mundo a DB
+  if (url.pathname === '/api/hivelearn/sync-progress' && req.method === 'PUT') {
+    try {
+      const body = await req.json() as {
+        alumnoId: string
+        racha?: number
+        zonaActual?: number
+        modulosCompletados?: string[]
+        beeState?: string
+        dificultadActual?: string
+        xpAcumulado?: number
       }
+      if (!body.alumnoId) {
+        return addCorsHeaders(
+          new Response(JSON.stringify({ error: 'alumnoId requerido' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+          req
+        )
+      }
+      const db = getDb()
+      const sets: string[] = []
+      const values: any[] = []
+      if (body.racha !== undefined) { sets.push('racha_actual = ?'); values.push(body.racha) }
+      if (body.zonaActual !== undefined) { sets.push('zona_actual = ?'); values.push(body.zonaActual) }
+      if (body.modulosCompletados !== undefined) { sets.push('modulos_completados_json = ?'); values.push(JSON.stringify(body.modulosCompletados)) }
+      if (body.beeState !== undefined) { sets.push('bee_state = ?'); values.push(body.beeState) }
+      if (body.dificultadActual !== undefined) { sets.push('dificultad_actual = ?'); values.push(body.dificultadActual) }
+      if (body.xpAcumulado !== undefined) { sets.push('xp_acumulado = ?'); values.push(body.xpAcumulado) }
+      if (sets.length > 0) {
+        sets.push("updated_at = CURRENT_TIMESTAMP")
+        values.push(body.alumnoId)
+        db.query(`UPDATE hl_student_profiles SET ${sets.join(', ')} WHERE alumno_id = ?`).run(...values)
+      }
+      return addCorsHeaders(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        req
+      )
+    } catch (e) {
+      return addCorsHeaders(
+        new Response(JSON.stringify({ error: (e as Error).message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        req
+      )
+    }
+  }
 
       // GET /api/hivelearn/student-profile/search?q=<nombre_o_nick>
       if (url.pathname === '/api/hivelearn/student-profile/search' && req.method === 'GET') {

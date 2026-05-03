@@ -132,6 +132,11 @@ export interface MundoResultado {
   datos: {
     calificacion: 'correcto' | 'incorrecto' | 'parcial'
     xp: number
+    xpMultiplicadores?: {
+      racha: number
+      velocidad: number
+      esfuerzo: number
+    }
     feedback: string
     razonamiento?: string
     pista?: string
@@ -262,12 +267,13 @@ export interface MundoA2UIMessage extends A2UIMessage {
  * Mensaje del cliente (alumno/mundo) al servidor (agentes)
  */
 export interface ClientMessage {
-  tipo: 'iniciar_sesion' | 'responder' | 'accion' | 'pausar' | 'reanudar' | 'error'
+  tipo: 'iniciar_sesion' | 'responder' | 'accion' | 'pausar' | 'reanudar' | 'pedir_pista' | 'error'
   session_id: string
   alumno_id: string
   payload: {
     mundo_evento?: MundoEvento
     a2ui_action?: A2UIAction
+    modulo_uuid?: string
     [key: string]: any
   }
   timestamp: string
@@ -292,39 +298,31 @@ export interface ServerMessage {
 // ─── Configuración del mundo ─────────────────────────────────────────────────
 
 export interface MundoConfig {
-  /** Dimensiones del mundo en tiles (1 tile = 32px) */
   tilesAncho: number
   tilesAlto: number
-  
-  /** Zona inicial (bienvenida) */
   zonaInicio: number
-  
-  /** Zona final (evaluación) */
   zonaFinal: number
-  
-  /** Colores de la paleta pixel art */
   colores: {
     fondo: number
     suelo: number
-    plataforma: number
+    agua: number
     bloqueo: number
     desbloqueado: number
     completado: number
     acento: number
   }
-  
-  /** Configuración del jugador */
   jugador: {
     velocidad: number
-    salto: number
-    gravedad: number
+    velocidadCorrer: number
   }
-  
-  /** Configuración de la cámara */
   camara: {
     suavizado: number
-    limiteIzquierdo: number
-    limiteDerecho: number
+    zoomMinimo: number
+    zoomMaximo: number
+  }
+  isoProyeccion: {
+    tileAncho: number
+    tileAlto: number
   }
 }
 
@@ -364,8 +362,8 @@ export interface MundoEstado {
   jugadorPosicion: {
     x: number
     y: number
-    direccion: 'izquierda' | 'derecha'
-    animacion: 'idle' | 'caminar' | 'saltar' | 'correr'
+    direccion: 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'
+    animacion: 'idle' | 'caminar' | 'correr' | 'interactuando' | 'celebrando'
   }
   
   /** Estado de la cámara */

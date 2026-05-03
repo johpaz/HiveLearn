@@ -19,6 +19,7 @@ import type {
   PortalState,
   PortalPhase,
   RioMundoState as State,
+  XpMultiplicadores,
 } from '../canvaslearn/rio/types'
 import { RIO_NIVELES, DEFAULT_AVATAR, ISO_CONFIG } from '../canvaslearn/rio/types'
 
@@ -78,7 +79,7 @@ const initialSwarmProgress: SwarmProgressWorld = {
   currentAgentId: null,
   currentAgentName: null,
   completedAgents: [],
-  totalAgents: 15,
+  totalAgents: 19,
   percentComplete: 0,
   lastCompletedZone: null,
 }
@@ -96,7 +97,7 @@ const initialState: State = {
   tema: null,
   meta: '',
 
-  loginPhase: 'nickname_input',
+  loginPhase: 'title_screen',
 
   onboarding: { ...initialOnboarding },
 
@@ -118,10 +119,12 @@ const initialState: State = {
   xpSesion: 0,
   nivelActual: 1,
   progresoNivel: 0,
+  xpMultiplicadores: { racha: 1, velocidad: 1, esfuerzo: 1 },
 
   vidas: 3,
   racha: 0,
   mejorRacha: 0,
+  hintCount: 0,
 
   logros: [],
   coleccionables: [],
@@ -146,7 +149,7 @@ const initialState: State = {
     status: 'idle' as CoordinatorState['status'],
     currentWorker: null,
     activeWorkers: [],
-    totalWorkers: 15,
+    totalWorkers: 19,
   },
 
   xpFloat: null,
@@ -218,6 +221,7 @@ export interface RioMundoStore extends State {
   perderVida: () => void
   incrementarRacha: () => void
   resetRacha: () => void
+  incrementarHint: () => void
 
   // ─── Achievements ─────────────────────────────────────────────────────────────
   desbloquearLogro: (logro: MundoLogro['datos']) => void
@@ -361,12 +365,14 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
   // ─── XP & Level ────────────────────────────────────────────────────────────────
 
   agregarXP: (xp, isoX, isoY) => set((s) => {
-    const nuevoXP = s.xpTotal + xp
+    const { racha, velocidad, esfuerzo } = s.xpMultiplicadores
+    const xpFinal = Math.round(xp * racha * velocidad * esfuerzo)
+    const nuevoXP = s.xpTotal + xpFinal
     const nuevoNivel = obtenerNivel(nuevoXP)
     const subioDeNivel = nuevoNivel.nivel > s.nivelActual
     const newState: Partial<State> = {
       xpTotal: nuevoXP,
-      xpSesion: s.xpSesion + xp,
+      xpSesion: s.xpSesion + xpFinal,
       nivelActual: nuevoNivel.nivel,
       progresoNivel: calcularProgresoNivel(nuevoXP, nuevoNivel.nivel),
       nivelUpActivo: subioDeNivel ? true : s.nivelUpActivo,
@@ -397,6 +403,7 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
     mejorRacha: Math.max(s.mejorRacha, s.racha + 1),
   })),
   resetRacha: () => set({ racha: 0 }),
+  incrementarHint: () => set((s) => ({ hintCount: s.hintCount + 1 })),
 
   // ─── Achievements ─────────────────────────────────────────────────────────────
 
@@ -532,11 +539,13 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
     vidas: state.vidas,
     racha: state.racha,
     mejorRacha: state.mejorRacha,
+    hintCount: state.hintCount,
     logros: state.logros,
     coleccionables: state.coleccionables,
     modulosCompletados: state.modulosCompletados,
     tributaries: state.tributaries,
     zonaActual: state.zonaActual,
+    beeState: state.beeState,
     portal: state.portal,
     selectedProviderId: state.selectedProviderId,
     selectedModelId: state.selectedModelId,

@@ -4,7 +4,7 @@
  * Es idempotente: todos los DDL usan IF NOT EXISTS.
  */
 import type { Database } from 'bun:sqlite'
-import { HIVELEARN_SCHEMA_V1, HIVELEARN_SCHEMA_V2, HIVELEARN_SCHEMA_V3, HIVELEARN_SCHEMA_V4, HIVELEARN_SCHEMA_V5, HIVELEARN_SCHEMA_V6 } from './hivelearn-schema'
+import { HIVELEARN_SCHEMA_V1, HIVELEARN_SCHEMA_V2, HIVELEARN_SCHEMA_V3, HIVELEARN_SCHEMA_V4, HIVELEARN_SCHEMA_V5, HIVELEARN_SCHEMA_V6, HIVELEARN_SCHEMA_V7 } from './hivelearn-schema'
 import { registerHiveLearnAgents } from '../agent/registry'
 import { seedIfEmpty } from './seed'
 
@@ -143,6 +143,34 @@ export function initHiveLearnStorage(db: Database): void {
   ensureColumn(db, 'hl_student_profiles', 'intervalo_custom', 'INTEGER DEFAULT NULL')
   ensureColumn(db, 'hl_student_profiles', 'umbral_custom', 'INTEGER DEFAULT NULL')
 
+  // V7: hl_node_effectiveness + hl_achievements
+  try {
+    db.exec(HIVELEARN_SCHEMA_V7)
+  } catch (e) {
+    const msg = (e as Error).message ?? ''
+    if (!msg.includes('already exists')) throw e
+  }
+
+  // V7 columnas: hl_sessions.status (5 estados reemplazan binario completada)
+  ensureColumn(db, 'hl_sessions', 'status', "TEXT DEFAULT 'active' CHECK(status IN ('active','paused','completed','abandoned','error'))")
+
+  // V7 columnas: hl_student_profiles ampliados
+  ensureColumn(db, 'hl_student_profiles', 'idioma', "TEXT DEFAULT 'es'")
+  ensureColumn(db, 'hl_student_profiles', 'intereses', "TEXT DEFAULT '[]'")
+  ensureColumn(db, 'hl_student_profiles', 'avatar_config_json', 'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_student_profiles', 'accessibility_needs', "TEXT DEFAULT '{}'")
+
+  // V7 columnas: progreso del mundo persistido en DB
+  ensureColumn(db, 'hl_student_profiles', 'racha_actual', 'INTEGER DEFAULT 0')
+  ensureColumn(db, 'hl_student_profiles', 'zona_actual', 'INTEGER DEFAULT 1')
+  ensureColumn(db, 'hl_student_profiles', 'modulos_completados_json', "TEXT DEFAULT '[]'")
+  ensureColumn(db, 'hl_student_profiles', 'bee_state', "TEXT DEFAULT 'following'")
+  ensureColumn(db, 'hl_student_profiles', 'dificultad_actual', "TEXT DEFAULT 'adaptativa'")
+
+  // V7 columnas: contexto/metadatos en hl_lesson_interactions
+  ensureColumn(db, 'hl_lesson_interactions', 'context_json', 'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_lesson_interactions', 'metadata_json', 'TEXT DEFAULT NULL')
+
   registerHiveLearnAgents(db)
-  seedIfEmpty()  // Seed solo si la BD está vacía
+  seedIfEmpty() // Seed solo si la BD está vacía
 }

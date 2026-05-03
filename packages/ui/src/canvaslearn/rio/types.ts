@@ -1,4 +1,4 @@
-import type { StudentProfile, LessonProgram, SwarmProgress, AgentStatus, CoordinatorState } from '@hivelearn/core'
+import type { StudentProfile, LessonProgram, SwarmProgress, AgentStatus, CoordinatorState, A2UIMessage } from '@hivelearn/core'
 import type { MundoLogro } from '@hivelearn/core'
 
 // ─── Tile Types ──────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ export interface AvatarState {
 
 // ─── Bee Coordinator ─────────────────────────────────────────────────────────
 
-export type BeeState = 'idle' | 'following' | 'guiding' | 'pointing' | 'celebrating' | 'talking' | 'flying_ahead'
+export type BeeState = 'idle' | 'following' | 'guiding' | 'pointing' | 'celebrating' | 'talking' | 'flying_ahead' | 'onboarding_interview' | 'program_generation' | 'evaluating' | 'hint_giving'
 
 export interface BeePosition {
   x: number
@@ -120,7 +120,7 @@ export interface IsoCameraState {
 
 // ─── Login State ─────────────────────────────────────────────────────────────
 
-export type LoginPhase = 'nickname_input' | 'loading' | 'restoring_session' | 'new_profile' | 'avatar_select' | 'entering_world' | 'in_world' | 'onboarding_chat'
+export type LoginPhase = 'title_screen' | 'nickname_input' | 'loading' | 'restoring_session' | 'new_profile' | 'avatar_select' | 'entering_world' | 'in_world' | 'onboarding_chat'
 
 export interface LoginState {
   phase: LoginPhase
@@ -204,11 +204,13 @@ export interface RioMundoState {
   xpSesion: number
   nivelActual: number
   progresoNivel: number
+  xpMultiplicadores: XpMultiplicadores
 
   // ─── Lives & Streak ──────────────────────────────────────────────────────────
   vidas: number
   racha: number
   mejorRacha: number
+  hintCount: number
 
   // ─── Achievements ────────────────────────────────────────────────────────────
   logros: MundoLogro['datos'][]
@@ -241,6 +243,14 @@ export interface RioMundoState {
   tiempoSesion: number
 }
 
+// ─── XP Multipliers ─────────────────────────────────────────────────────────
+
+export interface XpMultiplicadores {
+  racha: number
+  velocidad: number
+  esfuerzo: number
+}
+
 // ─── Portal Interaction State ──────────────────────────────────────────────────
 
 export type PortalPhase = 'closed' | 'entering' | 'open' | 'exiting'
@@ -250,7 +260,7 @@ export interface PortalState {
   zonaNumero: number | null
   moduloUuid: string | null
   zoomTarget: number
-  a2uiMessages: any[]
+  a2uiMessages: A2UIMessage[]
 }
 
 // ─── Level Configuration ─────────────────────────────────────────────────────

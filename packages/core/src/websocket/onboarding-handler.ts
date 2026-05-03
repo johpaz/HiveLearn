@@ -195,18 +195,26 @@ export async function handleOnboardingUserMessage(
       const rangoEdad = edad <= 12 ? 'nino' : edad <= 17 ? 'adolescente' : 'adulto'
       const avatarEmoji = edad <= 12 ? '🧒' : edad <= 17 ? '🧑' : '👤'
 
-      persistence.saveStudentProfile({
-        alumnoId,
-        nombre,
-        nickname,
-        avatar: avatarEmoji,
-        edad,
-        estado: 'activo',
-        sesionesTotal: 0,
-        xpAcumulado: 0,
-        creadoEn: new Date().toISOString(),
-        ultimoAcceso: new Date().toISOString(),
-      })
+  persistence.saveStudentProfile({
+    alumnoId,
+    nombre,
+    nickname,
+    apodo: nickname,
+    avatar: avatarEmoji,
+    edad,
+    estado: 'activo',
+    sesionesTotal: 0,
+    xpAcumulado: 0,
+    idioma: 'es',
+    intereses: [],
+    avatarConfigJson: null,
+    ritmoAtencion: 'normal',
+    estiloAprendizaje: 'mixto',
+    necesidadesEsp: 0,
+    accesibilidadJson: '{}',
+    creadoEn: new Date().toISOString(),
+    ultimoAcceso: new Date().toISOString(),
+  })
 
       log.info('[onboarding] Student profile saved', { alumnoId, nombre, nickname, edad })
 

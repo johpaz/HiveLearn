@@ -79,6 +79,14 @@ export class RioCamera {
     return this.zoom
   }
 
+  screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
+    const screenCenterX = this.app.screen.width / 2
+    const screenCenterY = this.app.screen.height / 2
+    const worldX = (screenX - screenCenterX) / this.zoom + this.x
+    const worldY = (screenY - screenCenterY) / this.zoom + this.y
+    return { x: worldX, y: worldY }
+  }
+
   destroy() {
     this.app.stage.removeChild(this.worldContainer)
     this.worldContainer.destroy()

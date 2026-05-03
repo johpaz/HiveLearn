@@ -6,10 +6,15 @@ import { generateRioMundo, activateTributary } from './world/RiverGenerator'
 import { RioCamera } from './camera/RioCamera'
 import { RioPlayer } from './player/RioPlayer'
 import { RioBee } from './bee/RioBee'
+import { RioSwarmBees } from './bee/RioSwarmBees'
 import { RioDialog } from './dialog/RioDialog'
 import { RioWaterSystem } from './effects/WaterSystem'
+import { RioEntryAnimation } from './effects/EntryAnimation'
 import { RioHUD } from './overlays/RioHUD'
+import { RioTutorialHints } from './overlays/RioTutorialHints'
 import { RioLogin } from './overlays/RioLogin'
+import { RioTitleScene } from './scenes/RioTitleScene'
+import { RioLoadingScene } from './scenes/RioLoadingScene'
 import { RioOnboardingChat } from './onboarding/RioOnboardingChat'
 import { RioOnboardingController } from './onboarding/RioOnboardingController'
 import { RioA2UIBridge } from './protocol/RioA2UIBridge'
@@ -66,13 +71,21 @@ export function RioMundo() {
   const cameraRef = useRef<RioCamera | null>(null)
   const playerRef = useRef<RioPlayer | null>(null)
   const beeRef = useRef<RioBee | null>(null)
+  const swarmBeesRef = useRef<RioSwarmBees | null>(null)
   const dialogRef = useRef<RioDialog | null>(null)
   const waterRef = useRef<RioWaterSystem | null>(null)
+  const entryAnimRef = useRef<RioEntryAnimation | null>(null)
   const onboardingRef = useRef(new RioOnboardingController())
   const mapRef = useRef<IsoMap | null>(null)
   const keysRef = useRef<Set<string>>(new Set())
+  const titleSceneRef = useRef<RioTitleScene | null>(null)
+  const loadingSceneRef = useRef<RioLoadingScene | null>(null)
+  const mouseTargetRef = useRef<{ x: number; y: number } | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showTitle, setShowTitle] = useState(true)
+  const [showLogin, setShowLogin] = useState(false)
+  const [showLoading, setShowLoading] = useState(false)
   const { speak: beeSpeak } = useTTSSpeak()
 
   const {
@@ -100,7 +113,7 @@ export function RioMundo() {
     app.init({
       width: window.innerWidth,
       height: window.innerHeight,
-      backgroundColor: 0x1a3c2a,
+      backgroundColor: 0x0a0e27,
       antialias: false,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
@@ -108,51 +121,27 @@ export function RioMundo() {
       if (!containerRef.current) return
       containerRef.current.appendChild(app.canvas as HTMLCanvasElement)
 
-      const renderer = new IsometricRenderer(app)
-      rendererRef.current = renderer
       appRef.current = app
 
-      const world = generateRioMundo(5, 42)
-      mapRef.current = world
-      renderer.setMap(world)
-      setMapa(world)
-
-      const spawnScreen = renderer.isoToScreen(world.spawn.x, world.spawn.y)
-      const camera = new RioCamera(app, {
-        x: spawnScreen.x,
-        y: spawnScreen.y,
-        zoom: 1,
-        smoothing: ISO_CONFIG.CAMERA_SMOOTHING,
-        bounds: { minX: -3000, minY: -2000, maxX: 3000, maxY: 2000 },
+      const titleScene = new RioTitleScene(app)
+      titleSceneRef.current = titleScene
+      titleScene.setOnEnter(() => {
+        titleScene.destroy()
+        titleSceneRef.current = null
+        setShowTitle(false)
+        setShowLogin(true)
+        useRioMundoStore.getState().setLoginPhase('nickname_input')
       })
-      cameraRef.current = camera
-
-      // Re-parent renderer containers into camera world container
-      const worldContainer = camera.getContainer()
-      worldContainer.addChild(renderer.getMapContainer())
-      worldContainer.addChild(renderer.getEntityContainer())
-      worldContainer.addChild(renderer.getOverlayContainer())
-
-      const player = new RioPlayer(app, renderer, camera)
-      playerRef.current = player
-
-      const bee = new RioBee(app, renderer, camera)
-      beeRef.current = bee
-
-      const dialog = new RioDialog(app, renderer)
-      dialogRef.current = dialog
-
-      const water = new RioWaterSystem(app, renderer)
-      water.setMap(world)
-      waterRef.current = water
-
-      useRioMundoStore.getState().setJugadorPosicion(world.spawn.x, world.spawn.y)
 
       setIsReady(true)
     })
 
     return () => {
-      waterRef.current?.destroy()
+    loadingSceneRef.current?.destroy()
+    titleSceneRef.current?.destroy()
+    swarmBeesRef.current?.destroy()
+    entryAnimRef.current?.destroy()
+    waterRef.current?.destroy()
       dialogRef.current?.destroy()
       beeRef.current?.destroy()
       playerRef.current?.destroy()
@@ -187,6 +176,127 @@ export function RioMundo() {
     }
   }, [])
 
+  // ─── Initialize world (deferred until after login) ──────────────────────────
+
+  const initWorld = useCallback(() => {
+    const app = appRef.current
+    if (!app || rendererRef.current) return
+
+    const loadingScene = new RioLoadingScene(app)
+    loadingSceneRef.current = loadingScene
+    setShowLoading(true)
+
+    loadingScene.setProgress(0.1)
+
+    setTimeout(() => {
+      if (!appRef.current) return
+
+      const renderer = new IsometricRenderer(app)
+      rendererRef.current = renderer
+      loadingScene.setProgress(0.3)
+
+      const world = generateRioMundo(5, 42)
+      mapRef.current = world
+      renderer.setMap(world)
+      setMapa(world)
+      loadingScene.setProgress(0.5)
+
+      const spawnScreen = renderer.isoToScreen(world.spawn.x, world.spawn.y)
+      const camera = new RioCamera(app, {
+        x: spawnScreen.x,
+        y: spawnScreen.y,
+        zoom: 1,
+        smoothing: ISO_CONFIG.CAMERA_SMOOTHING,
+        bounds: { minX: -3000, minY: -2000, maxX: 3000, maxY: 2000 },
+      })
+      cameraRef.current = camera
+
+      const worldContainer = camera.getContainer()
+      worldContainer.addChild(renderer.getMapContainer())
+      worldContainer.addChild(renderer.getEntityContainer())
+      worldContainer.addChild(renderer.getOverlayContainer())
+
+      loadingScene.setProgress(0.7)
+
+      const player = new RioPlayer(app, renderer, camera)
+      playerRef.current = player
+
+      const bee = new RioBee(app, renderer, camera)
+      beeRef.current = bee
+
+      const dialog = new RioDialog(app, renderer)
+      dialogRef.current = dialog
+
+    const water = new RioWaterSystem(app, renderer)
+    water.setMap(world)
+    waterRef.current = water
+
+    const swarmBees = new RioSwarmBees(app, renderer, camera)
+    swarmBees.initialize(world.tributaries)
+    swarmBeesRef.current = swarmBees
+
+    // Wire existing agent statuses from store
+    const existingStatuses = useRioMundoStore.getState().agentStatuses
+    for (const [agentId, status] of Object.entries(existingStatuses)) {
+      swarmBees.updateAgentStatus(agentId, status)
+    }
+
+      useRioMundoStore.getState().setJugadorPosicion(world.spawn.x, world.spawn.y)
+
+      loadingScene.setProgress(1.0)
+
+      loadingScene.setOnComplete(() => {
+        loadingScene.destroy()
+        loadingSceneRef.current = null
+        setShowLoading(false)
+      })
+    }, 100)
+  }, [setMapa])
+
+  // ─── Mouse click-to-move ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isReady) return
+
+    const handleClick = (e: MouseEvent) => {
+      const state = useRioMundoStore.getState()
+      if (state.loginPhase !== 'in_world' && state.loginPhase !== 'entering_world') return
+      if (!rendererRef.current || !cameraRef.current) return
+
+      const canvasRect = appRef.current?.canvas?.getBoundingClientRect()
+      if (!canvasRect) return
+
+      const screenX = e.clientX - canvasRect.left
+      const screenY = e.clientY - canvasRect.top
+
+      const camera = cameraRef.current
+      const worldPos = camera.screenToWorld(screenX, screenY)
+
+      if (rendererRef.current) {
+        const isoPos = rendererRef.current.screenToIso(worldPos.x, worldPos.y)
+        if (mapRef.current) {
+          const tileX = Math.round(isoPos.x)
+          const tileY = Math.round(isoPos.y)
+          const tile = mapRef.current.tiles[tileY]?.[tileX]
+          if (tile && tile.walkable) {
+            mouseTargetRef.current = { x: tileX, y: tileY }
+          }
+        }
+      }
+    }
+
+    const canvas = appRef.current?.canvas
+    if (canvas) {
+      canvas.addEventListener('click', handleClick)
+    }
+
+    return () => {
+      if (canvas) {
+        canvas.removeEventListener('click', handleClick)
+      }
+    }
+  }, [isReady])
+
   // ─── Game loop ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -207,20 +317,34 @@ export function RioMundo() {
         return
       }
 
-      // Update player movement
-      if (playerRef.current && mapRef.current) {
-        let dx = 0
-        let dy = 0
+        // Update player movement
+        if (playerRef.current && mapRef.current) {
+          let dx = 0
+          let dy = 0
 
-        // Don't move if chatting
-        if (state.loginPhase === 'in_world' || state.loginPhase === 'entering_world') {
-          if (keys.has('w') || keys.has('arrowup')) dy -= 1
-          if (keys.has('s') || keys.has('arrowdown')) dy += 1
-          if (keys.has('a') || keys.has('arrowleft')) dx -= 1
-          if (keys.has('d') || keys.has('arrowright')) dx += 1
-        }
+          if (state.loginPhase === 'in_world' || state.loginPhase === 'entering_world') {
+            if (keys.has('w') || keys.has('arrowup')) dy -= 1
+            if (keys.has('s') || keys.has('arrowdown')) dy += 1
+            if (keys.has('a') || keys.has('arrowleft')) dx -= 1
+            if (keys.has('d') || keys.has('arrowright')) dx += 1
 
-        if (dx !== 0 || dy !== 0) {
+            const mouseTarget = mouseTargetRef.current
+            if (mouseTarget && dx === 0 && dy === 0) {
+              const diffX = mouseTarget.x - state.jugador.x
+              const diffY = mouseTarget.y - state.jugador.y
+              const dist = Math.sqrt(diffX * diffX + diffY * diffY)
+              if (dist > 0.15) {
+                dx = diffX / dist
+                dy = diffY / dist
+              } else {
+                mouseTargetRef.current = null
+              }
+            } else if (dx !== 0 || dy !== 0) {
+              mouseTargetRef.current = null
+            }
+          }
+
+          if (dx !== 0 || dy !== 0) {
           const speed = state.jugador.animation === 'correr' ? ISO_CONFIG.PLAYER_RUN_SPEED : ISO_CONFIG.PLAYER_SPEED
           const newX = state.jugador.x + dx * speed * dt
           const newY = state.jugador.y + dy * speed * dt
@@ -264,10 +388,20 @@ export function RioMundo() {
         beeRef.current.update(state.jugador, state.beeState, dt, time)
       }
 
-      // Update water
-      if (waterRef.current) {
-        waterRef.current.update(dt, time)
-      }
+    // Update water
+    if (waterRef.current) {
+      waterRef.current.update(dt, time)
+    }
+
+    // Update swarm bees
+    if (swarmBeesRef.current) {
+      swarmBeesRef.current.update(time)
+    }
+
+    // Update entry animation
+    if (entryAnimRef.current) {
+      entryAnimRef.current.update(time)
+    }
 
       // Update dialog bubbles
       if (dialogRef.current) {
@@ -306,15 +440,43 @@ export function RioMundo() {
 
   useEffect(() => {
     if (loginPhase === 'entering_world' && isReady) {
-      setTimeout(() => {
-        useRioMundoStore.getState().setLoginPhase('onboarding_chat')
-        setShowOnboarding(true)
-        onboardingRef.current.setDialogRef(dialogRef.current)
-        onboardingRef.current.setSpeakFunction(beeSpeak)
-        onboardingRef.current.start()
-      }, 1500)
+      if (!rendererRef.current) {
+        initWorld()
+      }
+
+  const waitForWorld = () => {
+      if (rendererRef.current && playerRef.current) {
+        // Start entry animation
+        const spawn = mapRef.current?.spawn || { x: 20, y: 37 }
+        const entryAnim = new RioEntryAnimation(
+          appRef.current!,
+          rendererRef.current,
+          cameraRef.current!,
+          spawn.x,
+          spawn.y,
+        )
+        entryAnimRef.current = entryAnim
+        entryAnim.start(waterRef.current || undefined, playerRef.current || undefined, beeRef.current || undefined)
+
+        entryAnim.setOnComplete(() => {
+          entryAnim.destroy()
+          entryAnimRef.current = null
+        })
+
+        setTimeout(() => {
+          useRioMundoStore.getState().setLoginPhase('onboarding_chat')
+          setShowOnboarding(true)
+          onboardingRef.current.setDialogRef(dialogRef.current)
+          onboardingRef.current.setSpeakFunction(beeSpeak)
+          onboardingRef.current.start()
+        }, 1500)
+      } else {
+        setTimeout(waitForWorld, 100)
+      }
     }
-  }, [loginPhase, isReady])
+      waitForWorld()
+    }
+  }, [loginPhase, isReady, initWorld])
 
   // ─── Handle onboarding complete ──────────────────────────────────────────────
 
@@ -468,6 +630,17 @@ export function RioMundo() {
 
   // ─── Camera zoom for portal ──────────────────────────────────────────────────
 
+  // ─── Sync agentStatuses → swarm bees ────────────────────────────────────────
+
+  const agentStatuses = useRioMundoStore(s => s.agentStatuses)
+
+  useEffect(() => {
+    if (!swarmBeesRef.current) return
+    for (const [agentId, status] of Object.entries(agentStatuses)) {
+      swarmBeesRef.current.updateAgentStatus(agentId, status)
+    }
+  }, [agentStatuses])
+
   useEffect(() => {
     if (!isReady) return
     const store = useRioMundoStore.getState()
@@ -487,6 +660,9 @@ export function RioMundo() {
       {/* HUD overlay */}
       {mundoListo && loginPhase === 'in_world' && <RioHUD />}
 
+      {/* Tutorial hints for first-time interactions */}
+      {loginPhase === 'in_world' && <RioTutorialHints />}
+
       {/* Portal proximity indicator */}
       <PortalProximityIndicator />
 
@@ -498,8 +674,8 @@ export function RioMundo() {
         />
       )}
 
-      {/* Login overlay */}
-      {(loginPhase === 'nickname_input' || loginPhase === 'avatar_select' || loginPhase === 'loading' || loginPhase === 'restoring_session') && (
+      {/* Login overlay (title screen is now PixiJS-native) */}
+      {showLogin && (loginPhase === 'nickname_input' || loginPhase === 'avatar_select' || loginPhase === 'loading' || loginPhase === 'restoring_session') && (
         <RioLogin />
       )}
 

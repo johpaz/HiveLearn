@@ -228,27 +228,59 @@ export const HIVELEARN_SCHEMA_V6 = `
 -- HiveLearn Schema v6
 -- hl_curricula: currículos generados por sesión (referenciado por hl_sessions y hl_session_metrics)
 CREATE TABLE IF NOT EXISTS hl_curricula (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id  TEXT    NOT NULL,
-  topic_slug  TEXT    DEFAULT NULL,
-  meta_alumno TEXT    NOT NULL DEFAULT '',
-  nodos_json  TEXT    NOT NULL DEFAULT '[]',
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  topic_slug TEXT DEFAULT NULL,
+  meta_alumno TEXT NOT NULL DEFAULT '',
+  nodos_json TEXT NOT NULL DEFAULT '[]',
   total_nodos INTEGER DEFAULT 0,
-  rango_edad  TEXT    DEFAULT NULL,
-  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+  rango_edad TEXT DEFAULT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_hcurricula_session ON hl_curricula(session_id);
 
 -- hl_monitor_frames: trazabilidad del monitor de atención por sesión
 CREATE TABLE IF NOT EXISTS hl_monitor_frames (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id    TEXT    NOT NULL,
-  frame_id      TEXT    NOT NULL,
-  estado        TEXT    NOT NULL,
-  nivel         TEXT    NOT NULL DEFAULT 'info',
-  accion        TEXT    NOT NULL DEFAULT 'ninguna',
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  frame_id TEXT NOT NULL,
+  estado TEXT NOT NULL,
+  nivel TEXT NOT NULL DEFAULT 'info',
+  accion TEXT NOT NULL DEFAULT 'ninguna',
   segundos_dist INTEGER DEFAULT 0,
-  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_hmf_session ON hl_monitor_frames(session_id);
+`;
+
+/** Schema v7 — hl_node_effectiveness (tabla fantasma referenciada por LessonPersistence) + hl_achievements */
+export const HIVELEARN_SCHEMA_V7 = `
+-- HiveLearn Schema v7
+-- hl_node_effectiveness: efectividad por tipo de nodo/agente (requerida por LessonPersistence)
+CREATE TABLE IF NOT EXISTS hl_node_effectiveness (
+  id TEXT PRIMARY KEY,
+  nodo_content_hash TEXT NOT NULL DEFAULT '',
+  agente_tipo TEXT NOT NULL DEFAULT '',
+  tema TEXT NOT NULL DEFAULT '',
+  tipo_pedagogico TEXT NOT NULL DEFAULT '',
+  tipo_visual TEXT NOT NULL DEFAULT '',
+  rango_edad TEXT NOT NULL DEFAULT '',
+  intentos_promedio REAL NOT NULL DEFAULT 1,
+  tasa_abandono REAL NOT NULL DEFAULT 0,
+  tiempo_promedio REAL NOT NULL DEFAULT 0,
+  veces_visto INTEGER NOT NULL DEFAULT 0,
+  veces_completado INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hne_tema ON hl_node_effectiveness(tema);
+
+-- hl_achievements: logros desbloqueados por alumno
+CREATE TABLE IF NOT EXISTS hl_achievements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  alumno_id TEXT NOT NULL,
+  achievement_key TEXT NOT NULL,
+  unlocked_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(alumno_id, achievement_key)
+);
+CREATE INDEX IF NOT EXISTS idx_ha_alumno ON hl_achievements(alumno_id);
 `;
