@@ -72,11 +72,7 @@ Landing (/) → Nueva Sesion (/nueva-sesion) → Rio (/rio)
   5. **Respuestas**: el overlay A2UI envia respuestas via `RioA2UIBridge` → WS → servidor
   6. **Progreso del swarm**: los tributarios se activan (agua fluye) conforme los agentes completan modulos via WS
 
-### Rutas eliminadas
-- `/onboarding` — eliminada. Onboarding ahora es interno al rio via la abeja.
-- `/hivelearn-swarm` — eliminada. El swarm ahora se visualiza en el mundo rio.
-- `/lesson`, `/mundo`, `/evaluation`, `/result` — sin ruta activa. El contenido pasa por A2UI dentro del portal overlay del rio.
-
+#
 ### Store unificado
 - `rioMundoStore.ts` (Zustand + persist) maneja TODO el estado: login, onboarding, mapa, jugador, camara, XP, vidas, tributarios, portales, WS, A2UI.
 - `lessonStore.ts` y `mundoStore.ts` existen pero son legado. No agregar funcionalidad nueva ahi.

@@ -143,13 +143,9 @@ export async function runSwarmGeneration(
     }
   }
 
-  // Crear programa de formación con la estructura completa al terminar todos los agentes
-  try {
-    persistence.saveProgram(swarmId, perfil.alumnoId, swarmId, capturedStructureJson, capturedTotalZonas)
-    log.info('[swarm-gen] Program saved', { swarmId })
-  } catch (e) {
-    log.warn('[swarm-gen] Could not save program', { swarmId, error: (e as Error).message })
-  }
+  // Actualizar programa con la estructura final — fue creado en POST /session con schema vacío
+  persistence.updateProgramSchema(swarmId, capturedStructureJson, capturedTotalZonas)
+  log.info('[swarm-gen] Program schema updated', { swarmId, zonas: capturedTotalZonas })
 
   hlSwarmEmitter.emit('swarm:completed', {
     swarmId,

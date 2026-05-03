@@ -72,8 +72,27 @@ export function initHiveLearnStorage(db: Database): void {
   // Columnas tema/objetivo pueden faltar en tablas creadas antes de la V1 actual
   ensureColumn(db, 'hl_sessions', 'tema', 'TEXT DEFAULT NULL')
   ensureColumn(db, 'hl_sessions', 'objetivo', "TEXT NOT NULL DEFAULT ''")
-  // Casillas de cada agente: JSON acumulativo que se construye durante el swarm
-  ensureColumn(db, 'hl_sessions', 'agentes_json', "TEXT NOT NULL DEFAULT '{}'")
+  // Casilla individual por agente (una columna por cada worker del swarm)
+  ensureColumn(db, 'hl_sessions', 'agente_profile',          'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_intent',           'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_structure',        'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_explanation',      'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_exercise',         'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_quiz',             'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_challenge',        'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_code',             'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_svg',              'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_gif',              'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_infographic',      'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_image',            'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_audio',            'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_gamification',     'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_evaluation',       'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_feedback',         'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_monitor',          'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'agente_vision_pedagogica','TEXT DEFAULT NULL')
+  // Conclusiones del coordinador: síntesis final para crear el programa de formación
+  ensureColumn(db, 'hl_sessions', 'coordinador_conclusiones','TEXT DEFAULT NULL')
 
   // hl_topics: tabla referenciada por hl_programs.topic_slug — stub para satisfacer la FK
   db.exec('CREATE TABLE IF NOT EXISTS hl_topics (slug TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT \'\')')

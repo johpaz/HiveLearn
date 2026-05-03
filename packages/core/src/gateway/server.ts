@@ -837,14 +837,16 @@ export function createServer(): any {
         }
       }
 
-      // POST /api/hivelearn/session — crea sesión con tema y objetivo al terminar el onboarding
+      // POST /api/hivelearn/session — crea sesión + programa inicial al terminar el onboarding
       if (url.pathname === '/api/hivelearn/session' && req.method === 'POST') {
         try {
           const body = await req.json() as { alumnoId: string; sessionId: string; tema: string; objetivo: string }
           const persistence = new LessonPersistence()
           persistence.createSessionWithMeta(body.sessionId, body.alumnoId, body.tema, body.objetivo)
+          // Crear programa inicial vacío — el swarm lo irá llenando agente a agente
+          persistence.saveProgram(body.sessionId, body.alumnoId, body.sessionId, '{}', 0)
           return addCorsHeaders(
-            new Response(JSON.stringify({ ok: true, sessionId: body.sessionId }), {
+            new Response(JSON.stringify({ ok: true, sessionId: body.sessionId, programa_uuid: body.sessionId }), {
               status: 201,
               headers: { 'Content-Type': 'application/json' },
             }),

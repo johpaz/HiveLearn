@@ -202,17 +202,26 @@ export class LessonPersistence {
     `).run(sessionId, alumnoId, tema, objetivo)
   }
 
-  /** Actualiza la casilla del agente en agentes_json de la sesión (progreso incremental del swarm) */
+  /** Actualiza la columna individual del agente en hl_sessions (progreso incremental del swarm) */
   updateSessionAgentSlot(sessionId: string, agentKey: string, output: string): void {
     try {
-      this.db.query(`
-        UPDATE hl_sessions
-        SET agentes_json = json_set(COALESCE(agentes_json, '{}'), '$.' || ?, ?),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE session_id = ?
-      `).run(agentKey, output, sessionId)
+      const col = `agente_${agentKey.replace(/-/g, '_').replace(/[^a-z0-9_]/gi, '')}`
+      this.db.query(
+        `UPDATE hl_sessions SET ${col} = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?`
+      ).run(output, sessionId)
     } catch {
       // Non-critical — nunca bloquear el pipeline
+    }
+  }
+
+  /** Actualiza schema_json y total_nodos del programa al terminar el swarm */
+  updateProgramSchema(programaId: string, schemaJson: string, totalNodos: number): void {
+    try {
+      this.db.query(
+        'UPDATE hl_programs SET schema_json = ?, total_nodos = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      ).run(schemaJson, totalNodos, programaId)
+    } catch {
+      // Non-critical
     }
   }
 
