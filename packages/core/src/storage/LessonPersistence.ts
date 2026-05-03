@@ -184,13 +184,36 @@ export class LessonPersistence {
     )
   }
 
-  /** Crea sesión temprana (durante onboarding, sin currículo aún) */
+  /** Crea sesión temprana sin tema/objetivo (fallback interno del swarm) */
   createEarlySession(sessionId: string, alumnoId: string): void {
     this.db.query(`
       INSERT OR IGNORE INTO hl_sessions
-        (session_id, alumno_id, curriculo_id, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
-      VALUES (?, ?, NULL, 0, 'Aprendiz', '[]', 0, NULL, 0)
+        (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
+      VALUES (?, ?, NULL, NULL, '', 0, 'Aprendiz', '[]', 0, NULL, 0)
     `).run(sessionId, alumnoId)
+  }
+
+  /** Crea sesión desde el onboarding con tema y objetivo reales */
+  createSessionWithMeta(sessionId: string, alumnoId: string, tema: string, objetivo: string): void {
+    this.db.query(`
+      INSERT OR IGNORE INTO hl_sessions
+        (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
+      VALUES (?, ?, NULL, ?, ?, 0, 'Aprendiz', '[]', 0, NULL, 0)
+    `).run(sessionId, alumnoId, tema, objetivo)
+  }
+
+  /** Actualiza la casilla del agente en agentes_json de la sesión (progreso incremental del swarm) */
+  updateSessionAgentSlot(sessionId: string, agentKey: string, output: string): void {
+    try {
+      this.db.query(`
+        UPDATE hl_sessions
+        SET agentes_json = json_set(COALESCE(agentes_json, '{}'), '$.' || ?, ?),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = ?
+      `).run(agentKey, output, sessionId)
+    } catch {
+      // Non-critical — nunca bloquear el pipeline
+    }
   }
 
   updateSessionCurriculum(sessionId: string, curriculoId: number): void {

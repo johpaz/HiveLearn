@@ -19,9 +19,9 @@ export function SwarmWorld() {
 
   // Dispara la generación del programa al montar, si hay perfil+meta en el estado de navegación
   useEffect(() => {
-    const { perfil, meta } = (location.state as any) ?? {}
+    const { perfil, meta, sessionId: sessionIdFromState } = (location.state as any) ?? {}
     if (!perfil || !meta) return
-    const swarmId = `swarm-${Date.now()}`
+    const swarmId = sessionIdFromState ?? `swarm-${Date.now()}`
     apiClient<{ ok: boolean; swarmId: string }>('/api/hivelearn/generate', {
       method: 'POST',
       body: { perfil, meta, sessionId: swarmId },

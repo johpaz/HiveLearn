@@ -792,6 +792,30 @@ export function createServer(): any {
         }
       }
 
+      // POST /api/hivelearn/session — crea sesión con tema y objetivo al terminar el onboarding
+      if (url.pathname === '/api/hivelearn/session' && req.method === 'POST') {
+        try {
+          const body = await req.json() as { alumnoId: string; sessionId: string; tema: string; objetivo: string }
+          const persistence = new LessonPersistence()
+          persistence.createSessionWithMeta(body.sessionId, body.alumnoId, body.tema, body.objetivo)
+          return addCorsHeaders(
+            new Response(JSON.stringify({ ok: true, sessionId: body.sessionId }), {
+              status: 201,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
       // GET /api/hivelearn/student-profile/search?q=<nombre_o_nick>
       if (url.pathname === '/api/hivelearn/student-profile/search' && req.method === 'GET') {
         try {

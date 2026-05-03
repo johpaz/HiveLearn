@@ -73,9 +73,11 @@ export async function runSwarmGeneration(
 
   // Crear sesión temprana para que los outputs de cada agente tengan dónde guardarse
   const persistence = new LessonPersistence()
-  persistence.createEarlySession(swarmId, perfil.alumnoId)
+  persistence.createEarlySession(swarmId, perfil.alumnoId)  // no-op si ya existe
 
   let structureCtx = ''
+  let capturedStructureJson = '{}'
+  let capturedTotalZonas = 0
 
   for (const agentId of WORKER_AGENTS) {
     hlSwarmEmitter.emit('worker:task_started', { workerId: agentId, workerName: agentId, swarmId })
@@ -111,7 +113,8 @@ export async function runSwarmGeneration(
             null,
           )
           persistence.updateSessionCurriculum(swarmId, curriculoId)
-          persistence.saveProgram(swarmId, perfil.alumnoId, swarmId, jsonStr, estructura.zonas?.length ?? 0)
+          capturedStructureJson = jsonStr
+          capturedTotalZonas = estructura.zonas?.length ?? 0
           log.info('[swarm-gen] Curriculum saved', { swarmId, zonas: estructura.zonas?.length })
         } catch (parseErr) {
           log.warn('[swarm-gen] Could not parse structure', { error: (parseErr as Error).message })
@@ -137,6 +140,10 @@ export async function runSwarmGeneration(
       })
     }
   }
+
+  // Crear programa de formación con la estructura completa al terminar todos los agentes
+  persistence.saveProgram(swarmId, perfil.alumnoId, swarmId, capturedStructureJson, capturedTotalZonas)
+  log.info('[swarm-gen] Program saved', { swarmId })
 
   hlSwarmEmitter.emit('swarm:completed', {
     swarmId,

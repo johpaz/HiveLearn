@@ -69,6 +69,11 @@ export function initHiveLearnStorage(db: Database): void {
   // V2 ALTER TABLE: añadir columnas idempotente sin IF NOT EXISTS (no soportado en SQLite < 3.37)
   ensureColumn(db, 'hl_sessions', 'rating', 'INTEGER DEFAULT NULL')
   ensureColumn(db, 'hl_sessions', 'rating_comentario', 'TEXT DEFAULT NULL')
+  // Columnas tema/objetivo pueden faltar en tablas creadas antes de la V1 actual
+  ensureColumn(db, 'hl_sessions', 'tema', 'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_sessions', 'objetivo', "TEXT NOT NULL DEFAULT ''")
+  // Casillas de cada agente: JSON acumulativo que se construye durante el swarm
+  ensureColumn(db, 'hl_sessions', 'agentes_json', "TEXT NOT NULL DEFAULT '{}'")
 
   // V3: tabla hl_onboarding_messages + columnas de pausa/restauración de sesión
   try {
