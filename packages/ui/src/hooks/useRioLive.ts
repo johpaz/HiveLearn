@@ -62,6 +62,10 @@ export function useRioLive(
       const ws = new WebSocket(url)
       wsRef.current = ws
 
+      ws.onerror = () => {
+        // Silenciar errores de conexión — el reintentador los maneja
+      }
+
       ws.onopen = () => {
         if (unmountedRef.current) { ws.close(); return }
         setIsConnected(true)

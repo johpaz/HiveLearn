@@ -167,6 +167,8 @@ const initialState: State = {
   tiempoSesion: 0,
 
   audioManager: null as AudioManager | null,
+  audioReady: false,
+  beeLoaderVisible: true,
 }
 
 // ─── Store interface ──────────────────────────────────────────────────────────
@@ -194,6 +196,8 @@ export interface RioMundoStore extends State {
   toggleSFXMuted: () => void
   setWsStatus: (status: WsStatus) => void
   setAudioManager: (am: AudioManager | null) => void
+  setAudioReady: (ready: boolean) => void
+  setBeeLoaderVisible: (visible: boolean) => void
 
   // ─── Onboarding ──────────────────────────────────────────────────────────────
   setOnboardingStep: (step: OnboardingStep) => void
@@ -317,6 +321,8 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
   })),
   setWsStatus: (wsStatus) => set({ wsStatus }),
   setAudioManager: (audioManager) => set({ audioManager }),
+  setAudioReady: (audioReady) => set({ audioReady }),
+  setBeeLoaderVisible: (beeLoaderVisible) => set({ beeLoaderVisible }),
 
   // ─── Onboarding ───────────────────────────────────────────────────────────────
 

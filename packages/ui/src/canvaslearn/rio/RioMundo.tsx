@@ -21,6 +21,7 @@ import { RioA2UIBridge } from './protocol/RioA2UIBridge'
 import { PortalOverlay } from './portal/PortalOverlay'
 import { useTTSSpeak } from '@/hooks/useTTSSpeak'
 import { AudioManager } from './audio/AudioManager'
+import { BeeLoader } from '@/components/ui/bee-loader'
 import type { IsoMap, LoginPhase } from './types'
 import { ISO_CONFIG } from './types'
 
@@ -130,8 +131,8 @@ export function RioMundo() {
       audioManagerRef.current = audioManager
       store.setAudioManager(audioManager)
 
-      audioManager.init().then(() => {
-        audioManager.preloadAssets({
+      audioManager.init().then(async () => {
+        await audioManager.preloadAssets({
           titleMusic: '/canvaslearn/art/music/title_theme.ogg',
           hubMusic: '/canvaslearn/art/music/hub_theme.ogg',
           worldAdventure: '/canvaslearn/art/music/world_adventure.ogg',
@@ -148,7 +149,9 @@ export function RioMundo() {
         audioManager.setSFXVolume(settings.sfxVolume / 100)
         if (settings.musicMuted && !audioManager.getSettings().musicMuted) audioManager.toggleMusicMuted()
         if (settings.sfxMuted && !audioManager.getSettings().sfxMuted) audioManager.toggleSFXMuted()
-        // NO iniciar música automáticamente — esperar interacción del usuario
+        // Audio listo — ocultar loader
+        store.setAudioReady(true)
+        store.setBeeLoaderVisible(false)
       })
 
       setIsReady(true)
@@ -439,7 +442,9 @@ export function RioMundo() {
 
     app.ticker.add(gameLoop)
     return () => {
-      app.ticker.remove(gameLoop)
+      if (app && app.ticker) {
+        app.ticker.remove(gameLoop)
+      }
     }
   }, [isReady])
 
@@ -711,6 +716,9 @@ export function RioMundo() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden" ref={containerRef}>
+      {/* BeeLoader — bloquea hasta que audio esté listo */}
+      {useRioMundoStore(s => s.beeLoaderVisible) && <BeeLoader />}
+
       {/* HUD overlay */}
       {mundoListo && loginPhase === 'in_world' && <RioHUD />}
 

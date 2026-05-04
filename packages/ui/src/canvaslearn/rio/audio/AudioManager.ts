@@ -54,7 +54,7 @@ export class AudioManager {
     this.applyVolumes()
   }
 
-  private ensureCtx() {
+  ensureCtx() {
     if (!this.ctx) this.init()
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume()

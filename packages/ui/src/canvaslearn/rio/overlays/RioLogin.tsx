@@ -120,6 +120,10 @@ export function RioLogin() {
     setAvatar,
     setAlumnoId,
     setPerfil,
+    setSessionId,
+    setTema,
+    setMeta,
+    updateOnboarding,
   } = useRioMundoStore()
 
   // Crossfade a hub_theme cuando se monta el login
