@@ -20,8 +20,10 @@ import type {
   PortalPhase,
   RioMundoState as State,
   XpMultiplicadores,
+  AudioSettings,
+  WsStatus,
 } from '../canvaslearn/rio/types'
-import { RIO_NIVELES, DEFAULT_AVATAR, ISO_CONFIG } from '../canvaslearn/rio/types'
+import { RIO_NIVELES, DEFAULT_AVATAR, ISO_CONFIG, DEFAULT_AUDIO_SETTINGS } from '../canvaslearn/rio/types'
 
 // ─── Level helpers ───────────────────────────────────────────────────────────
 
@@ -104,6 +106,9 @@ const initialState: State = {
   selectedProviderId: null,
   selectedModelId: null,
 
+  audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
+  wsStatus: 'disconnected' as WsStatus,
+
   mundoListo: false,
   bienvenidaMostrada: false,
   sesionPausada: false,
@@ -179,6 +184,12 @@ export interface RioMundoStore extends State {
   setMeta: (meta: string) => void
   setTema: (tema: string) => void
   setProvider: (providerId: string, modelId: string | null) => void
+
+  // ─── Audio & Connection ────────────────────────────────────────────────────
+  setAudioSettings: (settings: Partial<AudioSettings>) => void
+  toggleMusicMuted: () => void
+  toggleSFXMuted: () => void
+  setWsStatus: (status: WsStatus) => void
 
   // ─── Onboarding ──────────────────────────────────────────────────────────────
   setOnboardingStep: (step: OnboardingStep) => void
@@ -288,6 +299,19 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
   setMeta: (meta) => set({ meta }),
   setTema: (tema) => set({ tema }),
   setProvider: (selectedProviderId, selectedModelId) => set({ selectedProviderId, selectedModelId }),
+
+  // ─── Audio & Connection ──────────────────────────────────────────────────────
+
+  setAudioSettings: (settings) => set((s) => ({
+    audioSettings: { ...s.audioSettings, ...settings },
+  })),
+  toggleMusicMuted: () => set((s) => ({
+    audioSettings: { ...s.audioSettings, musicMuted: !s.audioSettings.musicMuted },
+  })),
+  toggleSFXMuted: () => set((s) => ({
+    audioSettings: { ...s.audioSettings, sfxMuted: !s.audioSettings.sfxMuted },
+  })),
+  setWsStatus: (wsStatus) => set({ wsStatus }),
 
   // ─── Onboarding ───────────────────────────────────────────────────────────────
 
@@ -547,9 +571,10 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
     zonaActual: state.zonaActual,
     beeState: state.beeState,
     portal: state.portal,
-    selectedProviderId: state.selectedProviderId,
-    selectedModelId: state.selectedModelId,
-    onboarding: {
+  selectedProviderId: state.selectedProviderId,
+  selectedModelId: state.selectedModelId,
+  audioSettings: state.audioSettings,
+  onboarding: {
       ...state.onboarding,
       isTyping: false,
     },

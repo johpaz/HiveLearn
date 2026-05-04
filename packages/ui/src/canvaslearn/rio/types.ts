@@ -1,6 +1,9 @@
 import type { StudentProfile, LessonProgram, SwarmProgress, AgentStatus, CoordinatorState, A2UIMessage } from '@hivelearn/core'
 import type { MundoLogro } from '@hivelearn/core'
 
+export type { AudioSettings, WsStatus } from './audio/AudioManager'
+export { DEFAULT_AUDIO_SETTINGS } from './audio/AudioManager'
+
 // ─── Tile Types ──────────────────────────────────────────────────────────────
 
 export type TileType =
@@ -182,6 +185,10 @@ export interface RioMundoState {
   // ─── Provider Config ────────────────────────────────────────────────────────
   selectedProviderId: string | null
   selectedModelId: string | null
+
+  // ─── Audio & Connection ────────────────────────────────────────────────────
+  audioSettings: import('./audio/AudioManager').AudioSettings
+  wsStatus: import('./audio/AudioManager').WsStatus
 
   // ─── World State ─────────────────────────────────────────────────────────────
   mundoListo: boolean

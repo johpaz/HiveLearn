@@ -20,6 +20,7 @@ import { RioOnboardingController } from './onboarding/RioOnboardingController'
 import { RioA2UIBridge } from './protocol/RioA2UIBridge'
 import { PortalOverlay } from './portal/PortalOverlay'
 import { useTTSSpeak } from '@/hooks/useTTSSpeak'
+import { AudioManager } from './audio/AudioManager'
 import type { IsoMap, LoginPhase } from './types'
 import { ISO_CONFIG } from './types'
 
@@ -80,6 +81,7 @@ export function RioMundo() {
   const keysRef = useRef<Set<string>>(new Set())
   const titleSceneRef = useRef<RioTitleScene | null>(null)
   const loadingSceneRef = useRef<RioLoadingScene | null>(null)
+  const audioManagerRef = useRef<AudioManager | null>(null)
   const mouseTargetRef = useRef<{ x: number; y: number } | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -123,22 +125,53 @@ export function RioMundo() {
 
       appRef.current = app
 
-      const titleScene = new RioTitleScene(app)
+      const store = useRioMundoStore.getState()
+      const titleScene = new RioTitleScene(app, {
+        onEnter: () => {
+          titleScene.destroy()
+          titleSceneRef.current = null
+          setShowTitle(false)
+          setShowLogin(true)
+          store.setLoginPhase('nickname_input')
+        },
+        onContinue: () => {
+          titleScene.destroy()
+          titleSceneRef.current = null
+          setShowTitle(false)
+          store.setLoginPhase('restoring_session')
+        },
+        onConfig: () => {
+        },
+      })
       titleSceneRef.current = titleScene
-      titleScene.setOnEnter(() => {
-        titleScene.destroy()
-        titleSceneRef.current = null
-        setShowTitle(false)
-        setShowLogin(true)
-        useRioMundoStore.getState().setLoginPhase('nickname_input')
+      titleScene.hasSavedSession = !!(store.sessionId && store.programaUuid)
+
+      const audioManager = new AudioManager()
+      audioManagerRef.current = audioManager
+      audioManager.init().then(() => {
+        audioManager.preloadAssets({
+          titleMusic: '/canvaslearn/art/music/title_theme.ogg',
+          hubMusic: '/canvaslearn/art/music/hub_theme.ogg',
+          'sfx/ambient_water': '/canvaslearn/art/sfx/ambient_water.ogg',
+          'sfx/ambient_forest': '/canvaslearn/art/sfx/ambient_forest.ogg',
+          'sfx/applause': '/canvaslearn/art/sfx/applause.ogg',
+        })
+        const settings = store.audioSettings
+        audioManager.setMusicVolume(settings.musicVolume / 100)
+        audioManager.setSFXVolume(settings.sfxVolume / 100)
+        if (settings.musicMuted && !audioManager.getSettings().musicMuted) audioManager.toggleMusicMuted()
+        if (settings.sfxMuted && !audioManager.getSettings().sfxMuted) audioManager.toggleSFXMuted()
+        audioManager.playMusic('titleMusic')
       })
 
       setIsReady(true)
     })
 
-    return () => {
-    loadingSceneRef.current?.destroy()
-    titleSceneRef.current?.destroy()
+  return () => {
+      loadingSceneRef.current?.destroy()
+      titleSceneRef.current?.destroy()
+      audioManagerRef.current?.destroy()
+      audioManagerRef.current = null
     swarmBeesRef.current?.destroy()
     entryAnimRef.current?.destroy()
     waterRef.current?.destroy()

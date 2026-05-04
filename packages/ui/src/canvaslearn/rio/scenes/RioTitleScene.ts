@@ -6,6 +6,13 @@ import {
   TextStyle,
   FillGradient,
 } from 'pixi.js'
+import type { WsStatus } from '../audio/AudioManager'
+
+export interface RioTitleSceneCallbacks {
+  onEnter: () => void
+  onContinue: () => void
+  onConfig: () => void
+}
 
 interface TitleBee {
   container: Container
@@ -47,20 +54,31 @@ export class RioTitleScene {
   private buttonBg: Graphics
   private buttonBgHover: Graphics
   private buttonText: Text
+  private continueContainer: Container
+  private continueBg: Graphics
+  private continueBgHover: Graphics
+  private continueText: Text
+  private isContinueHovering: boolean = false
+  private configContainer: Container
+  private configIcon: Graphics
+  private wsDot: Graphics
   private bees: TitleBee[] = []
   private sparkles: Sparkle[] = []
   private isHovering: boolean = false
   private fadeAlpha: number = 1
   private isFadingOut: boolean = false
-  private onEnter: (() => void) | null = null
+  private callbacks: RioTitleSceneCallbacks
   private tickerCallback: ((ticker: any) => void) | null = null
   private startTime: number = 0
   private destroyed: boolean = false
   private screenWidth: number
   private screenHeight: number
+  private _hasSavedSession: boolean = false
+  private _wsStatus: WsStatus = 'disconnected'
 
-  constructor(app: Application) {
+  constructor(app: Application, callbacks: RioTitleSceneCallbacks) {
     this.app = app
+    this.callbacks = callbacks
     this.screenWidth = window.innerWidth
     this.screenHeight = window.innerHeight
     this.container = new Container()
@@ -79,6 +97,13 @@ export class RioTitleScene {
     this.buttonBg = new Graphics()
     this.buttonBgHover = new Graphics()
     this.buttonText = new Text()
+    this.continueContainer = new Container()
+    this.continueBg = new Graphics()
+    this.continueBgHover = new Graphics()
+    this.continueText = new Text()
+    this.configContainer = new Container()
+    this.configIcon = new Graphics()
+    this.wsDot = new Graphics()
 
     this.buildScene()
     this.spawnBees(6)
@@ -86,8 +111,14 @@ export class RioTitleScene {
     this.startAnimation()
   }
 
-  setOnEnter(cb: () => void) {
-    this.onEnter = cb
+  set hasSavedSession(v: boolean) {
+    this._hasSavedSession = v
+    this.continueContainer.visible = v
+  }
+
+  set wsStatus(s: WsStatus) {
+    this._wsStatus = s
+    this.drawWsDot()
   }
 
   private buildScene() {
@@ -98,12 +129,18 @@ export class RioTitleScene {
     this.drawHexLogo(cx, cy - 60)
     this.drawTitleText(cx, cy + 50)
     this.drawButton(cx, cy + 140)
+    this.drawContinueButton(cx, cy + 200)
+    this.drawConfigButton()
+    this.drawWsDot()
 
     this.container.addChild(this.bgGradient)
     this.container.addChild(this.hexLogo)
     this.container.addChild(this.titleText)
     this.container.addChild(this.subtitleText)
     this.container.addChild(this.buttonContainer)
+    this.container.addChild(this.continueContainer)
+    this.container.addChild(this.configContainer)
+    this.container.addChild(this.wsDot)
 
     this.app.stage.addChild(this.container)
   }
@@ -267,6 +304,115 @@ export class RioTitleScene {
     }
   }
 
+  private drawContinueButton(cx: number, cy: number) {
+    this.continueContainer.x = cx
+    this.continueContainer.y = cy
+    this.continueContainer.alpha = 0
+    this.continueContainer.visible = this._hasSavedSession
+    this.continueContainer.eventMode = 'static'
+    this.continueContainer.cursor = 'pointer'
+
+    const btnW = 200
+    const btnH = 46
+
+    this.continueBg = new Graphics()
+    this.drawButtonShape(this.continueBg, btnW, btnH, 0x4ade80, 0.1, 0x4ade80, 0.4)
+    this.continueContainer.addChild(this.continueBg)
+
+    this.continueBgHover = new Graphics()
+    this.drawButtonShape(this.continueBgHover, btnW, btnH, 0x4ade80, 0.25, 0x4ade80, 0.8)
+    this.continueBgHover.alpha = 0
+    this.continueContainer.addChild(this.continueBgHover)
+
+    const btnStyle = new TextStyle({
+      fontFamily: 'Arial, sans-serif',
+      fontSize: 18,
+      fontWeight: 'bold',
+      fill: 0x4ade80,
+    })
+    this.continueText = new Text({ text: 'Continuar', style: btnStyle })
+    this.continueText.anchor.set(0.5)
+    this.continueContainer.addChild(this.continueText)
+
+    this.continueContainer.on('pointerover', () => {
+      this.isContinueHovering = true
+    })
+    this.continueContainer.on('pointerout', () => {
+      this.isContinueHovering = false
+    })
+    this.continueContainer.on('pointertap', () => {
+      this.triggerContinue()
+    })
+
+    this.continueContainer.hitArea = {
+      contains(x: number, y: number) {
+        return x >= -btnW / 2 && x <= btnW / 2 && y >= -btnH / 2 && y <= btnH / 2
+      },
+    }
+  }
+
+  private drawConfigButton() {
+    const x = this.screenWidth - 50
+    const y = 50
+    this.configContainer.x = x
+    this.configContainer.y = y
+    this.configContainer.alpha = 0
+    this.configContainer.eventMode = 'static'
+    this.configContainer.cursor = 'pointer'
+
+    this.configIcon = new Graphics()
+    this.drawGearIcon(this.configIcon, 0, 0, 16, 12, 6)
+    this.configContainer.addChild(this.configIcon)
+
+    this.configContainer.hitArea = {
+      contains(x: number, y: number) {
+        return x >= -20 && x <= 20 && y >= -20 && y <= 20
+      },
+    }
+
+    this.configContainer.on('pointertap', () => {
+      this.callbacks.onConfig()
+    })
+  }
+
+  private drawGearIcon(g: Graphics, cx: number, cy: number, outerR: number, innerR: number, teeth: number) {
+    g.circle(cx, cy, innerR)
+    g.fill({ color: 0x888888, alpha: 0.8 })
+    g.circle(cx, cy, innerR * 0.45)
+    g.fill({ color: 0x0a0e27 })
+
+    for (let i = 0; i < teeth; i++) {
+      const angle = (Math.PI * 2 / teeth) * i - Math.PI / 2
+      const tx = cx + Math.cos(angle) * (outerR * 0.8)
+      const ty = cy + Math.sin(angle) * (outerR * 0.8)
+      g.circle(tx, ty, 4)
+      g.fill({ color: 0x888888, alpha: 0.8 })
+    }
+  }
+
+  private drawWsDot() {
+    this.wsDot.clear()
+    const x = this.screenWidth - 50
+    const y = 80
+    this.wsDot.x = x
+    this.wsDot.y = y
+
+    const colorMap: Record<WsStatus, number> = {
+      connected: 0x4ade80,
+      connecting: 0xfbbf24,
+      disconnected: 0xef4444,
+    }
+    const color = colorMap[this._wsStatus]
+
+    this.wsDot.circle(0, 0, 6)
+    this.wsDot.fill({ color, alpha: 0.9 })
+
+    if (this._wsStatus === 'connecting') {
+      this.wsDot.circle(0, 0, 10)
+      this.wsDot.stroke({ width: 1, color: 0xfbbf24, alpha: 0.4 })
+    }
+  }
+
   private drawButtonShape(g: Graphics, w: number, h: number, fillColor: number, fillAlpha: number, strokeColor: number, strokeAlpha: number) {
     const r = 14
     g.roundRect(-w / 2, -h / 2, w, h, r)
@@ -278,7 +424,15 @@ export class RioTitleScene {
     if (this.isFadingOut) return
     this.isFadingOut = true
     setTimeout(() => {
-      if (this.onEnter) this.onEnter()
+      this.callbacks.onEnter()
+    }, 800)
+  }
+
+  private triggerContinue() {
+    if (this.isFadingOut) return
+    this.isFadingOut = true
+    setTimeout(() => {
+      this.callbacks.onContinue()
     }, 800)
   }
 
@@ -385,6 +539,8 @@ export class RioTitleScene {
       this.updateSparkles(dt)
       this.updateHexGlow(time)
       this.updateButtonHover(time)
+      this.updateContinueHover(time)
+      this.updateWsPulse(time)
 
       if (this.isFadingOut) {
         this.fadeAlpha -= dt * 0.0015
@@ -401,6 +557,8 @@ export class RioTitleScene {
     const titleDelay = 700
     const subtitleDelay = 900
     const buttonDelay = 1100
+    const continueDelay = 1300
+    const configDelay = 1500
     const introSpeed = 3
 
     if (elapsed > logoDelay) {
@@ -425,6 +583,17 @@ export class RioTitleScene {
     if (elapsed > buttonDelay) {
       const t = Math.min(1, (elapsed - buttonDelay) / (500 / introSpeed))
       this.buttonContainer.alpha = t
+    }
+
+    if (elapsed > continueDelay && this._hasSavedSession) {
+      const t = Math.min(1, (elapsed - continueDelay) / (500 / introSpeed))
+      this.continueContainer.alpha = t
+    }
+
+    if (elapsed > configDelay) {
+      const t = Math.min(1, (elapsed - configDelay) / (400 / introSpeed))
+      this.configContainer.alpha = t
+      this.wsDot.alpha = t
     }
   }
 
@@ -469,8 +638,8 @@ export class RioTitleScene {
       const fadeAlpha = lifeRatio < 0.2
         ? lifeRatio / 0.2
         : lifeRatio > 0.8
-          ? (1 - lifeRatio) / 0.2
-          : 1
+        ? (1 - lifeRatio) / 0.2
+        : 1
 
       s.graphic.alpha = fadeAlpha * 0.5
 
@@ -500,6 +669,28 @@ export class RioTitleScene {
       this.buttonContainer.scale.set(pulse)
     } else {
       this.buttonContainer.scale.set(1)
+    }
+  }
+
+  private updateContinueHover(time: number) {
+    if (!this._hasSavedSession) return
+    const target = this.isContinueHovering ? 1 : 0
+    this.continueBgHover.alpha += (target - this.continueBgHover.alpha) * 0.12
+
+    if (this.isContinueHovering) {
+      const pulse = 1 + Math.sin(time / 300) * 0.03
+      this.continueContainer.scale.set(pulse)
+    } else {
+      this.continueContainer.scale.set(1)
+    }
+  }
+
+  private updateWsPulse(time: number) {
+    if (this._wsStatus === 'connecting') {
+      const alpha = 0.4 + Math.sin(time / 400) * 0.3
+      this.wsDot.alpha = alpha
+    } else {
+      this.wsDot.alpha = 0.9
     }
   }
 
