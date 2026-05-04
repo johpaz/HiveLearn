@@ -192,8 +192,23 @@ export class LessonPersistence {
     )
   }
 
+  // ─── Internal helper: ensure student profile exists (prevents FK constraint failures)
+
+  private ensureStudentProfile(alumnoId: string): void {
+    if (!alumnoId || alumnoId.trim() === '') return
+    const exists = this.db.query('SELECT 1 FROM hl_student_profiles WHERE alumno_id = ? LIMIT 1').get(alumnoId)
+    if (exists) return
+    // Insert minimal profile to satisfy FK constraint
+    this.db.query(`
+      INSERT OR IGNORE INTO hl_student_profiles
+        (alumno_id, nombre, nickname, apodo, avatar, edad, estado, sesiones_total, xp_acumulado, created_at, ultimo_acceso, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(alumnoId, alumnoId, alumnoId, alumnoId, '👤', 18, 'activo')
+  }
+
   /** Crea sesión temprana sin tema/objetivo (fallback interno del swarm) */
   createEarlySession(sessionId: string, alumnoId: string): void {
+    this.ensureStudentProfile(alumnoId)
     this.db.query(`
       INSERT OR IGNORE INTO hl_sessions
         (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
@@ -203,6 +218,7 @@ export class LessonPersistence {
 
   /** Crea sesión desde el onboarding con tema y objetivo reales */
   createSessionWithMeta(sessionId: string, alumnoId: string, tema: string, objetivo: string): void {
+    this.ensureStudentProfile(alumnoId)
     this.db.query(`
       INSERT OR IGNORE INTO hl_sessions
         (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)

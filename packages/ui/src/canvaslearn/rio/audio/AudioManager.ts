@@ -30,6 +30,9 @@ export class AudioManager {
   private buffers: Map<AudioKey, AudioBuffer> = new Map()
   private currentMusicSource: AudioBufferSourceNode | null = null
   private currentMusicKey: string | null = null
+  private previousMusicKey: string | null = null
+  private crossfadeGain: GainNode | null = null
+  private crossfadeSource: AudioBufferSourceNode | null = null
   private sfxPoolIndex: number = 0
   private sfxPool: (AudioBufferSourceNode | null)[] = new Array(SFX_POOL_SIZE).fill(null)
   private settings: AudioSettings = { ...DEFAULT_AUDIO_SETTINGS }
@@ -116,6 +119,116 @@ export class AudioManager {
       } catch {}
       this.currentMusicSource = null
       this.currentMusicKey = null
+    }
+    if (this.crossfadeSource) {
+      try {
+        this.crossfadeSource.stop()
+        this.crossfadeSource.disconnect()
+      } catch {}
+      this.crossfadeSource = null
+    }
+    if (this.crossfadeGain) {
+      try {
+        this.crossfadeGain.disconnect()
+      } catch {}
+      this.crossfadeGain = null
+    }
+  }
+
+  /** Crossfade suave entre tracks de música */
+  crossfadeMusic(toKey: string, durationMs = 1500) {
+    this.ensureCtx()
+    if (!this.ctx) return
+    if (this.currentMusicKey === toKey) return
+
+    const newBuffer = this.buffers.get(toKey)
+    if (!newBuffer) {
+      console.warn(`[AudioManager] Buffer not found: ${toKey}`)
+      return
+    }
+
+    const duration = durationMs / 1000
+    const now = this.ctx.currentTime
+
+    // Crear nuevo gain node para fade in
+    const newGain = this.ctx.createGain()
+    newGain.gain.setValueAtTime(0, now)
+    newGain.gain.linearRampToValueAtTime(
+      this.settings.musicMuted ? 0 : this.settings.musicVolume,
+      now + duration
+    )
+    newGain.connect(this.ctx.destination)
+
+    // Nuevo source con loop
+    const newSource = this.ctx.createBufferSource()
+    newSource.buffer = newBuffer
+    newSource.loop = true
+    newSource.connect(newGain)
+    newSource.start(0)
+
+    // Fade out del anterior
+    if (this.currentMusicSource && this.musicGain) {
+      this.musicGain.gain.linearRampToValueAtTime(0, now + duration)
+
+      // Limpiar el anterior después del fade
+      const oldSource = this.currentMusicSource
+      const oldGain = this.musicGain
+
+      setTimeout(() => {
+        try {
+          oldSource.stop()
+          oldSource.disconnect()
+          oldGain.disconnect()
+        } catch {}
+      }, durationMs + 50)
+    }
+
+    // Actualizar referencias
+    this.previousMusicKey = this.currentMusicKey
+    this.currentMusicSource = newSource
+    this.musicGain = newGain
+    this.currentMusicKey = toKey
+  }
+
+  /** Reproduce un track UNA VEZ (no loop), luego vuelve a previousMusicKey */
+  playMusicOnce(key: string) {
+    this.ensureCtx()
+    if (!this.ctx || !this.musicGain) return
+
+    const buffer = this.buffers.get(key)
+    if (!buffer) return
+
+    // Guardar música actual para volver después
+    const returnKey = this.currentMusicKey
+
+    // Fade out música actual
+    if (this.musicGain) {
+      const now = this.ctx.currentTime
+      this.musicGain.gain.linearRampToValueAtTime(0, now + 0.5)
+    }
+
+    // Crear source temporal (sin loop)
+    const tempGain = this.ctx.createGain()
+    tempGain.gain.setValueAtTime(0, this.ctx.currentTime)
+    tempGain.gain.linearRampToValueAtTime(
+      this.settings.musicMuted ? 0 : this.settings.musicVolume,
+      this.ctx.currentTime + 0.5
+    )
+    tempGain.connect(this.ctx.destination)
+
+    const tempSource = this.ctx.createBufferSource()
+    tempSource.buffer = buffer
+    tempSource.connect(tempGain)
+    tempSource.start(0)
+
+    // Al terminar, volver a la música anterior
+    tempSource.onended = () => {
+      try {
+        tempGain.disconnect()
+      } catch {}
+      if (returnKey) {
+        this.crossfadeMusic(returnKey, 1500)
+      }
     }
   }
 
@@ -204,6 +317,10 @@ export class AudioManager {
     this.settings.sfxMuted = !this.settings.sfxMuted
     this.applyVolumes()
     return this.settings.sfxMuted
+  }
+
+  getCurrentMusicKey(): string | null {
+    return this.currentMusicKey
   }
 
   getSettings(): AudioSettings {

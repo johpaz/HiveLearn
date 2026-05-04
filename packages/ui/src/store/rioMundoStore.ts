@@ -24,6 +24,7 @@ import type {
   WsStatus,
 } from '../canvaslearn/rio/types'
 import { RIO_NIVELES, DEFAULT_AVATAR, ISO_CONFIG, DEFAULT_AUDIO_SETTINGS } from '../canvaslearn/rio/types'
+import type { AudioManager } from '../canvaslearn/rio/audio/AudioManager'
 
 // ─── Level helpers ───────────────────────────────────────────────────────────
 
@@ -164,6 +165,8 @@ const initialState: State = {
 
   tiempoInicioSesion: null,
   tiempoSesion: 0,
+
+  audioManager: null as AudioManager | null,
 }
 
 // ─── Store interface ──────────────────────────────────────────────────────────
@@ -190,6 +193,7 @@ export interface RioMundoStore extends State {
   toggleMusicMuted: () => void
   toggleSFXMuted: () => void
   setWsStatus: (status: WsStatus) => void
+  setAudioManager: (am: AudioManager | null) => void
 
   // ─── Onboarding ──────────────────────────────────────────────────────────────
   setOnboardingStep: (step: OnboardingStep) => void
@@ -312,6 +316,7 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
     audioSettings: { ...s.audioSettings, sfxMuted: !s.audioSettings.sfxMuted },
   })),
   setWsStatus: (wsStatus) => set({ wsStatus }),
+  setAudioManager: (audioManager) => set({ audioManager }),
 
   // ─── Onboarding ───────────────────────────────────────────────────────────────
 

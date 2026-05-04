@@ -53,13 +53,9 @@ Antes de iniciar una tarea compleja, define en voz alta qué significa completar
 El flujo principal de la aplicacion es unificado a traves del mundo rio isometrico. Ya no existen pantallas separadas de swarm, lecciones, o onboarding.
 
 ```
-Landing (/) → Nueva Sesion (/nueva-sesion) → Rio (/rio)
+Landing (/) → Nueva Sesion → Rio (/rio)
 ```
 
-### `/nueva-sesion`
-- Pantalla completa, sin layout.
-- NuevaSesionWorld (PixiJS): el estudiante elige tema y objetivo.
-- Al completar: guarda sesion via `/api/hivelearn/session`, navega a `/rio`.
 
 ### `/rio` — MUNDO PRINCIPAL
 - Pantalla completa, sin layout. Todo el aprendizaje ocurre aqui.

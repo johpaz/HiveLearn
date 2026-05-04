@@ -13,7 +13,7 @@ import { RioEntryAnimation } from './effects/EntryAnimation'
 import { RioHUD } from './overlays/RioHUD'
 import { RioTutorialHints } from './overlays/RioTutorialHints'
 import { RioLogin } from './overlays/RioLogin'
-import { RioTitleScene } from './scenes/RioTitleScene'
+import { RioWelcomeOverlay } from './overlays/RioWelcomeOverlay'
 import { RioLoadingScene } from './scenes/RioLoadingScene'
 import { RioOnboardingChat } from './onboarding/RioOnboardingChat'
 import { RioOnboardingController } from './onboarding/RioOnboardingController'
@@ -79,13 +79,12 @@ export function RioMundo() {
   const onboardingRef = useRef(new RioOnboardingController())
   const mapRef = useRef<IsoMap | null>(null)
   const keysRef = useRef<Set<string>>(new Set())
-  const titleSceneRef = useRef<RioTitleScene | null>(null)
   const loadingSceneRef = useRef<RioLoadingScene | null>(null)
   const audioManagerRef = useRef<AudioManager | null>(null)
   const mouseTargetRef = useRef<{ x: number; y: number } | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [showTitle, setShowTitle] = useState(true)
+  const [showWelcome, setShowWelcome] = useState(true)
   const [showLogin, setShowLogin] = useState(false)
   const [showLoading, setShowLoading] = useState(false)
   const { speak: beeSpeak } = useTTSSpeak()
@@ -126,32 +125,20 @@ export function RioMundo() {
       appRef.current = app
 
       const store = useRioMundoStore.getState()
-      const titleScene = new RioTitleScene(app, {
-        onEnter: () => {
-          titleScene.destroy()
-          titleSceneRef.current = null
-          setShowTitle(false)
-          setShowLogin(true)
-          store.setLoginPhase('nickname_input')
-        },
-        onContinue: () => {
-          titleScene.destroy()
-          titleSceneRef.current = null
-          setShowTitle(false)
-          store.setLoginPhase('restoring_session')
-        },
-        onConfig: () => {
-        },
-      })
-      titleSceneRef.current = titleScene
-      titleScene.hasSavedSession = !!(store.sessionId && store.programaUuid)
 
       const audioManager = new AudioManager()
       audioManagerRef.current = audioManager
+      store.setAudioManager(audioManager)
+
       audioManager.init().then(() => {
         audioManager.preloadAssets({
           titleMusic: '/canvaslearn/art/music/title_theme.ogg',
           hubMusic: '/canvaslearn/art/music/hub_theme.ogg',
+          worldAdventure: '/canvaslearn/art/music/world_adventure.ogg',
+          worldPeaceful: '/canvaslearn/art/music/world_peaceful.ogg',
+          worldTension: '/canvaslearn/art/music/world_tension.ogg',
+          victoryTheme: '/canvaslearn/art/music/victory_theme.ogg',
+          gameOverTheme: '/canvaslearn/art/music/game_over_theme.ogg',
           'sfx/ambient_water': '/canvaslearn/art/sfx/ambient_water.ogg',
           'sfx/ambient_forest': '/canvaslearn/art/sfx/ambient_forest.ogg',
           'sfx/applause': '/canvaslearn/art/sfx/applause.ogg',
@@ -161,7 +148,7 @@ export function RioMundo() {
         audioManager.setSFXVolume(settings.sfxVolume / 100)
         if (settings.musicMuted && !audioManager.getSettings().musicMuted) audioManager.toggleMusicMuted()
         if (settings.sfxMuted && !audioManager.getSettings().sfxMuted) audioManager.toggleSFXMuted()
-        audioManager.playMusic('titleMusic')
+        // NO iniciar música automáticamente — esperar interacción del usuario
       })
 
       setIsReady(true)
@@ -169,7 +156,6 @@ export function RioMundo() {
 
   return () => {
       loadingSceneRef.current?.destroy()
-      titleSceneRef.current?.destroy()
       audioManagerRef.current?.destroy()
       audioManagerRef.current = null
     swarmBeesRef.current?.destroy()
@@ -472,6 +458,13 @@ export function RioMundo() {
   // ─── Handle login phase transitions ──────────────────────────────────────────
 
   useEffect(() => {
+    // Auto-hide login when entering world or beyond
+    if (loginPhase === 'entering_world' || loginPhase === 'onboarding_chat' || loginPhase === 'in_world') {
+      setShowLogin(false)
+    }
+  }, [loginPhase])
+
+  useEffect(() => {
     if (loginPhase === 'entering_world' && isReady) {
       if (!rendererRef.current) {
         initWorld()
@@ -510,6 +503,29 @@ export function RioMundo() {
       waitForWorld()
     }
   }, [loginPhase, isReady, initWorld])
+
+  // ─── Music transitions by login phase ───────────────────────────────────────
+
+  useEffect(() => {
+    const am = useRioMundoStore.getState().audioManager
+    if (!am) return
+
+    switch (loginPhase) {
+      case 'entering_world':
+        am.crossfadeMusic('worldAdventure', 2000)
+        break
+      case 'onboarding_chat':
+        am.crossfadeMusic('worldPeaceful', 1500)
+        break
+      case 'in_world':
+        // Solo cambiar si no está ya sonando worldPeaceful o worldTension
+        const current = am.getCurrentMusicKey?.() || ''
+        if (current !== 'worldPeaceful' && current !== 'worldTension') {
+          am.crossfadeMusic('worldPeaceful', 1500)
+        }
+        break
+    }
+  }, [loginPhase])
 
   // ─── Handle onboarding complete ──────────────────────────────────────────────
 
@@ -677,14 +693,19 @@ export function RioMundo() {
   useEffect(() => {
     if (!isReady) return
     const store = useRioMundoStore.getState()
+    const am = store.audioManager
 
     if (store.portal.phase === 'entering' || store.portal.phase === 'open') {
       // Zoom in to portal location
       store.setCamaraZoom(store.portal.zoomTarget)
       store.setBeeState('talking')
+      // Tension music for portal
+      am?.crossfadeMusic('worldTension', 1000)
     } else if (store.portal.phase === 'exiting' || store.portal.phase === 'closed') {
       store.setCamaraZoom(1)
       store.setBeeState('following')
+      // Back to peaceful
+      am?.crossfadeMusic('worldPeaceful', 1500)
     }
   }, [portal.phase, isReady])
 
@@ -707,7 +728,22 @@ export function RioMundo() {
         />
       )}
 
-      {/* Login overlay (title screen is now PixiJS-native) */}
+      {/* Welcome overlay - pantalla de bienvenida estilo juego */}
+      {showWelcome && (
+        <RioWelcomeOverlay
+          onStart={() => {
+            setShowWelcome(false)
+            setShowLogin(true)
+            useRioMundoStore.getState().setLoginPhase('nickname_input')
+          }}
+          onContinue={() => {
+            setShowWelcome(false)
+            useRioMundoStore.getState().setLoginPhase('restoring_session')
+          }}
+        />
+      )}
+
+      {/* Login overlay */}
       {showLogin && (loginPhase === 'nickname_input' || loginPhase === 'avatar_select' || loginPhase === 'loading' || loginPhase === 'restoring_session') && (
         <RioLogin />
       )}
