@@ -168,7 +168,8 @@ export function createServer(): any {
         }
         if (url.pathname.includes('hivelearn-onboarding') ||
             url.pathname.includes('hivelearn-lesson') ||
-            url.pathname.includes('hivelearn-events')) {
+            url.pathname.includes('hivelearn-events') ||
+            url.pathname.includes('hivelearn-game')) {
           const upgraded = server.upgrade(req, {
             data: {
               sessionId: url.searchParams.get('sessionId'),
@@ -1366,8 +1367,8 @@ export function createServer(): any {
       message(ws: any, message: any) {
         try {
           const data = JSON.parse(message.toString())
-          if (data?.type === 'ping') {
-            ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }))
+          if (data?.type === 'ping' || data?.tipo === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong', tipo: 'pong', timestamp: Date.now() }))
             return
           }
           const sessionId   = ws._sessionId   as string | undefined
