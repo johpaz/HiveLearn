@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRioMundoStore } from '@/store/rioMundoStore'
+import { ConnectionIndicator } from '@/components/ConnectionIndicator'
 
 interface RioWelcomeOverlayProps {
   onStart: () => void
@@ -72,7 +73,6 @@ function TechBadge({ icon, label, color }: { icon: string; label: string; color:
 
 export function RioWelcomeOverlay({ onStart, onContinue, onConfig }: RioWelcomeOverlayProps) {
   const hasSavedSession = useRioMundoStore(s => !!(s.sessionId && s.programaUuid))
-  const wsStatus = useRioMundoStore(s => s.wsStatus)
   const audioSettings = useRioMundoStore(s => s.audioSettings)
   const toggleMusicMuted = useRioMundoStore(s => s.toggleMusicMuted)
   const toggleSFXMuted = useRioMundoStore(s => s.toggleSFXMuted)
@@ -101,12 +101,6 @@ export function RioWelcomeOverlay({ onStart, onContinue, onConfig }: RioWelcomeO
     setTimeout(() => onContinue?.(), 800)
   }, [onContinue])
 
-  const wsColorMap: Record<string, string> = {
-    connected: 'bg-green-400',
-    connecting: 'bg-yellow-400 animate-pulse',
-    disconnected: 'bg-red-400',
-  }
-
   return (
     <div
       className={`absolute inset-0 z-50 flex flex-col items-center justify-center transition-all duration-1000 ${
@@ -120,11 +114,8 @@ export function RioWelcomeOverlay({ onStart, onContinue, onConfig }: RioWelcomeO
       <PollenParticles />
 
       {/* WS Status - top right */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-        <span className="text-xs text-[#888]">
-          {wsStatus === 'connected' ? 'Conectado' : wsStatus === 'connecting' ? 'Conectando' : 'Sin conexión'}
-        </span>
-        <div className={`w-3 h-3 rounded-full ${wsColorMap[wsStatus] || 'bg-red-400'}`} />
+      <div className="absolute top-4 right-4 z-10">
+        <ConnectionIndicator />
       </div>
 
       {/* Config button */}

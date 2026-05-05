@@ -378,6 +378,49 @@ export async function handleHiveLearn(req: Request, url: URL): Promise<Response 
     }
   }
 
+  // DELETE /api/hivelearn/sessions/:id
+  if (url.pathname.startsWith('/api/hivelearn/sessions/') && req.method === 'DELETE') {
+    try {
+      const sessionId = url.pathname.split('/')[4]
+      if (!sessionId) {
+        return addCorsHeaders(
+          new Response(JSON.stringify({ error: 'sessionId requerido' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+          req
+        )
+      }
+      const persistence = new LessonPersistence()
+      const deleted = persistence.deleteSession(sessionId)
+      if (!deleted) {
+        return addCorsHeaders(
+          new Response(JSON.stringify({ error: 'Sesión no encontrada' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+          req
+        )
+      }
+      return addCorsHeaders(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        req
+      )
+    } catch (e) {
+      log.error('[hivelearn/sessions/:id] DELETE error', { error: (e as Error).message })
+      return addCorsHeaders(
+        new Response(JSON.stringify({ error: (e as Error).message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        req
+      )
+    }
+  }
+
   // GET /api/hivelearn/agents
   if (url.pathname === '/api/hivelearn/agents' && req.method === 'GET') {
     try {

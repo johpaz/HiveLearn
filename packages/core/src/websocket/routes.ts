@@ -27,29 +27,26 @@ export function isWebSocketRoute(pathname: string): boolean {
 
 /**
  * Handler para cuando se abre una conexión WebSocket.
- * sessionId y pathname se extraen en el fetch handler y se pasan via ws.data.
+ * pathname se extrae en el fetch handler y se pasa via ws.data.
  */
 export async function handleWebSocketOpen(
   ws: ServerWebSocket<any>,
-  sessionId: string | null,
   pathname: string,
   sessions: WebSocketSessionManager
 ): Promise<void> {
-  const config = await obtenerConfiguracionCoordinador(sessionId || undefined)
+  const config = await obtenerConfiguracionCoordinador()
 
   log.info('[ws] Client connected', {
     path: pathname,
-    sessionId,
   })
 
-  // Register session by path
-  if (pathname.includes('hivelearn-program') && sessionId) {
-    sessions.programSessions.set(sessionId, ws)
-    log.debug('[ws] Registered program session', { sessionId })
-  } else if (pathname.includes('hivelearn-onboarding') && sessionId) {
-    sessions.onboardingSessions.set(sessionId, ws)
-  } else if (pathname.includes('hivelearn-lesson') && sessionId) {
-    sessions.lessonSessions.set(sessionId, ws)
+  // Register session by path (sin sessionId — el WS es anónimo)
+  if (pathname.includes('hivelearn-program')) {
+    // El program handler registra sesiones cuando llega un mensaje con session_id
+  } else if (pathname.includes('hivelearn-onboarding')) {
+    // El onboarding handler maneja sessionId desde los mensajes
+  } else if (pathname.includes('hivelearn-lesson')) {
+    // El lesson handler maneja sessionId desde los mensajes
   } else if (pathname.includes('hivelearn-events')) {
     sessions.eventSubscribers.add(ws)
   }
@@ -57,7 +54,6 @@ export async function handleWebSocketOpen(
   // Send connection acknowledgment con configuración
   ws.send(JSON.stringify({
     type: 'connected',
-    sessionId,
     path: pathname,
     config: {
       providerId: config.providerId,

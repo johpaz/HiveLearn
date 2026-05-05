@@ -844,6 +844,23 @@ export class LessonPersistence {
     }))
   }
 
+  /** Elimina una sesión y todos sus datos relacionados */
+  deleteSession(sessionId: string): boolean {
+    try {
+      this.db.query('DELETE FROM hl_programs WHERE session_id = ?').run(sessionId)
+      this.db.query('DELETE FROM hl_lesson_interactions WHERE session_id = ?').run(sessionId)
+      this.db.query('DELETE FROM hl_session_metrics WHERE session_id = ?').run(sessionId)
+      this.db.query('DELETE FROM hl_student_responses WHERE session_id = ?').run(sessionId)
+      this.db.query('DELETE FROM hl_session_agent_outputs WHERE session_id = ?').run(sessionId)
+      this.db.query('DELETE FROM hl_onboarding_messages WHERE session_id = ?').run(sessionId)
+      this.db.query('DELETE FROM hl_onboarding_progress WHERE session_id = ?').run(sessionId)
+      const result = this.db.query('DELETE FROM hl_sessions WHERE session_id = ?').run(sessionId)
+      return result.changes > 0
+    } catch {
+      return false
+    }
+  }
+
   /**
    * Devuelve todas las sesiones con metadatos del currículo y perfil del alumno.
    * Soporta búsqueda por nombre/nickname (q) y filtro por nickname exacto.

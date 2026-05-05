@@ -8,7 +8,7 @@ import {
   Layers,
   HelpCircle,
 } from 'lucide-react'
-import { useRioMundoStore } from '@/store/rioMundoStore'
+import { ConnectionIndicator } from '@/components/ConnectionIndicator'
 
 interface NavbarProps {
   onNavigate: (page: string) => void
@@ -100,6 +100,7 @@ export function Navbar({ onNavigate, currentPage }: NavbarProps) {
 
             {/* ── Mobile: right actions ── */}
             <div className="flex md:hidden items-center gap-2">
+              <ConnectionIndicator />
               <button
                 className="p-2 text-white/40 hover:text-white transition-colors rounded-lg"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -196,28 +197,6 @@ function NavButton({
       )}
       <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-px bg-hive-amber transition-all duration-300 group-hover:w-1/2" />
     </button>
-  )
-}
-
-function ConnectionIndicator() {
-  const isConnected = useRioMundoStore(s => s.wsStatus === 'connected')
-
-  return (
-    <div
-      className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-        isConnected
-          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-          : 'bg-red-500/10 border-red-500/30 text-red-400'
-      }`}
-      title={isConnected ? 'Conectado al servidor' : 'Reconectando...'}
-    >
-      <span
-        className={`w-1.5 h-1.5 rounded-full ${
-          isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400 animate-pulse'
-        }`}
-      />
-      <span className="hidden lg:inline">{isConnected ? 'Conectado' : 'Offline'}</span>
-    </div>
   )
 }
 

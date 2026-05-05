@@ -40,6 +40,7 @@ export function useRioLive(): RioLiveState {
   const eventsReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectDelayRef = useRef(BASE_RECONNECT_MS)
   const unmountedRef = useRef(false)
+  const pingSentAtRef = useRef<number | null>(null)
 
   // ─── Get bridge from store (set by RioMundoPage) ────────────────────────────
   const getBridge = useCallback(() => {
@@ -68,6 +69,7 @@ export function useRioLive(): RioLiveState {
         // Ping interval
         pingTimerRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
+            pingSentAtRef.current = Date.now()
             ws.send(JSON.stringify({ tipo: 'heartbeat', timestamp: new Date().toISOString() }))
           }
         }, PING_INTERVAL_MS)
@@ -77,6 +79,16 @@ export function useRioLive(): RioLiveState {
         if (unmountedRef.current) return
         try {
           const message = JSON.parse(e.data as string) as any
+
+          // Handle pong to measure latency
+          if (message.tipo === 'pong' || message.type === 'pong') {
+            if (pingSentAtRef.current) {
+              const latency = Date.now() - pingSentAtRef.current
+              useRioMundoStore.getState().setWsLatencyMs(latency)
+              pingSentAtRef.current = null
+            }
+            return
+          }
 
           // Handle store-updating message types
           switch (message.tipo) {

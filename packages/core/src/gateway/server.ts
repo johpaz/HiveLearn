@@ -26,7 +26,6 @@ import { routeHandlers } from './routes'
 import { corsHeaders, addCorsHeaders } from './routes/_helpers'
 
 type WebSocketData = {
-  sessionId: string | null
   pathname: string
 }
 
@@ -127,7 +126,7 @@ export function createServer(): any {
       if (req.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
         if (url.pathname === '/ws/llm') {
           const upgraded = server.upgrade(req, {
-            data: { sessionId: 'llm-local', pathname: '/ws/llm' },
+            data: { pathname: '/ws/llm' },
           })
           if (upgraded) return undefined
           return new Response('WebSocket upgrade failed', { status: 400 })
@@ -138,10 +137,7 @@ export function createServer(): any {
           url.pathname.includes('hivelearn-program') ||
           url.pathname.includes('hivelearn-game')) {
           const upgraded = server.upgrade(req, {
-            data: {
-              sessionId: url.searchParams.get('sessionId'),
-              pathname: url.pathname,
-            },
+            data: { pathname: url.pathname },
           })
           if (upgraded) return undefined
           return new Response('WebSocket upgrade failed', { status: 400 })
@@ -188,9 +184,8 @@ export function createServer(): any {
 
     websocket: {
       async open(ws: any) {
-        const { sessionId, pathname } = (ws.data ?? {}) as { sessionId: string | null; pathname: string }
-        await handleWebSocketOpen(ws, sessionId, pathname, sessions)
-        if (sessionId) ws._sessionId = sessionId
+        const { pathname } = (ws.data ?? {}) as { pathname: string }
+        await handleWebSocketOpen(ws, pathname, sessions)
         ws._isOnboarding = (pathname ?? '').includes('hivelearn-onboarding')
         ws._isProgram    = (pathname ?? '').includes('hivelearn-program')
         ws._isLesson     = (pathname ?? '').includes('hivelearn-lesson')
@@ -203,30 +198,31 @@ export function createServer(): any {
             ws.send(JSON.stringify({ type: 'pong', tipo: 'pong', timestamp: Date.now() }))
             return
           }
-          const sessionId   = ws._sessionId   as string | undefined
           const isOnboarding = ws._isOnboarding as boolean | undefined
           const isProgram    = ws._isProgram    as boolean | undefined
           const isLesson     = ws._isLesson     as boolean | undefined
 
-          if (isLesson && sessionId) {
-            if (data?.tipo === 'iniciar_sesion') {
+          if (isLesson) {
+            const sessionId = data.session_id || data.sessionId
+            if (data?.tipo === 'iniciar_sesion' && sessionId) {
               startLessonSession(sessionId, ws)
-            } else if (data?.tipo === 'monitor:frame' && data.frame) {
+            } else if (data?.tipo === 'monitor:frame' && data.frame && sessionId) {
               handleMonitorFrame(sessionId, String(data.frame), data.context ?? {}, ws)
                 .catch((e: Error) => log.error('[monitor] frame error', { error: e.message }))
-            } else {
+            } else if (sessionId) {
               handleLessonMessage(sessionId, data)
             }
           } else if (isProgram) {
             handleProgramMessage(ws, data).catch((e: Error) =>
               log.error('[ws] program message error', { error: e.message })
             )
-          } else if (isOnboarding && sessionId) {
-            if (data?.type === 'init') {
+          } else if (isOnboarding) {
+            const sessionId = data.session_id || data.sessionId
+            if (data?.type === 'init' && sessionId) {
               handleOnboardingInit(ws, sessionId).catch((e: Error) =>
                 log.error('[ws] onboarding init error', { error: e.message })
               )
-            } else if (data?.type === 'user_message' && data.content) {
+            } else if (data?.type === 'user_message' && data.content && sessionId) {
               handleOnboardingUserMessage(ws, sessionId, String(data.content)).catch((e: Error) =>
                 log.error('[ws] onboarding user_message error', { error: e.message })
               )

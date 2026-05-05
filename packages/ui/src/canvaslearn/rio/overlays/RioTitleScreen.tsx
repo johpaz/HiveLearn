@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useRioMundoStore } from '@/store/rioMundoStore'
+import { ConnectionIndicator } from '@/components/ConnectionIndicator'
 
 export function RioTitleScreen() {
   const setLoginPhase = useRioMundoStore(s => s.setLoginPhase)
   const hasSavedSession = useRioMundoStore(s => !!(s.sessionId && s.programaUuid))
-  const wsStatus = useRioMundoStore(s => s.wsStatus)
   const audioSettings = useRioMundoStore(s => s.audioSettings)
   const setAudioSettings = useRioMundoStore(s => s.setAudioSettings)
   const toggleMusicMuted = useRioMundoStore(s => s.toggleMusicMuted)
@@ -37,20 +37,11 @@ export function RioTitleScreen() {
     }, 800)
   }
 
-  const wsColorMap: Record<string, string> = {
-    connected: 'bg-green-400',
-    connecting: 'bg-yellow-400 animate-pulse',
-    disconnected: 'bg-red-400',
-  }
-
   return (
     <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#0a0e27]">
-      {/* WS status dot - top right */}
-      <div className="absolute top-4 right-4 flex items-center gap-2">
-        <span className="text-xs text-[#888]">
-          {wsStatus === 'connected' ? 'Conectado' : wsStatus === 'connecting' ? 'Conectando' : 'Sin conexión'}
-        </span>
-        <div className={`w-3 h-3 rounded-full ${wsColorMap[wsStatus] || 'bg-red-400'}`} />
+      {/* WS status - top right */}
+      <div className="absolute top-4 right-4">
+        <ConnectionIndicator />
       </div>
 
       {/* Config button - top right */}

@@ -5,6 +5,7 @@ import { RioA2UIBridge } from '@/canvaslearn/rio/protocol/RioA2UIBridge'
 import { IsometricRenderer } from '@/canvaslearn/rio/renderer/IsometricRenderer'
 import { useRioMundoStore } from '@/store/rioMundoStore'
 import { useRioLive } from '@/hooks/useRioLive'
+import { ConnectionIndicator } from '@/components/ConnectionIndicator'
 
 export function RioMundoPage() {
   const navigate = useNavigate()
@@ -160,23 +161,7 @@ export function RioMundoPage() {
 
       {/* Connection status indicator — visible en todas las fases del juego */}
       <div className="absolute top-4 right-4 pointer-events-none z-50">
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-sm ${
-          isConnected
-            ? 'bg-[#22c55e]/20 border border-[#22c55e]/40 text-[#22c55e]'
-            : 'bg-[#ef4444]/20 border border-[#ef4444]/40 text-[#ef4444]'
-        }`}>
-          {isConnected ? (
-            <>
-              <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
-              Conectado
-            </>
-          ) : (
-            <>
-              <span className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse" />
-              Reconectando...
-            </>
-          )}
-        </div>
+        <ConnectionIndicator />
       </div>
 
       {/* Generation progress */}

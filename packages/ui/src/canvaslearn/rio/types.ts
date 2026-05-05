@@ -192,6 +192,7 @@ export interface RioMundoState {
   // ─── Audio & Connection ────────────────────────────────────────────────────
   audioSettings: import('./audio/AudioManager').AudioSettings
   wsStatus: import('./audio/AudioManager').WsStatus
+  wsLatencyMs: number | null
   sendWsMessage: ((msg: { tipo: string; [k: string]: any }) => void) | null
 
   // ─── World State ─────────────────────────────────────────────────────────────

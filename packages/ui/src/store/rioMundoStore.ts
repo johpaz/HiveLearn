@@ -110,6 +110,7 @@ const initialState: State = {
 
   audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
   wsStatus: 'disconnected' as WsStatus,
+  wsLatencyMs: null,
   sendWsMessage: null,
 
   mundoListo: false,
@@ -201,6 +202,7 @@ export interface RioMundoStore extends State {
   toggleMusicMuted: () => void
   toggleSFXMuted: () => void
   setWsStatus: (status: WsStatus) => void
+  setWsLatencyMs: (latency: number | null) => void
   setAudioManager: (am: AudioManager | null) => void
   setAudioReady: (ready: boolean) => void
   setBeeLoaderVisible: (visible: boolean) => void
@@ -335,6 +337,7 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
     audioSettings: { ...s.audioSettings, sfxMuted: !s.audioSettings.sfxMuted },
   })),
   setWsStatus: (wsStatus) => set({ wsStatus }),
+  setWsLatencyMs: (wsLatencyMs) => set({ wsLatencyMs }),
   setAudioManager: (audioManager) => set({ audioManager }),
   setAudioReady: (audioReady) => set({ audioReady }),
   setBeeLoaderVisible: (beeLoaderVisible) => set({ beeLoaderVisible }),
