@@ -20,13 +20,13 @@ const LOADING_MESSAGES = [
 
 export class RioLoadingScene {
   private app: Application
-  private container: Container
-  private bg: Graphics
-  private progressBar: Graphics
-  private progressFill: Graphics
-  private messageText: Text
-  private percentText: Text
-  private titleText: Text
+  private container: Container | null = null
+  private bg: Graphics | null = null
+  private progressBar: Graphics | null = null
+  private progressFill: Graphics | null = null
+  private messageText: Text | null = null
+  private percentText: Text | null = null
+  private titleText: Text | null = null
   private destroyed: boolean = false
   private progress: number = 0
   private targetProgress: number = 0
@@ -153,6 +153,10 @@ export class RioLoadingScene {
   private startAnimation() {
     this.tickerCallback = (ticker: any) => {
       if (this.destroyed) return
+      // Guard against destroyed graphics objects
+      if (!this.progressFill || !this.progressBar || !this.messageText || !this.percentText || !this.container) {
+        return
+      }
       const dt = ticker.deltaMS
 
       if (this.isFadingIn) {
@@ -205,7 +209,18 @@ export class RioLoadingScene {
     this.destroyed = true
     if (this.tickerCallback) {
       this.app.ticker.remove(this.tickerCallback)
+      this.tickerCallback = null
     }
-    this.container.destroy({ children: true })
+    if (this.container) {
+      this.container.destroy({ children: true })
+    }
+    // Null out references to destroyed graphics to prevent accidental access
+    this.progressFill = null as any
+    this.progressBar = null as any
+    this.messageText = null as any
+    this.percentText = null as any
+    this.titleText = null as any
+    this.bg = null as any
+    this.container = null as any
   }
 }

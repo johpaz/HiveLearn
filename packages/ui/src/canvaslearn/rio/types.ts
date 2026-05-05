@@ -106,6 +106,8 @@ export interface DialogBubble {
   createdAt: number
   duration: number
   isQuestion: boolean
+  anchorIsoX?: number
+  anchorIsoY?: number
 }
 
 // ─── Camera ──────────────────────────────────────────────────────────────────
@@ -123,7 +125,7 @@ export interface IsoCameraState {
 
 // ─── Login State ─────────────────────────────────────────────────────────────
 
-export type LoginPhase = 'title_screen' | 'nickname_input' | 'loading' | 'restoring_session' | 'new_profile' | 'avatar_select' | 'entering_world' | 'in_world' | 'onboarding_chat'
+export type LoginPhase = 'title_screen' | 'nickname_input' | 'loading' | 'restoring_session' | 'new_profile' | 'avatar_select' | 'entering_world' | 'swarm_tour' | 'in_world' | 'onboarding_chat'
 
 export interface LoginState {
   phase: LoginPhase

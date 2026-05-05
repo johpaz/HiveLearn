@@ -123,13 +123,16 @@ export class AudioManager {
         }
 
         // Use promise-based decodeAudioData with callback fallback
+        // NOTE: decodeAudioData detaches the ArrayBuffer, so we need a copy for fallback
         let audioBuffer: AudioBuffer
         try {
           audioBuffer = await this.ctx!.decodeAudioData(arrayBuffer)
         } catch (decodeError) {
           console.warn(`[AudioManager] Promise-based decode failed for ${key}, trying callback...`, decodeError)
+          // Use a copy since the original buffer may have been detached
+          const arrayBufferCopy = arrayBuffer.slice(0)
           audioBuffer = await new Promise((resolve, reject) => {
-            this.ctx!.decodeAudioData(arrayBuffer, resolve, reject)
+            this.ctx!.decodeAudioData(arrayBufferCopy, resolve, reject)
           })
         }
         

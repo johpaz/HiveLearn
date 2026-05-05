@@ -84,7 +84,10 @@ export class RioDialog {
     for (const [id, bubble] of this.activeBubbles) {
       let screenPos: { x: number; y: number }
 
-      if (beeState === 'talking') {
+      // Check if bubble has fixed anchor coordinates (for swarm agents)
+      if (bubble.anchorIsoX !== undefined && bubble.anchorIsoY !== undefined) {
+        screenPos = this.renderer.isoToScreen(bubble.anchorIsoX, bubble.anchorIsoY - 1)
+      } else if (beeState === 'talking') {
         // Position above bee — usar posición guardada en el store
         const beePos = state.beePosicion
         if (beePos.x !== 0 || beePos.y !== 0) {
@@ -127,6 +130,26 @@ export class RioDialog {
       createdAt: Date.now(),
       duration,
       isQuestion,
+    }
+
+    this.showBubble(bubble)
+    useRioMundoStore.getState().addDialogBubble(bubble)
+
+    return id
+  }
+
+  showAgentMessage(agentId: string, text: string, isoX: number, isoY: number, duration: number = 5000) {
+    const id = `agent-msg-${agentId}-${Date.now()}`
+    const bubble: DialogBubble = {
+      id,
+      text,
+      x: 0,
+      y: 0,
+      createdAt: Date.now(),
+      duration,
+      isQuestion: false,
+      anchorIsoX: isoX,
+      anchorIsoY: isoY,
     }
 
     this.showBubble(bubble)

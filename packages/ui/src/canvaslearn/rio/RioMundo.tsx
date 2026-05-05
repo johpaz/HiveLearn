@@ -17,6 +17,7 @@ import { RioWelcomeOverlay } from './overlays/RioWelcomeOverlay'
 import { RioLoadingScene } from './scenes/RioLoadingScene'
 import { RioOnboardingChat } from './onboarding/RioOnboardingChat'
 import { RioOnboardingController } from './onboarding/RioOnboardingController'
+import { RioSwarmTourController } from './onboarding/RioSwarmTourController'
 import { RioA2UIBridge } from './protocol/RioA2UIBridge'
 import { PortalOverlay } from './portal/PortalOverlay'
 import { useTTSSpeak } from '@/hooks/useTTSSpeak'
@@ -78,6 +79,7 @@ export function RioMundo() {
   const waterRef = useRef<RioWaterSystem | null>(null)
   const entryAnimRef = useRef<RioEntryAnimation | null>(null)
   const onboardingRef = useRef(new RioOnboardingController())
+  const tourRef = useRef(new RioSwarmTourController())
   const mapRef = useRef<IsoMap | null>(null)
   const keysRef = useRef<Set<string>>(new Set())
   const loadingSceneRef = useRef<RioLoadingScene | null>(null)
@@ -88,6 +90,7 @@ export function RioMundo() {
   const [showWelcome, setShowWelcome] = useState(true)
   const [showLogin, setShowLogin] = useState(false)
   const [showLoading, setShowLoading] = useState(false)
+  const [showTourSkip, setShowTourSkip] = useState(false)
   const { speak: beeSpeak } = useTTSSpeak()
 
   const {
@@ -290,7 +293,7 @@ export function RioMundo() {
 
     const handleClick = (e: MouseEvent) => {
       const state = useRioMundoStore.getState()
-      if (state.loginPhase !== 'in_world' && state.loginPhase !== 'entering_world') return
+      if (state.loginPhase !== 'in_world' && state.loginPhase !== 'entering_world' && state.loginPhase !== 'swarm_tour') return
       if (!rendererRef.current || !cameraRef.current) return
 
       const canvasRect = appRef.current?.canvas?.getBoundingClientRect()
@@ -341,7 +344,7 @@ export function RioMundo() {
       const keys = keysRef.current
 
       // Only move in world states
-      if (state.loginPhase !== 'in_world' && state.loginPhase !== 'onboarding_chat' && state.loginPhase !== 'entering_world') {
+      if (state.loginPhase !== 'in_world' && state.loginPhase !== 'onboarding_chat' && state.loginPhase !== 'entering_world' && state.loginPhase !== 'swarm_tour') {
         // Still update water animation
         if (waterRef.current) waterRef.current.update(dt, time)
         return
@@ -352,7 +355,7 @@ export function RioMundo() {
         let dx = 0
         let dy = 0
 
-        if (state.loginPhase === 'in_world' || state.loginPhase === 'entering_world') {
+        if (state.loginPhase === 'in_world' || state.loginPhase === 'entering_world' || state.loginPhase === 'swarm_tour') {
           if (keys.has('w') || keys.has('arrowup')) dy -= 1
           if (keys.has('s') || keys.has('arrowdown')) dy += 1
           if (keys.has('a') || keys.has('arrowleft')) dx -= 1
@@ -475,7 +478,7 @@ export function RioMundo() {
 
   useEffect(() => {
     // Auto-hide login when entering world or beyond
-    if (loginPhase === 'entering_world' || loginPhase === 'onboarding_chat' || loginPhase === 'in_world') {
+    if (loginPhase === 'entering_world' || loginPhase === 'onboarding_chat' || loginPhase === 'in_world' || loginPhase === 'swarm_tour') {
       setShowLogin(false)
     }
   }, [loginPhase])
@@ -553,6 +556,9 @@ export function RioMundo() {
       case 'onboarding_chat':
         am.crossfadeMusic('worldPeaceful', 1500)
         break
+      case 'swarm_tour':
+        am.crossfadeMusic('worldAdventure', 1500)
+        break
       case 'in_world':
         // Solo cambiar si no está ya sonando worldPeaceful o worldTension
         const current = am.getCurrentMusicKey?.() || ''
@@ -567,7 +573,6 @@ export function RioMundo() {
 
   const handleOnboardingComplete = useCallback(async (data: Record<string, string | number>) => {
     setShowOnboarding(false)
-    useRioMundoStore.getState().setLoginPhase('in_world')
     useRioMundoStore.getState().setMundoListo(true)
 
     // Activate first tributary
@@ -597,7 +602,18 @@ export function RioMundo() {
         edad: data.edad || 18,
       })
     }
-  }, [])
+
+    // Iniciar Swarm Tour en lugar de ir directo a in_world
+    if (beeRef.current && dialogRef.current && swarmBeesRef.current) {
+      tourRef.current.setRefs(beeRef.current, dialogRef.current, swarmBeesRef.current)
+      tourRef.current.setSpeakFunction(beeSpeak)
+      setShowTourSkip(true)
+      tourRef.current.start()
+    } else {
+      // Fallback si no hay refs: ir directo a in_world
+      useRioMundoStore.getState().setLoginPhase('in_world')
+    }
+  }, [beeSpeak])
 
   // ─── Portal interaction ─────────────────────────────────────────────────────
 
@@ -790,6 +806,21 @@ export function RioMundo() {
           controller={onboardingRef.current}
           onComplete={handleOnboardingComplete}
         />
+      )}
+
+      {/* Swarm Tour Skip Button */}
+      {showTourSkip && (
+        <div className="absolute top-4 left-4 z-50 pointer-events-auto">
+          <button
+            onClick={() => {
+              tourRef.current.skip()
+              setShowTourSkip(false)
+            }}
+            className="px-4 py-2 bg-[#1a1f3a]/80 backdrop-blur-sm border border-[#fbbf24]/30 text-[#fbbf24] hover:bg-[#1a1f3a] rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+          >
+            Saltar Tour
+          </button>
+        </div>
       )}
     </div>
   )

@@ -16,6 +16,9 @@ export class RioBee {
   private targetX: number = 0
   private targetY: number = 0
   private lastState: BeeState = 'following'
+  private destinationX: number | null = null
+  private destinationY: number | null = null
+  private onArrivalCallback: (() => void) | null = null
 
   constructor(app: Application, renderer: IsometricRenderer, camera: RioCamera) {
     this.app = app
@@ -59,7 +62,23 @@ export class RioBee {
 
     const off = dirOffsets[playerState.direction] || { dx: 0, dy: -2 }
 
-    if (beeState === 'talking') {
+    // Si hay un destino absoluto (flyTo), priorizarlo
+    if (this.destinationX !== null && this.destinationY !== null) {
+      this.targetX = this.destinationX
+      this.targetY = this.destinationY
+      
+      // Verificar si llegó al destino
+      const dist = Math.hypot(this.targetX - playerState.x, this.targetY - playerState.y)
+      if (dist < 2) {
+        // Llegó al destino
+        this.destinationX = null
+        this.destinationY = null
+        if (this.onArrivalCallback) {
+          this.onArrivalCallback()
+          this.onArrivalCallback = null
+        }
+      }
+    } else if (beeState === 'talking') {
       // Quedarse quieta cerca del jugador, no moverse
       if (this.lastState !== 'talking') {
         // Al entrar en talking, fijar posición actual cerca del jugador
@@ -76,7 +95,7 @@ export class RioBee {
       this.targetY = playerState.y + off.dy * 3
     }
 
-    // Smooth movement (solo si no está talking)
+    // Smooth movement
     const currentX = parseFloat(this.container.x.toString()) || this.renderer.isoToScreen(playerState.x, playerState.y).x
     const currentY = parseFloat(this.container.y.toString()) || this.renderer.isoToScreen(playerState.x, playerState.y).y
 
@@ -187,6 +206,18 @@ export class RioBee {
 
   getPosition(): { x: number; y: number } {
     return { x: this.targetX, y: this.targetY }
+  }
+
+  flyTo(isoX: number, isoY: number, onArrival?: () => void) {
+    this.destinationX = isoX
+    this.destinationY = isoY
+    this.onArrivalCallback = onArrival || null
+  }
+
+  cancelFlyTo() {
+    this.destinationX = null
+    this.destinationY = null
+    this.onArrivalCallback = null
   }
 
   destroy() {

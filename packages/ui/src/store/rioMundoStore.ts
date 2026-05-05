@@ -166,6 +166,13 @@ const initialState: State = {
   logroActivo: null,
   isGenerating: false,
 
+  // ─── Swarm Tour ──────────────────────────────────────────────────────────────
+  tourActivo: false,
+  tourStep: 0,
+  tourAgentesVisitados: [] as string[],
+  tourSkipeado: false,
+  tourAgenteActual: null as string | null,
+
   loginSearchResult: null,
   ttsAudioQueue: [],
 
@@ -282,6 +289,14 @@ export interface RioMundoStore extends State {
   setAgentStatus: (agentId: string, status: AgentStatus) => void
   setCoordinatorStatus: (status: CoordinatorState['status'], currentWorker?: string | null) => void
   setIsGenerating: (isGenerating: boolean) => void
+
+  // ─── Swarm Tour ────────────────────────────────────────────────────────────────
+  iniciarTour: () => void
+  skipTour: () => void
+  setTourStep: (step: number) => void
+  marcarAgenteVisitado: (agentId: string) => void
+  setTourAgenteActual: (agentId: string | null) => void
+  finalizarTour: () => void
 
   // ─── Login WS Result ─────────────────────────────────────────────────────────
   setLoginSearchResult: (result: { found: boolean; profile?: StudentProfile } | null) => void
@@ -561,6 +576,33 @@ export const useRioMundoStore = create<RioMundoStore>()((set, get) => ({
     },
   })),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
+
+  // ─── Swarm Tour ────────────────────────────────────────────────────────────────
+
+  iniciarTour: () => set({
+    tourActivo: true,
+    tourStep: 0,
+    tourAgentesVisitados: [],
+    tourSkipeado: false,
+    tourAgenteActual: null,
+    loginPhase: 'swarm_tour',
+  }),
+  skipTour: () => set({
+    tourSkipeado: true,
+    tourActivo: false,
+    loginPhase: 'in_world',
+  }),
+  setTourStep: (tourStep) => set({ tourStep }),
+  marcarAgenteVisitado: (agentId) => set((s) => ({
+    tourAgentesVisitados: [...s.tourAgentesVisitados, agentId],
+  })),
+  setTourAgenteActual: (tourAgenteActual) => set({ tourAgenteActual }),
+  finalizarTour: () => set({
+    tourActivo: false,
+    tourStep: 0,
+    tourAgenteActual: null,
+    loginPhase: 'in_world',
+  }),
 
   // ─── Login WS Result ─────────────────────────────────────────────────────────
 
