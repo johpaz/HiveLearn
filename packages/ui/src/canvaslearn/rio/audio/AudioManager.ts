@@ -42,22 +42,41 @@ export class AudioManager {
 
   async init(settings?: Partial<AudioSettings>) {
     if (this.ctx) return
-    this.ctx = new AudioContext()
-    this.musicGain = this.ctx.createGain()
-    this.sfxGain = this.ctx.createGain()
-    this.musicGain.connect(this.ctx.destination)
-    this.sfxGain.connect(this.ctx.destination)
+    
+    try {
+      const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext
+      this.ctx = new AudioContextClass()
+      console.log('[AudioManager] AudioContext created. State:', this.ctx!.state)
+      
+      this.musicGain = this.ctx!.createGain()
+      this.sfxGain = this.ctx!.createGain()
+      this.musicGain.connect(this.ctx!.destination)
+      this.sfxGain.connect(this.ctx!.destination)
 
-    if (settings) {
-      this.settings = { ...this.settings, ...settings }
+      if (settings) {
+        this.settings = { ...this.settings, ...settings }
+      }
+      this.applyVolumes()
+
+      // Try to resume immediately if suspended (though it might need a gesture)
+      if (this.ctx!.state === 'suspended') {
+        this.ctx!.resume().catch(() => {
+          console.log('[AudioManager] Context suspended, waiting for user interaction.')
+        })
+      }
+    } catch (e) {
+      console.error('[AudioManager] Failed to initialize AudioContext:', e)
     }
-    this.applyVolumes()
   }
 
-  ensureCtx() {
-    if (!this.ctx) this.init()
+  async ensureCtx() {
+    if (!this.ctx) await this.init()
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume()
+      try {
+        await this.ctx.resume()
+      } catch (e) {
+        console.warn('[AudioManager] Failed to resume context:', e)
+      }
     }
   }
 
@@ -71,27 +90,61 @@ export class AudioManager {
   }
 
   async preloadAssets(assets: Record<AudioKey, string>): Promise<void> {
-    this.ensureCtx()
-    if (!this.ctx) return
+    await this.ensureCtx()
+    if (!this.ctx) {
+      console.error('[AudioManager] Cannot preload assets: No AudioContext')
+      return
+    }
 
     const entries = Object.entries(assets)
-    const promises = entries.map(async ([key, url]) => {
+    console.log(`[AudioManager] Starting sequential preload of ${entries.length} assets...`)
+    
+    for (const [key, url] of entries) {
       try {
         const resp = await fetch(url)
+        const contentType = resp.headers.get('content-type') || 'unknown'
+        
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText} (Type: ${contentType})`)
+        }
+        
         const arrayBuffer = await resp.arrayBuffer()
-        const audioBuffer = await this.ctx!.decodeAudioData(arrayBuffer)
+        if (arrayBuffer.byteLength === 0) {
+          throw new Error(`Empty buffer received for ${url}`)
+        }
+
+        // Log first bytes to identify content
+        const bytes = new Uint8Array(arrayBuffer.slice(0, 16))
+        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')
+        console.log(`[AudioManager] Loading ${key}: ${arrayBuffer.byteLength} bytes, type=${contentType}, magic=${hex}`)
+        
+        if (this.ctx?.state === 'closed') {
+          throw new Error('AudioContext is closed')
+        }
+
+        // Use promise-based decodeAudioData with callback fallback
+        let audioBuffer: AudioBuffer
+        try {
+          audioBuffer = await this.ctx!.decodeAudioData(arrayBuffer)
+        } catch (decodeError) {
+          console.warn(`[AudioManager] Promise-based decode failed for ${key}, trying callback...`, decodeError)
+          audioBuffer = await new Promise((resolve, reject) => {
+            this.ctx!.decodeAudioData(arrayBuffer, resolve, reject)
+          })
+        }
+        
         this.buffers.set(key, audioBuffer)
       } catch (e) {
         console.warn(`[AudioManager] Failed to load: ${key} from ${url}`, e)
       }
-    })
+    }
 
-    await Promise.all(promises)
     this.loaded = true
+    console.log(`[AudioManager] Preload complete. Loaded ${this.buffers.size}/${entries.length} assets.`)
   }
 
-  playMusic(key: string) {
-    this.ensureCtx()
+  async playMusic(key: string) {
+    await this.ensureCtx()
     if (!this.ctx || !this.musicGain) return
 
     if (this.currentMusicKey === key && this.currentMusicSource) return
@@ -99,7 +152,10 @@ export class AudioManager {
     this.stopMusic()
 
     const buffer = this.buffers.get(key)
-    if (!buffer) return
+    if (!buffer) {
+      console.warn(`[AudioManager] Buffer not found for music: ${key}`)
+      return
+    }
 
     const source = this.ctx.createBufferSource()
     source.buffer = buffer
@@ -136,14 +192,14 @@ export class AudioManager {
   }
 
   /** Crossfade suave entre tracks de música */
-  crossfadeMusic(toKey: string, durationMs = 1500) {
-    this.ensureCtx()
+  async crossfadeMusic(toKey: string, durationMs = 1500) {
+    await this.ensureCtx()
     if (!this.ctx) return
     if (this.currentMusicKey === toKey) return
 
     const newBuffer = this.buffers.get(toKey)
     if (!newBuffer) {
-      console.warn(`[AudioManager] Buffer not found: ${toKey}`)
+      console.warn(`[AudioManager] Buffer not found for crossfade: ${toKey}`)
       return
     }
 
@@ -191,8 +247,8 @@ export class AudioManager {
   }
 
   /** Reproduce un track UNA VEZ (no loop), luego vuelve a previousMusicKey */
-  playMusicOnce(key: string) {
-    this.ensureCtx()
+  async playMusicOnce(key: string) {
+    await this.ensureCtx()
     if (!this.ctx || !this.musicGain) return
 
     const buffer = this.buffers.get(key)
@@ -232,8 +288,8 @@ export class AudioManager {
     }
   }
 
-  playSFX(key: string) {
-    this.ensureCtx()
+  async playSFX(key: string) {
+    await this.ensureCtx()
     if (!this.ctx || !this.sfxGain) return
 
     const buffer = this.buffers.get(key)

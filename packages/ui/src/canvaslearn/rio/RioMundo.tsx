@@ -131,7 +131,15 @@ export function RioMundo() {
       audioManagerRef.current = audioManager
       store.setAudioManager(audioManager)
 
-      audioManager.init().then(async () => {
+      const initialSettings = {
+        musicVolume: store.audioSettings.musicVolume / 100,
+        sfxVolume: store.audioSettings.sfxVolume / 100,
+        musicMuted: store.audioSettings.musicMuted,
+        sfxMuted: store.audioSettings.sfxMuted,
+      }
+
+
+      audioManager.init(initialSettings).then(async () => {
         await audioManager.preloadAssets({
           titleMusic: '/canvaslearn/art/music/title_theme.ogg',
           hubMusic: '/canvaslearn/art/music/hub_theme.ogg',
@@ -140,9 +148,9 @@ export function RioMundo() {
           worldTension: '/canvaslearn/art/music/world_tension.ogg',
           victoryTheme: '/canvaslearn/art/music/victory_theme.ogg',
           gameOverTheme: '/canvaslearn/art/music/game_over_theme.ogg',
-          'sfx/ambient_water': '/canvaslearn/art/sfx/ambient_water.ogg',
-          'sfx/ambient_forest': '/canvaslearn/art/sfx/ambient_forest.ogg',
-          'sfx/applause': '/canvaslearn/art/sfx/applause.ogg',
+          sfx_ambient_water: '/canvaslearn/art/sfx/ambient_water.ogg',
+          sfx_ambient_forest: '/canvaslearn/art/sfx/ambient_forest.ogg',
+          sfx_applause: '/canvaslearn/art/sfx/applause.ogg',
         })
         const settings = store.audioSettings
         audioManager.setMusicVolume(settings.musicVolume / 100)
@@ -157,13 +165,13 @@ export function RioMundo() {
       setIsReady(true)
     })
 
-  return () => {
+    return () => {
       loadingSceneRef.current?.destroy()
       audioManagerRef.current?.destroy()
       audioManagerRef.current = null
-    swarmBeesRef.current?.destroy()
-    entryAnimRef.current?.destroy()
-    waterRef.current?.destroy()
+      swarmBeesRef.current?.destroy()
+      entryAnimRef.current?.destroy()
+      waterRef.current?.destroy()
       dialogRef.current?.destroy()
       beeRef.current?.destroy()
       playerRef.current?.destroy()
@@ -249,19 +257,19 @@ export function RioMundo() {
       const dialog = new RioDialog(app, renderer)
       dialogRef.current = dialog
 
-    const water = new RioWaterSystem(app, renderer)
-    water.setMap(world)
-    waterRef.current = water
+      const water = new RioWaterSystem(app, renderer)
+      water.setMap(world)
+      waterRef.current = water
 
-    const swarmBees = new RioSwarmBees(app, renderer, camera)
-    swarmBees.initialize(world.tributaries)
-    swarmBeesRef.current = swarmBees
+      const swarmBees = new RioSwarmBees(app, renderer, camera)
+      swarmBees.initialize(world.tributaries)
+      swarmBeesRef.current = swarmBees
 
-    // Wire existing agent statuses from store
-    const existingStatuses = useRioMundoStore.getState().agentStatuses
-    for (const [agentId, status] of Object.entries(existingStatuses)) {
-      swarmBees.updateAgentStatus(agentId, status)
-    }
+      // Wire existing agent statuses from store
+      const existingStatuses = useRioMundoStore.getState().agentStatuses
+      for (const [agentId, status] of Object.entries(existingStatuses)) {
+        swarmBees.updateAgentStatus(agentId, status)
+      }
 
       useRioMundoStore.getState().setJugadorPosicion(world.spawn.x, world.spawn.y)
 
@@ -339,34 +347,34 @@ export function RioMundo() {
         return
       }
 
-        // Update player movement
-        if (playerRef.current && mapRef.current) {
-          let dx = 0
-          let dy = 0
+      // Update player movement
+      if (playerRef.current && mapRef.current) {
+        let dx = 0
+        let dy = 0
 
-          if (state.loginPhase === 'in_world' || state.loginPhase === 'entering_world') {
-            if (keys.has('w') || keys.has('arrowup')) dy -= 1
-            if (keys.has('s') || keys.has('arrowdown')) dy += 1
-            if (keys.has('a') || keys.has('arrowleft')) dx -= 1
-            if (keys.has('d') || keys.has('arrowright')) dx += 1
+        if (state.loginPhase === 'in_world' || state.loginPhase === 'entering_world') {
+          if (keys.has('w') || keys.has('arrowup')) dy -= 1
+          if (keys.has('s') || keys.has('arrowdown')) dy += 1
+          if (keys.has('a') || keys.has('arrowleft')) dx -= 1
+          if (keys.has('d') || keys.has('arrowright')) dx += 1
 
-            const mouseTarget = mouseTargetRef.current
-            if (mouseTarget && dx === 0 && dy === 0) {
-              const diffX = mouseTarget.x - state.jugador.x
-              const diffY = mouseTarget.y - state.jugador.y
-              const dist = Math.sqrt(diffX * diffX + diffY * diffY)
-              if (dist > 0.15) {
-                dx = diffX / dist
-                dy = diffY / dist
-              } else {
-                mouseTargetRef.current = null
-              }
-            } else if (dx !== 0 || dy !== 0) {
+          const mouseTarget = mouseTargetRef.current
+          if (mouseTarget && dx === 0 && dy === 0) {
+            const diffX = mouseTarget.x - state.jugador.x
+            const diffY = mouseTarget.y - state.jugador.y
+            const dist = Math.sqrt(diffX * diffX + diffY * diffY)
+            if (dist > 0.15) {
+              dx = diffX / dist
+              dy = diffY / dist
+            } else {
               mouseTargetRef.current = null
             }
+          } else if (dx !== 0 || dy !== 0) {
+            mouseTargetRef.current = null
           }
+        }
 
-          if (dx !== 0 || dy !== 0) {
+        if (dx !== 0 || dy !== 0) {
           const speed = state.jugador.animation === 'correr' ? ISO_CONFIG.PLAYER_RUN_SPEED : ISO_CONFIG.PLAYER_SPEED
           const newX = state.jugador.x + dx * speed * dt
           const newY = state.jugador.y + dy * speed * dt
@@ -408,22 +416,25 @@ export function RioMundo() {
       // Update bee
       if (beeRef.current) {
         beeRef.current.update(state.jugador, state.beeState, dt, time)
+        // Guardar posición de la abeja en el store para que las burbujas de diálogo se posicionen sobre ella
+        const beePos = beeRef.current.getPosition()
+        useRioMundoStore.getState().setBeePosicion(beePos.x, beePos.y)
       }
 
-    // Update water
-    if (waterRef.current) {
-      waterRef.current.update(dt, time)
-    }
+      // Update water
+      if (waterRef.current) {
+        waterRef.current.update(dt, time)
+      }
 
-    // Update swarm bees
-    if (swarmBeesRef.current) {
-      swarmBeesRef.current.update(time)
-    }
+      // Update swarm bees
+      if (swarmBeesRef.current) {
+        swarmBeesRef.current.update(time)
+      }
 
-    // Update entry animation
-    if (entryAnimRef.current) {
-      entryAnimRef.current.update(time)
-    }
+      // Update entry animation
+      if (entryAnimRef.current) {
+        entryAnimRef.current.update(time)
+      }
 
       // Update dialog bubbles
       if (dialogRef.current) {
@@ -475,36 +486,56 @@ export function RioMundo() {
         initWorld()
       }
 
-  const waitForWorld = () => {
-      if (rendererRef.current && playerRef.current) {
-        // Start entry animation
-        const spawn = mapRef.current?.spawn || { x: 20, y: 37 }
-        const entryAnim = new RioEntryAnimation(
-          appRef.current!,
-          rendererRef.current,
-          cameraRef.current!,
-          spawn.x,
-          spawn.y,
-        )
-        entryAnimRef.current = entryAnim
-        entryAnim.start(waterRef.current || undefined, playerRef.current || undefined, beeRef.current || undefined)
+      const waitForWorld = () => {
+        if (rendererRef.current && playerRef.current) {
+          // Start entry animation
+          const spawn = mapRef.current?.spawn || { x: 20, y: 37 }
+          const entryAnim = new RioEntryAnimation(
+            appRef.current!,
+            rendererRef.current,
+            cameraRef.current!,
+            spawn.x,
+            spawn.y,
+          )
+          entryAnimRef.current = entryAnim
+          entryAnim.start(waterRef.current || undefined, playerRef.current || undefined, beeRef.current || undefined)
 
-        entryAnim.setOnComplete(() => {
-          entryAnim.destroy()
-          entryAnimRef.current = null
-        })
+          entryAnim.setOnComplete(() => {
+            entryAnim.destroy()
+            entryAnimRef.current = null
+          })
 
-        setTimeout(() => {
-          useRioMundoStore.getState().setLoginPhase('onboarding_chat')
-          setShowOnboarding(true)
-          onboardingRef.current.setDialogRef(dialogRef.current)
-          onboardingRef.current.setSpeakFunction(beeSpeak)
-          onboardingRef.current.start()
-        }, 1500)
-      } else {
-        setTimeout(waitForWorld, 100)
+          setTimeout(() => {
+            const store = useRioMundoStore.getState()
+            const o = store.onboarding
+            const hasNombre = o.nombre?.trim() || store.perfil?.nombre || store.nickname?.trim()
+            const hasEdad = o.edad != null || store.perfil?.edad != null
+            const hasTema = o.tema?.trim()
+            const hasObjetivo = o.objetivo?.trim()
+            const hasEstilo = o.estilo?.trim()
+            const allComplete = hasNombre && hasEdad && hasTema && hasObjetivo && hasEstilo
+
+            if (allComplete) {
+              // Onboarding ya completo — saltar directo al mundo
+              handleOnboardingComplete({
+                nombre: o.nombre || store.perfil?.nombre || '',
+                edad: o.edad ?? store.perfil?.edad ?? 18,
+                tema: o.tema || '',
+                objetivo: o.objetivo || '',
+                estilo: o.estilo || '',
+              })
+            } else {
+              useRioMundoStore.getState().setLoginPhase('onboarding_chat')
+              setShowOnboarding(true)
+              onboardingRef.current.setDialogRef(dialogRef.current)
+              onboardingRef.current.setSpeakFunction(beeSpeak)
+              onboardingRef.current.start()
+            }
+          }, 1500)
+        } else {
+          setTimeout(waitForWorld, 100)
+        }
       }
-    }
       waitForWorld()
     }
   }, [loginPhase, isReady, initWorld])
@@ -555,9 +586,10 @@ export function RioMundo() {
       }
     }
 
-    // Create student profile on server via WS
-    const sendWs = useRioMundoStore.getState().sendWsMessage
-    if (sendWs) {
+    // Create student profile on server via WS (solo si es alumno nuevo)
+    const state = useRioMundoStore.getState()
+    const sendWs = state.sendWsMessage
+    if (sendWs && !state.alumnoId) {
       sendWs({
         tipo: 'crear_alumno',
         nombre: data.nombre || data.nickname || 'Estudiante',

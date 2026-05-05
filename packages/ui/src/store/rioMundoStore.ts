@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
 import type { StudentProfile, LessonProgram, SwarmProgress, AgentStatus, CoordinatorState } from '@hivelearn/core'
 import type { MundoLogro } from '@hivelearn/core'
 import type {
@@ -142,6 +141,7 @@ const initialState: State = {
   respuestas: {},
 
   beeState: 'following' as BeeState,
+  beePosicion: { x: 0, y: 0 },
   dialogBubbles: [],
 
   portal: {
@@ -195,6 +195,8 @@ export interface RioMundoStore extends State {
   setMeta: (meta: string) => void
   setTema: (tema: string) => void
   setProvider: (providerId: string, modelId: string | null) => void
+  setSelectedProvider: (providerId: string) => void
+  setSelectedModel: (modelId: string | null) => void
   setWsConnectionId: (id: string | null) => void
 
   // ─── Audio & Connection ────────────────────────────────────────────────────
@@ -264,6 +266,7 @@ export interface RioMundoStore extends State {
 
   // ─── Bee ──────────────────────────────────────────────────────────────────────
   setBeeState: (state: BeeState) => void
+  setBeePosicion: (x: number, y: number) => void
   addDialogBubble: (bubble: DialogBubble) => void
   removeDialogBubble: (id: string) => void
   clearDialogBubbles: () => void
@@ -297,7 +300,7 @@ let xpFloatKey = 0
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
+export const useRioMundoStore = create<RioMundoStore>()((set, get) => ({
   ...initialState,
 
   // ─── Identity ────────────────────────────────────────────────────────────────
@@ -323,6 +326,8 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
   setMeta: (meta) => set({ meta }),
   setTema: (tema) => set({ tema }),
   setProvider: (selectedProviderId, selectedModelId) => set({ selectedProviderId, selectedModelId }),
+  setSelectedProvider: (selectedProviderId) => set({ selectedProviderId }),
+  setSelectedModel: (selectedModelId) => set({ selectedModelId }),
   setWsConnectionId: (wsConnectionId) => set({ wsConnectionId }),
 
   // ─── Audio & Connection ──────────────────────────────────────────────────────
@@ -497,6 +502,7 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
   // ─── Bee ───────────────────────────────────────────────────────────────────────
 
   setBeeState: (beeState) => set({ beeState }),
+  setBeePosicion: (x, y) => set({ beePosicion: { x, y } }),
   addDialogBubble: (bubble) => set((s) => ({
     dialogBubbles: [...s.dialogBubbles, bubble],
   })),
@@ -591,39 +597,4 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
 
   resetCompleto: () => set(initialState),
 
-}), {
-  name: 'hivelearn-rio-v1',
-  storage: createJSONStorage(() => localStorage),
-  partialize: (state) => ({
-    alumnoId: state.alumnoId,
-    nickname: state.nickname,
-    perfil: state.perfil,
-    avatar: state.avatar,
-    instanceId: state.instanceId,
-    sessionId: state.sessionId,
-    programaUuid: state.programaUuid,
-    programa: state.programa,
-    tema: state.tema,
-    meta: state.meta,
-    xpTotal: state.xpTotal,
-    nivelActual: state.nivelActual,
-    vidas: state.vidas,
-    racha: state.racha,
-    mejorRacha: state.mejorRacha,
-    hintCount: state.hintCount,
-    logros: state.logros,
-    coleccionables: state.coleccionables,
-    modulosCompletados: state.modulosCompletados,
-    tributaries: state.tributaries,
-    zonaActual: state.zonaActual,
-    beeState: state.beeState,
-    portal: state.portal,
-  selectedProviderId: state.selectedProviderId,
-  selectedModelId: state.selectedModelId,
-  audioSettings: state.audioSettings,
-  onboarding: {
-      ...state.onboarding,
-      isTyping: false,
-    },
-  }),
 }))

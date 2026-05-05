@@ -95,9 +95,17 @@ export function useRioLive(): RioLiveState {
             case 'buscar_nickname_result': {
               const store = useRioMundoStore.getState()
               if (message.payload?.ok && message.payload?.found && message.payload?.profile) {
-                store.setPerfil(message.payload.profile)
-                store.setAlumnoId(message.payload.profile.alumnoId)
-                store.setNickname(message.payload.profile.nickname)
+                const profile = message.payload.profile
+                store.setPerfil(profile)
+                store.setAlumnoId(profile.alumnoId)
+                store.setNickname(profile.nickname)
+                // Poblar onboarding con datos del perfil para saludo personalizado
+                if (profile.nombre) {
+                  store.updateOnboarding({ nombre: profile.nombre })
+                }
+                if (profile.edad != null) {
+                  store.updateOnboarding({ edad: profile.edad })
+                }
               }
               store.setLoginSearchResult({
                 found: !!message.payload?.found,
@@ -131,6 +139,27 @@ export function useRioLive(): RioLiveState {
               const store = useRioMundoStore.getState()
               if (message.payload?.ok && message.payload?.programa_uuid) {
                 store.setProgramaUuid(message.payload.programa_uuid)
+                if (message.payload?.tema) store.setTema(message.payload.tema)
+                if (message.payload?.objetivo) store.setMeta(message.payload.objetivo)
+                if (message.payload?.xp_total !== undefined) {
+                  // agregarXP espera un delta, calculamos la diferencia
+                  const delta = message.payload.xp_total - store.xpTotal
+                  if (delta > 0) store.agregarXP(delta)
+                }
+              }
+              return
+            }
+            case 'reanudar_sesion_result': {
+              const store = useRioMundoStore.getState()
+              if (message.payload?.ok && message.payload?.sessionId) {
+                store.setSessionId(message.payload.sessionId)
+                store.setProgramaUuid(message.payload.programa_uuid || message.payload.sessionId)
+                if (message.payload?.tema) store.setTema(message.payload.tema)
+                if (message.payload?.objetivo) store.setMeta(message.payload.objetivo)
+                if (message.payload?.xp_total !== undefined && message.payload.xp_total > store.xpTotal) {
+                  store.agregarXP(message.payload.xp_total - store.xpTotal)
+                }
+                store.setLoginPhase('in_world')
               }
               return
             }

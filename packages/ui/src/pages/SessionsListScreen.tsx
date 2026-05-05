@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLessonStore } from '../store/lessonStore'
+import { useRioMundoStore } from '../store/rioMundoStore'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
 import type { LessonProgram } from '@hivelearn/core'
 import { Input } from '@/components/ui/input'
@@ -55,7 +55,7 @@ interface ModelRow { id: string; name: string; provider_id: string; context_wind
 // ── Model Config Popover ─────────────────────────────────────────────────────
 
 function ModelConfigPopover({ onClose }: { onClose: () => void }) {
-  const { selectedProviderId, selectedModelId, setSelectedProvider, setSelectedModel } = useLessonStore()
+  const { selectedProviderId, selectedModelId, setSelectedProvider, setSelectedModel } = useRioMundoStore()
   const [providers, setProviders] = useState<ProviderRow[]>([])
   const [models, setModels] = useState<ModelRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -154,7 +154,7 @@ function timeAgo(dateStr: string): string {
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export function SessionsListScreen() {
-  const { reset, restoreSession, selectedModelId } = useLessonStore()
+  const { reset, restoreSession, selectedModelId } = useRioMundoStore()
   const navigate = useNavigate()
 
   const [sessions, setSessions] = useState<SessionRow[]>([])
@@ -211,13 +211,11 @@ export function SessionsListScreen() {
         perfilAdaptacion: { duracionSesion: 20, nodosRecomendados: nodos.length, tono: 'amigable' },
       }
 
-      restoreSession(program, {
+      restoreSession({
+        programa: program,
         sessionId: data.session_id,
         xpTotal: data.xp_total ?? 0,
-        nodosCompletados: [],
-        lastNodeId: data.last_node_id ?? null,
-        sessionStateJson: data.session_state_json ?? null,
-        paused_at: data.paused_at ?? null,
+        modulosCompletados: [],
       })
 
       if (session.completada) {

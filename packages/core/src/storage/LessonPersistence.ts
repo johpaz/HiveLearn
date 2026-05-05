@@ -22,6 +22,8 @@ export interface SessionData {
   nodosCompletados: number
   evaluacionPuntaje: number | null
   completada: boolean
+  tema: string
+  objetivo: string
 }
 
 export interface SessionRow {
@@ -219,11 +221,23 @@ export class LessonPersistence {
   createSessionWithMeta(sessionId: string | undefined, alumnoId: string, tema: string, objetivo: string): string {
     this.ensureStudentProfile(alumnoId)
     const sid = sessionId ?? crypto.randomUUID()
-    this.db.query(`
-      INSERT OR IGNORE INTO hl_sessions
-        (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
-      VALUES (?, ?, NULL, ?, ?, 0, 'Aprendiz', '[]', 0, NULL, 0)
-    `).run(sid, alumnoId, tema, objetivo)
+
+    // Si la sesión ya existe (ej. createEarlySession del swarm), actualizar tema/objetivo.
+    // Si no existe, insertar nueva fila.
+    const existing = this.db.query('SELECT 1 FROM hl_sessions WHERE session_id = ?').get(sid)
+    if (existing) {
+      this.db.query(`
+        UPDATE hl_sessions
+        SET tema = ?, objetivo = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = ?
+      `).run(tema, objetivo, sid)
+    } else {
+      this.db.query(`
+        INSERT INTO hl_sessions
+          (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
+        VALUES (?, ?, NULL, ?, ?, 0, 'Aprendiz', '[]', 0, NULL, 0)
+      `).run(sid, alumnoId, tema, objetivo)
+    }
     return sid
   }
 
@@ -294,6 +308,8 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
+      tema: row.tema || '',
+      objetivo: row.objetivo || '',
     }
   }
 
@@ -312,6 +328,8 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
+      tema: row.tema || '',
+      objetivo: row.objetivo || '',
     }
   }
 

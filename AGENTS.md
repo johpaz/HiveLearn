@@ -62,7 +62,7 @@ Landing (/) → Nueva Sesion → Rio (/rio) siempre conectada al ws
 - Componente: `RioMundo` dentro de `RioMundoPage`. conectada al ws sin sesion.
 - Flujos internos:
   1. **Login**: nickname lookup(si existe traer los datos y pasarlos al storage para crear la sesion, se crea en la otra pantalla de juego, si no existe entra al avatar select y crea alumno) → avatar select → entering_world aca se hacen las preguntas de que quiere aprender y para que, guarda la sesion inicia el juego, debe tener indicador de conexion a ws con la velocidad.
-  2. **Onboarding bee**: conversacion guiada si no existe  nombre/edad/tema/objetivo/estilo se guarda en la bd,  si existe se saluda con el nombre y se pregunta tema/objetivo / estilo y crea la sesion en bd por ws.) Debe tener boton de salir y el boton de config sonidos,etc.
+  2. **Onboarding bee**: conversacion guiada,  saluda por   y pregunta por tema/objetivo/estilo se guarda en la bd,  si existe se saluda con el nombre y se pregunta tema/objetivo / estilo y crea la sesion en bd por ws.) Debe tener boton de salir y el boton de config sonidos,etc.
   3. **Creacion del programa** Aca entran los agentes a crear el programa con la interaccion del alumno. Termina y guarda en la bd el programa en bd para persistencia. Y a Jugar aprendiendo.
   3. **Exploracion libre**: WASD para caminar, Shift para correr,debe tener indicador de conexion a ws con la velocidad.
   4. **Interaccion con portales**: pararse sobre tile `portal_zona` → "Presiona E" → zoom in → overlay A2UI con contenido de la zona,debe tener indicador de conexion a ws con la velocidad.

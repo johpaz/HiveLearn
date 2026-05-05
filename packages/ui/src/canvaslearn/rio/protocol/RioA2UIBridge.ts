@@ -58,6 +58,14 @@ export class RioA2UIBridge {
 
   private procesarContenido(messages: any[]): void {
     this.a2uiMessageQueue.push(...messages)
+    // Sync with store so PortalOverlay can render them
+    const store = useRioMundoStore.getState()
+    store.setPortalMessages([...this.a2uiMessageQueue])
+
+    // If generating, ensure portal is visible for interaction
+    if (store.isGenerating && store.portal.phase === 'closed') {
+      store.setPortalPhase('open')
+    }
   }
 
   private procesarResultado(event: any): void {
@@ -269,11 +277,46 @@ export class RioA2UIBridge {
   // ─── Client → Server ──────────────────────────────────────────────────────────
 
   enviarRespuesta(moduloUuid: string, nodoId: string, respuesta: any, intentos: number): void {
-    // Will be sent via WebSocket manager
+    const store = useRioMundoStore.getState()
+    if (store.sendWsMessage) {
+      store.sendWsMessage({
+        tipo: 'accion',
+        session_id: this.sessionId,
+        alumno_id: this.alumnoId,
+        payload: {
+          mundo_evento: {
+            tipo: 'mundo:evaluar',
+            datos: {
+              modulo_uuid: moduloUuid,
+              nodo_id: nodoId,
+              respuesta,
+              intentos,
+              tiempo_respuesta_ms: Date.now(),
+            },
+          },
+        },
+      })
+    }
   }
 
   enviarInteraccionZona(zonaNumero: number, accion: 'entrar' | 'salir' | 'completar'): void {
-    // Will be sent via WebSocket manager
+    const store = useRioMundoStore.getState()
+    if (store.sendWsMessage) {
+      store.sendWsMessage({
+        tipo: 'accion',
+        session_id: this.sessionId,
+        alumno_id: this.alumnoId,
+        payload: {
+          mundo_evento: {
+            tipo: 'mundo:interaccion',
+            datos: {
+              zona_numero: zonaNumero,
+              accion,
+            },
+          },
+        },
+      })
+    }
   }
 
   // ─── Utilities ─────────────────────────────────────────────────────────────────
@@ -284,6 +327,7 @@ export class RioA2UIBridge {
 
   clearMessageQueue(): void {
     this.a2uiMessageQueue = []
+    useRioMundoStore.getState().setPortalMessages([])
   }
 
   destroy(): void {

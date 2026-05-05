@@ -78,12 +78,27 @@ export class RioDialog {
 
   update(dt: number) {
     const now = Date.now()
-    const beeState = useRioMundoStore.getState().beeState
+    const state = useRioMundoStore.getState()
+    const beeState = state.beeState
 
     for (const [id, bubble] of this.activeBubbles) {
-      // Position above bee
-      const playerState = useRioMundoStore.getState().jugador
-      const screenPos = this.renderer.isoToScreen(playerState.x, playerState.y - 2)
+      let screenPos: { x: number; y: number }
+
+      if (beeState === 'talking') {
+        // Position above bee — usar posición guardada en el store
+        const beePos = state.beePosicion
+        if (beePos.x !== 0 || beePos.y !== 0) {
+          screenPos = this.renderer.isoToScreen(beePos.x, beePos.y - 1)
+        } else {
+          // Fallback: posición del jugador
+          const playerState = state.jugador
+          screenPos = this.renderer.isoToScreen(playerState.x, playerState.y - 2)
+        }
+      } else {
+        // Position above player (default behavior)
+        const playerState = state.jugador
+        screenPos = this.renderer.isoToScreen(playerState.x, playerState.y - 2)
+      }
 
       // Float animation
       const floatY = Math.sin(now / 800 + bubble.createdAt) * 3

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useRioMundoStore } from '@/store/rioMundoStore'
 import { RioOnboardingController } from '../onboarding/RioOnboardingController'
+import { Volume2, VolumeX, SkipForward } from 'lucide-react'
 
 interface RioOnboardingChatProps {
   controller: RioOnboardingController
@@ -8,7 +9,7 @@ interface RioOnboardingChatProps {
 }
 
 export function RioOnboardingChat({ controller, onComplete }: RioOnboardingChatProps) {
-  const { onboarding, setBeeState } = useRioMundoStore()
+  const { onboarding, setBeeState, audioSettings, toggleMusicMuted, toggleSFXMuted } = useRioMundoStore()
   const [inputValue, setInputValue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -55,10 +56,48 @@ export function RioOnboardingChat({ controller, onComplete }: RioOnboardingChatP
     }
   }, [handleSubmit])
 
+  const handleSkip = useCallback(() => {
+    const store = useRioMundoStore.getState()
+    const o = store.onboarding
+    onComplete({
+      nombre: o.nombre || store.perfil?.nombre || '',
+      edad: o.edad ?? store.perfil?.edad ?? 18,
+      tema: o.tema || '',
+      objetivo: o.objetivo || '',
+      estilo: o.estilo || '',
+    })
+  }, [onComplete])
+
   const currentQuestion = controller.getCurrentQuestion()
 
   return (
     <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
+      {/* Top bar: Skip + Audio config */}
+      <div className="absolute top-4 right-4 flex items-center gap-2 pointer-events-auto z-50">
+        <button
+          onClick={toggleMusicMuted}
+          className="p-2 rounded-xl bg-[#1a1f3a]/80 backdrop-blur-sm border border-[#fbbf24]/20 text-[#fbbf24]/70 hover:text-[#fbbf24] hover:bg-[#1a1f3a] transition-all"
+          title={audioSettings.musicMuted ? 'Activar música' : 'Silenciar música'}
+        >
+          {audioSettings.musicMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={toggleSFXMuted}
+          className="p-2 rounded-xl bg-[#1a1f3a]/80 backdrop-blur-sm border border-[#fbbf24]/20 text-[#fbbf24]/70 hover:text-[#fbbf24] hover:bg-[#1a1f3a] transition-all"
+          title={audioSettings.sfxMuted ? 'Activar efectos' : 'Silenciar efectos'}
+        >
+          {audioSettings.sfxMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={handleSkip}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1a1f3a]/80 backdrop-blur-sm border border-[#fbbf24]/20 text-[#fbbf24]/70 hover:text-[#fbbf24] hover:bg-[#1a1f3a] transition-all text-xs font-bold uppercase tracking-wider"
+          title="Saltar al mundo"
+        >
+          <SkipForward className="w-4 h-4" />
+          <span className="hidden sm:inline">Saltar</span>
+        </button>
+      </div>
+
       {/* Chat history */}
       <div className="max-w-lg mx-auto mb-4 px-4 max-h-40 overflow-y-auto pointer-events-auto"
         style={{ scrollbarWidth: 'none' }}

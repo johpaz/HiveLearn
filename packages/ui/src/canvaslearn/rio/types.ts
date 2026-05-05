@@ -234,6 +234,7 @@ export interface RioMundoState {
 
   // ─── Bee ─────────────────────────────────────────────────────────────────────
   beeState: BeeState
+  beePosicion: { x: number; y: number }
   dialogBubbles: DialogBubble[]
 
   // ─── Portal Interaction ──────────────────────────────────────────────────────

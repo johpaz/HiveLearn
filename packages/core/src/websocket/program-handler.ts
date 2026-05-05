@@ -475,8 +475,114 @@ export async function reanudarPrograma(
   ws: ServerWebSocket<any>,
   sessionId: string
 ): Promise<void> {
-  // TODO: reconstruir sesión desde BD y continuar
-  sendError(ws, 'Reanudación aún no implementada.', true)
+  const persistence = new LessonPersistence()
+  const sessionData = persistence.getSession(sessionId)
+  if (!sessionData) {
+    sendError(ws, 'Sesión no encontrada.', false)
+    return
+  }
+
+  const curriculum = persistence.getCurriculumBySessionId(sessionId)
+  if (!curriculum) {
+    sendError(ws, 'Currículo no encontrado para esta sesión.', false)
+    return
+  }
+
+  const profile = persistence.getStudentProfile(sessionData.alumnoId)
+  if (!profile) {
+    sendError(ws, 'Perfil del alumno no encontrado.', false)
+    return
+  }
+
+  // Parsear zonas desde nodos_json del currículo
+  let zonas: any[] = []
+  try {
+    const parsed = JSON.parse(curriculum.nodos_json || '[]')
+    zonas = Array.isArray(parsed) ? parsed : []
+  } catch {
+    sendError(ws, 'Error parseando estructura del programa.', false)
+    return
+  }
+
+  // Determinar zona actual desde estado pausado o nodos completados
+  const stateRestored = persistence.restoreSessionState(sessionId)
+  const zonaActual = stateRestored?.lastNodeId
+    ? parseInt(stateRestored.lastNodeId.replace('zona-', '').replace('modulo-', '')) || 0
+    : sessionData.nodosCompletados || 0
+
+  // Reconstruir ProgramSession
+  const session: ProgramSession = {
+    sessionId,
+    alumnoId: sessionData.alumnoId,
+    nickname: profile.nickname || profile.nombre || 'Alumno',
+    perfil: profile,
+    meta: sessionData.tema || 'Aprendizaje',
+    estructura: { zonas },
+    zonaActual,
+    modulosCompletados: [],
+    xpTotal: sessionData.xpTotal,
+    logros: JSON.parse(sessionData.logrosJson || '[]'),
+    ws,
+    startTime: Date.now(),
+  }
+
+  activeSessions.set(sessionId, session)
+
+  // Enviar bienvenida
+  sendEvent(ws, {
+    tipo: 'mundo:bienvenida',
+    datos: {
+      nickname: session.nickname,
+      avatar: profile.avatar || '',
+      mensaje_agente: `¡Bienvenido de vuelta, ${session.nickname}! Continuamos con ${session.meta}.`,
+      programa_uuid: sessionId,
+      tema: session.meta,
+      nivel_previo: profile.ritmoAtencion || 'principiante',
+      reanudado: true,
+    },
+  })
+
+  // Abrir zonas previas como completadas
+  for (let i = 0; i < zonaActual && i < zonas.length; i++) {
+    const zona = zonas[i]
+    session.modulosCompletados.push(`modulo-${zona.numero ?? i + 1}`)
+    sendEvent(ws, {
+      tipo: 'mundo:abrir_modulo',
+      datos: {
+        modulo_uuid: `modulo-${zona.numero ?? i + 1}`,
+        titulo: zona.titulo || `Zona ${i + 1}`,
+        agente_id: zona.agente_id || AGENT_IDS.explanation,
+        zona_numero: zona.numero ?? i + 1,
+        tipo_pedagogico: zona.tipo_pedagogico || 'concepto',
+        xp_recompensa: zona.xp_recompensa || 10,
+        animacion: 'apertura',
+        estado: 'completado',
+      },
+    })
+  }
+
+  // Abrir zona actual
+  if (zonaActual < zonas.length) {
+    sendEvent(ws, {
+      tipo: 'mundo:abrir_modulo',
+      datos: {
+        modulo_uuid: `modulo-${zonas[zonaActual].numero ?? zonaActual + 1}`,
+        titulo: zonas[zonaActual].titulo || `Zona ${zonaActual + 1}`,
+        agente_id: zonas[zonaActual].agente_id || AGENT_IDS.explanation,
+        zona_numero: zonas[zonaActual].numero ?? zonaActual + 1,
+        tipo_pedagogico: zonas[zonaActual].tipo_pedagogico || 'concepto',
+        xp_recompensa: zonas[zonaActual].xp_recompensa || 10,
+        animacion: 'apertura',
+        estado: 'disponible',
+      },
+    })
+
+    // Generar y enviar contenido A2UI de zona actual
+    await abrirZona(session, zonaActual)
+  } else {
+    // Todas las zonas completadas
+    await completarPrograma(session)
+  }
 }
 
 // ─── Helpers para respuestas WS ──────────────────────────────────────────────
@@ -643,6 +749,12 @@ async function handleObtenerPrograma(ws: ServerWebSocket<any>, data: any): Promi
       ok: true,
       sessionId: latestSession.session_id,
       programa_uuid: latestSession.session_id,
+      tema: latestSession.tema || '',
+      objetivo: latestSession.objetivo || '',
+      xp_total: latestSession.xp_total ?? 0,
+      nodos_completados: latestSession.nodos_completados ?? 0,
+      total_nodos: latestSession.total_nodos ?? 0,
+      completada: !!latestSession.completada,
     })
   } catch (err) {
     log.error('[program] Error en obtener_programa', { error: (err as Error).message })
@@ -694,6 +806,76 @@ async function handleTTS(ws: ServerWebSocket<any>, data: any): Promise<void> {
   }
 }
 
+async function handleReanudarSesion(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { alumnoId } = data
+    if (!alumnoId) {
+      sendReply(ws, 'reanudar_sesion_result', { ok: false, error: 'alumnoId requerido' })
+      return
+    }
+
+    const persistence = new LessonPersistence()
+
+    // 1. Buscar sesión activa del alumno
+    const activeSession = persistence.getActiveSession(alumnoId)
+
+    // 2. Si no hay activa, buscar la última sesión completada
+    let sessionData = activeSession
+    if (!sessionData) {
+      const row = persistence.db.query(
+        `SELECT * FROM hl_sessions WHERE alumno_id = ? ORDER BY created_at DESC LIMIT 1`
+      ).get(alumnoId) as Record<string, any> | undefined
+      if (row) {
+        sessionData = {
+          sessionId: row.session_id,
+          alumnoId: row.alumno_id,
+          curriculoId: row.curriculo_id,
+          xpTotal: row.xp_total,
+          nivelAlcanzado: row.nivel_alcanzado,
+          logrosJson: row.logros_json,
+          nodosCompletados: row.nodos_completados,
+          evaluacionPuntaje: row.evaluacion_puntaje,
+          completada: !!row.completada,
+          tema: row.tema || '',
+          objetivo: row.objetivo || '',
+        }
+      }
+    }
+
+    if (!sessionData) {
+      sendReply(ws, 'reanudar_sesion_result', { ok: false, error: 'No hay sesiones para este alumno' })
+      return
+    }
+
+    // 3. Verificar que tenga currículo (estructura generada)
+    const curriculum = persistence.getCurriculumBySessionId(sessionData.sessionId)
+    if (!curriculum) {
+      sendReply(ws, 'reanudar_sesion_result', {
+        ok: false,
+        error: 'La sesión aún no tiene programa generado.',
+        sessionId: sessionData.sessionId,
+      })
+      return
+    }
+
+    // 4. Reanudar programa
+    await reanudarPrograma(ws, sessionData.sessionId)
+
+    sendReply(ws, 'reanudar_sesion_result', {
+      ok: true,
+      sessionId: sessionData.sessionId,
+      programa_uuid: sessionData.sessionId,
+      tema: sessionData.tema,
+      objetivo: sessionData.objetivo,
+      xp_total: sessionData.xpTotal,
+      completada: sessionData.completada,
+    })
+  } catch (err) {
+    log.error('[program] Error en reanudar_sesion', { error: (err as Error).message })
+    sendReply(ws, 'reanudar_sesion_result', { ok: false, error: 'Error al reanudar sesión' })
+  }
+}
+
 // ─── Router principal ────────────────────────────────────────────────────────
 
 export async function handleProgramMessage(
@@ -723,6 +905,9 @@ export async function handleProgramMessage(
       break
     case 'obtener_programa':
       await handleObtenerPrograma(ws, data)
+      break
+    case 'reanudar_sesion':
+      await handleReanudarSesion(ws, data)
       break
     case 'sync_progress':
       await handleSyncProgress(ws, data)

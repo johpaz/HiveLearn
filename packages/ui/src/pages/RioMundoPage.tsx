@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RioMundo } from '@/canvaslearn/rio'
 import { RioA2UIBridge } from '@/canvaslearn/rio/protocol/RioA2UIBridge'
-import { IsometricRenderer } from '@/canvaslearn/rio/renderer/IsometricRenderer'
 import { useRioMundoStore } from '@/store/rioMundoStore'
 import { useRioLive } from '@/hooks/useRioLive'
 import { ConnectionIndicator } from '@/components/ConnectionIndicator'
@@ -40,10 +39,12 @@ export function RioMundoPage() {
       rioRef: rioBridgeObj.current,
     })
     bridgeRef.current = bridge
+    ;(useRioMundoStore.getState() as any)._rioBridge = bridge
 
     return () => {
       bridge.destroy()
       bridgeRef.current = null
+      ;(useRioMundoStore.getState() as any)._rioBridge = null
     }
   }, [sessionId, alumnoId])
 
@@ -66,14 +67,25 @@ export function RioMundoPage() {
       if (perfil.alumnoId) {
         setAlumnoId(perfil.alumnoId)
       }
-      const savedUuid = useRioMundoStore.getState().programaUuid
+      const state = useRioMundoStore.getState()
+      const savedUuid = state.programaUuid
       if (savedUuid) {
+        // Ya tenemos programa en memoria, entrar directo
         setLoginPhase('entering_world')
       } else {
-        setLoginPhase('entering_world')
+        // Sin programa en memoria — pedir reanudación desde BD
+        if (state.sendWsMessage && perfil.alumnoId) {
+          state.sendWsMessage({
+            tipo: 'reanudar_sesion',
+            alumnoId: perfil.alumnoId,
+          })
+        }
+        // Mientras llega la respuesta, quedarse en restoring_session
+        // El handler en useRioLive cambiará a 'in_world' si hay sesión
+        // Si no hay sesión, el usuario debe esperar o reiniciar
       }
     }
-  }, [loginPhase, perfil])
+  }, [loginPhase, perfil, setAlumnoId, setLoginPhase])
 
   // ─── Create session when entering world ─────────────────────────────────────
 

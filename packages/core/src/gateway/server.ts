@@ -75,11 +75,13 @@ hlSwarmEmitter.on('swarm:completed', (e: any) => {
 
 // Helper para servir archivos estáticos de la UI
 async function serveUIFile(pathname: string): Promise<Response | null> {
-  const subPath = pathname === '/' || !pathname.includes('.') ? '/index.html' : pathname
+  log.info(`[serveUI] Request: ${pathname}`)
+  const isHtmlRequest = pathname === '/' || !pathname.includes('.') || pathname.endsWith('.html')
+  const subPath = isHtmlRequest ? '/index.html' : pathname
 
   // First try registered embedded UI bundle (from CLI postbuild)
   if (embeddedUIBundle) {
-    const entry = embeddedUIBundle.get(subPath) ?? embeddedUIBundle.get('/index.html')
+    const entry = embeddedUIBundle.get(subPath)
     if (entry) {
       return new Response(entry.data as any, {
         headers: {
@@ -87,6 +89,15 @@ async function serveUIFile(pathname: string): Promise<Response | null> {
           'Cache-Control': subPath === '/index.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
         },
       })
+    }
+    // Only fallback to index.html if it's an HTML request
+    if (isHtmlRequest) {
+      const indexEntry = embeddedUIBundle.get('/index.html')
+      if (indexEntry) {
+        return new Response(indexEntry.data as any, {
+          headers: { 'Content-Type': 'text/html', 'Cache-Control': 'no-cache' },
+        })
+      }
     }
   }
 
@@ -104,13 +115,37 @@ async function serveUIFile(pathname: string): Promise<Response | null> {
     const filePath = join(uiDir, subPath)
     const file = Bun.file(filePath)
     if (await file.exists()) {
-      return new Response(file)
+      const ext = subPath.split('.').pop()?.toLowerCase()
+      const mimeTypes: Record<string, string> = {
+        'ogg': 'audio/ogg',
+        'mp3': 'audio/mpeg',
+        'wav': 'audio/wav',
+        'js': 'application/javascript',
+        'css': 'text/css',
+        'html': 'text/html',
+        'json': 'application/json',
+        'png': 'image/png',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'svg': 'image/svg+xml'
+      }
+      
+      return new Response(file, {
+        headers: {
+          'Content-Type': mimeTypes[ext || ''] || 'application/octet-stream',
+          'Cache-Control': 'public, max-age=3600'
+        }
+      })
     }
 
-    // SPA fallback
-    const indexFile = Bun.file(join(uiDir, 'index.html'))
-    if (await indexFile.exists()) {
-      return new Response(indexFile)
+    // SPA fallback - only for HTML requests
+    if (isHtmlRequest) {
+      const indexFile = Bun.file(join(uiDir, 'index.html'))
+      if (await indexFile.exists()) {
+        return new Response(indexFile, {
+          headers: { 'Content-Type': 'text/html' }
+        })
+      }
     }
   }
 

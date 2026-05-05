@@ -9,7 +9,7 @@ interface PortalOverlayProps {
 }
 
 export function PortalOverlay({ onClose, onAnswer }: PortalOverlayProps) {
-  const { portal, zonaActual, tributaries } = useRioMundoStore()
+  const { portal, zonaActual, tributaries, isGenerating } = useRioMundoStore()
   const { phase, a2uiMessages } = portal
   const [feedback, setFeedback] = useState<{
     correcto: boolean
@@ -50,10 +50,14 @@ export function PortalOverlay({ onClose, onAnswer }: PortalOverlayProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-[#1a1f3a]/95 border border-[#fbbf24]/30 rounded-t-2xl">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{getTipoEmoji(zonaTipo)}</span>
+            <span className="text-2xl">{isGenerating ? '🐝' : getTipoEmoji(zonaTipo)}</span>
             <div>
-              <h2 className="text-[#fbbf24] font-bold text-lg">{zonaTitulo}</h2>
-              <p className="text-[#888] text-xs">{getTipoLabel(zonaTipo)}</p>
+              <h2 className="text-[#fbbf24] font-bold text-lg">
+                {isGenerating ? 'Interacción con el Swarm' : zonaTitulo}
+              </h2>
+              <p className="text-[#888] text-xs">
+                {isGenerating ? 'Responde para personalizar tu programa' : getTipoLabel(zonaTipo)}
+              </p>
             </div>
           </div>
 

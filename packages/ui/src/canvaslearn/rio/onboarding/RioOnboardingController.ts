@@ -88,21 +88,98 @@ export class RioOnboardingController {
     return ONBOARDING_QUESTIONS[this.currentStep]
   }
 
-  async start(flowStep: 'nombre' = 'nombre') {
-    this.currentStep = ONBOARDING_QUESTIONS.findIndex(q => q.step === flowStep)
+  /**
+   * Determina el primer paso faltante del onboarding basado en el store.
+   * Si todos los campos están completos, devuelve null.
+   */
+  private detectFirstMissingStep(): OnboardingStep | null {
+    const store = useRioMundoStore.getState()
+    const o = store.onboarding
+
+    // Si ya tiene perfil (alumno existente), nombre y edad ya están en el perfil o nickname
+    const hasNombre = o.nombre?.trim() || store.perfil?.nombre || store.nickname?.trim()
+    const hasEdad = o.edad != null || store.perfil?.edad != null
+    const hasTema = o.tema?.trim()
+    const hasObjetivo = o.objetivo?.trim()
+    const hasEstilo = o.estilo?.trim()
+
+    if (!hasNombre) return 'nombre'
+    if (!hasEdad) return 'edad'
+    if (!hasTema) return 'tema'
+    if (!hasObjetivo) return 'objetivo'
+    if (!hasEstilo) return 'estilo'
+    return null
+  }
+
+  async start(flowStep?: OnboardingStep) {
+    const store = useRioMundoStore.getState()
+
+    // Determinar paso inicial: el proporcionado, o el primero faltante en el store
+    const firstMissing = flowStep ?? this.detectFirstMissingStep()
+
+    if (!firstMissing) {
+      // Todos los campos completos — no iniciar chat, el caller debe saltar a in_world
+      return
+    }
+
+    this.currentStep = ONBOARDING_QUESTIONS.findIndex(q => q.step === firstMissing)
     if (this.currentStep === -1) this.currentStep = 0
     this.onboardingMessages = []
+
+    // Poblar collectedData con valores ya existentes en el store/perfil/nickname
     this.collectedData = {}
+    const o = store.onboarding
+    const perfil = store.perfil
+    const name = o.nombre || perfil?.nombre || store.nickname || ''
+    if (name) this.collectedData.nombre = name as string
+    if (o.edad != null || perfil?.edad != null) this.collectedData.edad = (o.edad ?? perfil?.edad) as number
+    if (o.tema) this.collectedData.tema = o.tema
+    if (o.objetivo) this.collectedData.objetivo = o.objetivo
+    if (o.estilo) this.collectedData.estilo = o.estilo
 
-    const store = useRioMundoStore.getState()
     store.setBeeState('talking')
-    store.setOnboardingStep(flowStep)
+    store.setOnboardingStep(firstMissing)
 
-    const question = this.getCurrentQuestion()
-    if (question && this.dialogRef) {
-      this.dialogRef.showBeeMessage(question.question, 6000, true)
+    // Mensaje inicial personalizado
+    const existingName = (o.nombre || perfil?.nombre || store.nickname || '') as string
+    const isReturning = !!existingName && firstMissing !== 'nombre'
+
+    let welcomeMessage: string | null = null
+    let questionMessage: string | null = null
+
+    if (isReturning) {
+      welcomeMessage = `Hola de nuevo, ${existingName}! Vamos a continuar tu camino de aprendizaje.`
+      const question = this.getCurrentQuestion()
+      questionMessage = question?.question ?? null
+    } else {
+      const question = this.getCurrentQuestion()
+      questionMessage = question?.question ?? 'Bienvenido al Rio!'
+    }
+
+    // Mostrar saludo de bienvenida (texto + voz)
+    if (welcomeMessage) {
+      this.onboardingMessages.push({ role: 'bee', text: welcomeMessage })
+      store.addOnboardingMessage('bee', welcomeMessage)
+      if (this.dialogRef) {
+        this.dialogRef.showBeeMessage(welcomeMessage, 5000, false)
+      }
       if (this.speakFn) {
-        await this.speakFn(question.question)
+        await this.speakFn(welcomeMessage)
+      }
+      // Pequeña pausa entre saludo y pregunta
+      await new Promise(r => setTimeout(r, 800))
+    }
+
+    // Mostrar primera pregunta (texto + voz)
+    if (questionMessage) {
+      const personalizedQuestion = questionMessage.replace('{tema}', this.collectedData.tema as string || '')
+      this.onboardingMessages.push({ role: 'bee', text: personalizedQuestion })
+      store.addOnboardingMessage('bee', personalizedQuestion)
+      if (this.dialogRef) {
+        this.dialogRef.showBeeMessage(personalizedQuestion, 6000, true)
+      }
+      if (this.speakFn) {
+        await this.speakFn(personalizedQuestion)
       }
     }
   }
@@ -113,6 +190,8 @@ export class RioOnboardingController {
 
     const error = question.validate(response)
     if (error) {
+      const store = useRioMundoStore.getState()
+      store.addOnboardingMessage('bee', error)
       if (this.dialogRef) {
         this.dialogRef.showBeeMessage(error, 3000, false)
       }
@@ -123,9 +202,10 @@ export class RioOnboardingController {
     }
 
     this.collectedData[question.step] = question.type === 'number' ? parseInt(response) : response.trim()
-    this.onboardingMessages.push({ role: 'student', text: response })
 
     const store = useRioMundoStore.getState()
+    store.addOnboardingMessage('student', response)
+    this.onboardingMessages.push({ role: 'student', text: response })
 
     switch (question.step) {
       case 'nombre':
@@ -146,6 +226,7 @@ export class RioOnboardingController {
     }
 
     const reaction = question.beeReaction(response)
+    store.addOnboardingMessage('bee', reaction)
     this.onboardingMessages.push({ role: 'bee', text: reaction })
 
     if (this.dialogRef) {
@@ -162,6 +243,7 @@ export class RioOnboardingController {
         store.completeOnboarding()
         store.setBeeState('celebrating')
         const finalMsg = 'Listo! Tu camino esta preparado. Vamos a explorar!'
+        store.addOnboardingMessage('bee', finalMsg)
         if (this.dialogRef) {
           this.dialogRef.showBeeMessage(finalMsg, 4000)
         }
@@ -179,6 +261,7 @@ export class RioOnboardingController {
       const personalizedQuestion = nextQuestion.question.replace('{tema}', this.collectedData.tema as string || '')
       setTimeout(async () => {
         store.setOnboardingStep(nextQuestion.step)
+        store.addOnboardingMessage('bee', personalizedQuestion)
         if (this.dialogRef) {
           this.dialogRef.showBeeMessage(personalizedQuestion, 6000, true)
         }

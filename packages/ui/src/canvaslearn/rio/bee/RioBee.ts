@@ -59,7 +59,15 @@ export class RioBee {
 
     const off = dirOffsets[playerState.direction] || { dx: 0, dy: -2 }
 
-    if (beeState === 'following' || beeState === 'idle') {
+    if (beeState === 'talking') {
+      // Quedarse quieta cerca del jugador, no moverse
+      if (this.lastState !== 'talking') {
+        // Al entrar en talking, fijar posición actual cerca del jugador
+        this.targetX = playerState.x + off.dx
+        this.targetY = playerState.y + off.dy
+      }
+      // No actualizar target, quedarse en posición fija
+    } else if (beeState === 'following' || beeState === 'idle') {
       this.targetX = playerState.x + off.dx
       this.targetY = playerState.y + off.dy
     } else if (beeState === 'guiding' || beeState === 'flying_ahead') {
@@ -68,12 +76,12 @@ export class RioBee {
       this.targetY = playerState.y + off.dy * 3
     }
 
-    // Smooth movement
+    // Smooth movement (solo si no está talking)
     const currentX = parseFloat(this.container.x.toString()) || this.renderer.isoToScreen(playerState.x, playerState.y).x
     const currentY = parseFloat(this.container.y.toString()) || this.renderer.isoToScreen(playerState.x, playerState.y).y
 
     const targetScreen = this.renderer.isoToScreen(this.targetX, this.targetY)
-    const lerpSpeed = 0.05
+    const lerpSpeed = beeState === 'talking' ? 0.02 : 0.05
 
     this.container.x += (targetScreen.x - this.container.x) * lerpSpeed
     this.container.y += (targetScreen.y - this.container.y) * lerpSpeed

@@ -161,8 +161,14 @@ export function RioLogin() {
     if (store.nickname && store.perfil?.alumnoId) {
       setInputNickname(store.nickname)
       setExistingProfile(store.perfil as ExistingProfile)
-      setStep('existing_welcome')
+      // Alumno existente restaurado: saltar directo al mundo
+      updateOnboarding({
+        nombre: store.perfil.nombre,
+        edad: store.perfil.edad,
+      })
+      setLoginPhase('entering_world')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ─── Step 1: Nickname lookup ─────────────────────────────────────────────
@@ -176,11 +182,17 @@ export function RioLogin() {
     if (!loginSearchResult) return
 
     if (loginSearchResult.found && loginSearchResult.profile) {
-      setExistingProfile(loginSearchResult.profile as ExistingProfile)
-      setNickname(loginSearchResult.profile.nickname)
-      setAlumnoId(loginSearchResult.profile.alumnoId)
-      setPerfil(loginSearchResult.profile as StudentProfile)
-      setStep('existing_welcome')
+      const profile = loginSearchResult.profile as ExistingProfile
+      setExistingProfile(profile)
+      setNickname(profile.nickname)
+      setAlumnoId(profile.alumnoId)
+      setPerfil(profile as StudentProfile)
+      // Alumno existente: saltar directo al mundo, el onboarding bee manejará tema/objetivo si falta
+      updateOnboarding({
+        nombre: profile.nombre,
+        edad: profile.edad,
+      })
+      setLoginPhase('entering_world')
     } else {
       setNickname(inputNickname.trim())
       setNewNombre(inputNickname.trim())

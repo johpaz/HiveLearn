@@ -82,18 +82,6 @@ function getAtPath(obj: Record<string, any>, path: string): string | undefined {
   return cur != null ? String(cur) : undefined
 }
 
-function setAtPath(obj: Record<string, any>, path: string, value: any): Record<string, any> {
-  const parts = path.replace(/^\//, '').split('/')
-  const result = { ...obj }
-  let cur: any = result
-  for (let i = 0; i < parts.length - 1; i++) {
-    cur[parts[i]] = { ...(cur[parts[i]] ?? {}) }
-    cur = cur[parts[i]]
-  }
-  cur[parts[parts.length - 1]] = value
-  return result
-}
-
 // ─── Renderer principal ───────────────────────────────────────────────────────
 
 export function A2UIRenderer({ messages, onAction, isLoading, feedback }: A2UIRendererProps) {
