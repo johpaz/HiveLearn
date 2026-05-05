@@ -55,7 +55,7 @@ export function RioMundoPage() {
     currentAgentName,
     error: wsError,
     a2uiMessages,
-  } = useRioLive(sessionId, alumnoId)
+  } = useRioLive()
 
   // ─── Handle login phase transitions ────────────────────────────────────────
 
@@ -107,56 +107,41 @@ export function RioMundoPage() {
       xpAcumulado: 0,
     }
 
-    // Create session + start generation
+    // Create session + start generation via WS
     const metaStr = `Tema: ${tema}. Objetivo: ${objetivo}. Estilo: ${estilo}.`
     setTema(tema)
 
-    fetch('/api/hivelearn/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const sendWs = useRioMundoStore.getState().sendWsMessage
+    if (sendWs) {
+      sendWs({
+        tipo: 'crear_sesion',
         alumnoId,
         sessionId,
         tema,
         objetivo,
-      }),
-    }).then(() => {
-      // Start generation
-      return fetch('/api/hivelearn/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          perfil: perfilData,
-          meta: metaStr,
-          sessionId,
-          alumnoId,
-        }),
       })
-    }).then(res => res.json()).then(data => {
-      if (data.swarmId || data.ok) {
-        useRioMundoStore.getState().setIsGenerating(true)
-      }
-    }).catch(err => {
-      console.error('[RioMundoPage] Error starting generation:', err)
-    })
+      sendWs({
+        tipo: 'iniciar_generacion',
+        perfil: perfilData,
+        meta: metaStr,
+        sessionId,
+        alumnoId,
+      })
+    }
   }, [loginPhase, sessionId, alumnoId, programaUuid])
 
   // ─── Fetch program when generation completes ─────────────────────────────────
 
   useEffect(() => {
     if (!isGenerating && sessionId && !programaUuid && alumnoId) {
-      // Generation might have completed, try to fetch program
-      fetch(`/api/hivelearn/sessions?alumnoId=${alumnoId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.sessions && data.sessions.length > 0) {
-            const latestSession = data.sessions[data.sessions.length - 1]
-            if (latestSession.programa_uuid) {
-              setProgramaUuid(latestSession.programa_uuid)
-            }
-          }
+      // Generation might have completed, request program via WS
+      const sendWs = useRioMundoStore.getState().sendWsMessage
+      if (sendWs) {
+        sendWs({
+          tipo: 'obtener_programa',
+          alumnoId,
         })
-        .catch(() => {})
+      }
     }
   }, [isGenerating, sessionId, programaUuid, alumnoId])
 
@@ -173,28 +158,26 @@ export function RioMundoPage() {
     <div className="relative w-full h-screen overflow-hidden bg-[#1a3c2a]">
       <RioMundo />
 
-      {/* Connection status indicator */}
-      {loginPhase === 'in_world' && (
-        <div className="absolute top-4 right-4 pointer-events-none">
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-sm ${
-            isConnected
-              ? 'bg-[#22c55e]/20 border border-[#22c55e]/40 text-[#22c55e]'
-              : 'bg-[#ef4444]/20 border border-[#ef4444]/40 text-[#ef4444]'
-          }`}>
-            {isConnected ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
-                Conectado
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse" />
-                Reconectando...
-              </>
-            )}
-          </div>
+      {/* Connection status indicator — visible en todas las fases del juego */}
+      <div className="absolute top-4 right-4 pointer-events-none z-50">
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-sm ${
+          isConnected
+            ? 'bg-[#22c55e]/20 border border-[#22c55e]/40 text-[#22c55e]'
+            : 'bg-[#ef4444]/20 border border-[#ef4444]/40 text-[#ef4444]'
+        }`}>
+          {isConnected ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
+              Conectado
+            </>
+          ) : (
+            <>
+              <span className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse" />
+              Reconectando...
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Generation progress */}
       {isGenerating && loginPhase === 'in_world' && (

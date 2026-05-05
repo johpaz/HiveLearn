@@ -9,7 +9,6 @@
  */
 
 import { logger } from '../utils/logger';
-import { getCorrelationIdFromHeaders, requireCorrelationId } from '../utils/correlation-id';
 import { HiveLearnError } from '../errors';
 
 const log = logger.child('error-handler');
@@ -21,7 +20,6 @@ export interface ErrorResponse {
   error: string;
   code: string;
   statusCode: number;
-  correlationId?: string;
   meta?: Record<string, unknown>;
   stack?: string; // Solo en desarrollo
 }
@@ -51,7 +49,6 @@ function isServerError(error: Error): boolean {
  */
 export function formatErrorResponse(
   error: Error,
-  correlationId?: string,
   isDev: boolean = false
 ): ErrorResponse {
   const isHiveLearnError = error instanceof HiveLearnError;
@@ -60,7 +57,6 @@ export function formatErrorResponse(
     error: error.message || 'An unexpected error occurred',
     code: isHiveLearnError ? error.code : 'INTERNAL_ERROR',
     statusCode: isHiveLearnError ? error.statusCode : 500,
-    correlationId: correlationId || requireCorrelationId(),
   };
 
   // Incluir meta si existe
@@ -84,25 +80,18 @@ export function handleErrorResponse(
   req?: Request,
   isDev: boolean = false
 ): Response {
-  // Extraer correlation ID del request o usar uno existente
-  const correlationId = req 
-    ? (getCorrelationIdFromHeaders(req.headers) || requireCorrelationId())
-    : requireCorrelationId();
-
-  const errorResponse = formatErrorResponse(error, correlationId, isDev);
+  const errorResponse = formatErrorResponse(error, isDev);
 
   // Logging apropiado según tipo de error
   if (isExpectedError(error)) {
     log.warn('Expected error', {
       code: errorResponse.code,
       message: error.message,
-      correlationId,
     });
   } else if (isServerError(error)) {
     log.error('Server error', {
       code: errorResponse.code,
       message: error.message,
-      correlationId,
       stack: error.stack,
     });
   }
@@ -112,7 +101,6 @@ export function handleErrorResponse(
     status: errorResponse.statusCode,
     headers: {
       'Content-Type': 'application/json',
-      'X-Correlation-ID': correlationId,
       'X-Error-Code': errorResponse.code,
     },
   });
@@ -163,8 +151,6 @@ export async function withErrorHandling<T>(
   try {
     return await fn();
   } catch (error) {
-    const correlationId = requireCorrelationId();
-    
     // Si ya es un HiveLearnError, re-lanzar
     if (error instanceof HiveLearnError) {
       throw error;
@@ -177,8 +163,7 @@ export async function withErrorHandling<T>(
       defaultStatusCode,
       {
         originalError: (error as Error).message,
-      },
-      correlationId
+      }
     );
 
     throw wrappedError;
@@ -192,12 +177,9 @@ export async function withErrorHandling<T>(
 export function setupGlobalErrorHandlers(): void {
   // Errores no capturados en promesas
   process.on('unhandledRejection', (reason, promise) => {
-    const correlationId = requireCorrelationId();
-    
     log.error('Unhandled Promise Rejection', {
       reason: (reason as Error)?.message || String(reason),
       stack: (reason as Error)?.stack,
-      correlationId,
     });
     
     // En producción, podríamos querer salir del proceso
@@ -209,12 +191,9 @@ export function setupGlobalErrorHandlers(): void {
 
   // Errores no capturados excepcionales
   process.on('uncaughtException', (error) => {
-    const correlationId = requireCorrelationId();
-    
     log.error('Uncaught Exception', {
       message: error.message,
       stack: error.stack,
-      correlationId,
     });
     
     // En producción, reiniciar el proceso

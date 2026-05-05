@@ -23,13 +23,6 @@ Bun.serve({
       return new Response(null, { status: 204, headers: CORS })
     }
 
-    if (req.method === "GET" && url.pathname === "/health") {
-      return Response.json(
-        { ok: true, voice: DEFAULT_VOICE, voices: listVoices() },
-        { headers: CORS }
-      )
-    }
-
     if (req.method === "GET" && url.pathname === "/voices") {
       return Response.json({ voices: listVoices() }, { headers: CORS })
     }

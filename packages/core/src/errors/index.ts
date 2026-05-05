@@ -17,14 +17,12 @@ export class HiveLearnError extends Error {
   public readonly statusCode: number;
   public readonly meta?: Record<string, unknown>;
   public readonly timestamp: string;
-  public readonly correlationId?: string;
 
   constructor(
     message: string,
     code: string,
     statusCode: number = 500,
-    meta?: Record<string, unknown>,
-    correlationId?: string
+    meta?: Record<string, unknown>
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -32,7 +30,6 @@ export class HiveLearnError extends Error {
     this.statusCode = statusCode;
     this.meta = meta;
     this.timestamp = new Date().toISOString();
-    this.correlationId = correlationId;
 
     // Capture stack trace
     Error.captureStackTrace(this, this.constructor);
@@ -46,7 +43,6 @@ export class HiveLearnError extends Error {
       statusCode: this.statusCode,
       meta: this.meta,
       timestamp: this.timestamp,
-      correlationId: this.correlationId,
     };
   }
 }

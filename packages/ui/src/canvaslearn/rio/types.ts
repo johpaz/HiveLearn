@@ -176,6 +176,9 @@ export interface RioMundoState {
   tema: string | null
   meta: string
 
+  // ─── WebSocket Connection ───────────────────────────────────────────────────
+  wsConnectionId: string | null
+
   // ─── Login / Phase ──────────────────────────────────────────────────────────
   loginPhase: LoginPhase
 
@@ -189,6 +192,7 @@ export interface RioMundoState {
   // ─── Audio & Connection ────────────────────────────────────────────────────
   audioSettings: import('./audio/AudioManager').AudioSettings
   wsStatus: import('./audio/AudioManager').WsStatus
+  sendWsMessage: ((msg: { tipo: string; [k: string]: any }) => void) | null
 
   // ─── World State ─────────────────────────────────────────────────────────────
   mundoListo: boolean
@@ -244,6 +248,17 @@ export interface RioMundoState {
   nivelUpActivo: boolean
   logroActivo: MundoLogro['datos'] | null
   isGenerating: boolean
+
+  // ─── Login WS Result ─────────────────────────────────────────────────────────
+  loginSearchResult: { found: boolean; profile?: StudentProfile } | null
+
+  // ─── TTS Audio Queue ─────────────────────────────────────────────────────────
+  ttsAudioQueue: Array<{ audioBase64: string }>
+
+  // ─── Audio ───────────────────────────────────────────────────────────────────
+  audioManager: import('./audio/AudioManager').AudioManager | null
+  audioReady: boolean
+  beeLoaderVisible: boolean
 
   // ─── Time ────────────────────────────────────────────────────────────────────
   tiempoInicioSesion: number | null

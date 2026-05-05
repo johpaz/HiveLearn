@@ -1,6 +1,6 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { useRioMundoStore } from '@/store/rioMundoStore'
 
-const TTS_URL = import.meta.env.VITE_TTS_URL || ''
 const TTS_TIMEOUT = 10000
 
 let audioContext: AudioContext | null = null
@@ -52,37 +52,78 @@ async function playNextInQueue(): Promise<void> {
   }
 }
 
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = atob(base64)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return bytes.buffer
+}
+
 export function useTTSSpeak() {
-  const queueRef = useRef<boolean>(false)
+  const processedRef = useRef<number>(0)
+
+  // Watch store ttsAudioQueue and play new items
+  const ttsAudioQueue = useRioMundoStore(s => s.ttsAudioQueue)
+
+  useEffect(() => {
+    if (ttsAudioQueue.length > processedRef.current) {
+      // Process new items
+      for (let i = processedRef.current; i < ttsAudioQueue.length; i++) {
+        const item = ttsAudioQueue[i]
+        if (item?.audioBase64) {
+          try {
+            const audioData = base64ToArrayBuffer(item.audioBase64)
+            audioQueue.push(audioData)
+          } catch {
+            // Ignore decode errors
+          }
+        }
+      }
+      processedRef.current = ttsAudioQueue.length
+      if (!isPlaying) {
+        playNextInQueue()
+      }
+    }
+  }, [ttsAudioQueue])
 
   const speak = useCallback(async (text: string, voice?: string): Promise<void> => {
     if (!text.trim()) return
 
-    const baseUrl = TTS_URL || `${window.location.protocol}//${window.location.hostname}:8787`
-
-    try {
-      const res = await fetch(`${baseUrl}/api/tts/synthesize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim(), voice: voice || 'sorah' }),
-        signal: AbortSignal.timeout(TTS_TIMEOUT),
-      })
-
-      if (!res.ok) {
-        fallbackBrowserSpeak(text)
-        return
-      }
-
-      const audioData = await res.arrayBuffer()
-      audioQueue.push(audioData)
-
-      if (!isPlaying) {
-        await playNextInQueue()
-      }
-    } catch {
+    const sendWsMessage = useRioMundoStore.getState().sendWsMessage
+    if (!sendWsMessage) {
       fallbackBrowserSpeak(text)
+      return
     }
+
+    // Send TTS request via WS
+    sendWsMessage({
+      tipo: 'tts:synthesize',
+      text: text.trim(),
+      voice: voice || 'sorah',
+    })
+
+    // Fallback timeout: if no audio arrives in time, use browser TTS
+    const timeoutId = setTimeout(() => {
+      fallbackBrowserSpeak(text)
+    }, TTS_TIMEOUT)
+
+    // Store timeout to cancel if audio arrives
+    ;(useTTSSpeak as any)._pendingTimeouts = (useTTSSpeak as any)._pendingTimeouts || new Map()
+    ;(useTTSSpeak as any)._pendingTimeouts.set(text.trim(), timeoutId)
   }, [])
+
+  // Cancel pending timeout when audio arrives for this text
+  useEffect(() => {
+    const pending = (useTTSSpeak as any)._pendingTimeouts as Map<string, ReturnType<typeof setTimeout>> | undefined
+    if (pending && ttsAudioQueue.length > 0) {
+      // Just clear all pending timeouts when ANY audio arrives
+      // (Bee speaks one phrase at a time, so this is safe)
+      pending.forEach((id) => clearTimeout(id))
+      pending.clear()
+    }
+  }, [ttsAudioQueue])
 
   const stop = useCallback(() => {
     stopCurrent()

@@ -32,6 +32,26 @@ export default defineConfig(({ mode }) => {
           target: "ws://localhost:8787",
           ws: true,
         },
+        "/hivelearn-onboarding": {
+          target: "ws://localhost:8787",
+          ws: true,
+        },
+        "/hivelearn-lesson": {
+          target: "ws://localhost:8787",
+          ws: true,
+        },
+        "/hivelearn-events": {
+          target: "ws://localhost:8787",
+          ws: true,
+        },
+        "/hivelearn-program": {
+          target: "ws://localhost:8787",
+          ws: true,
+        },
+        "/hivelearn-game": {
+          target: "ws://localhost:8787",
+          ws: true,
+        },
       },
     },
     build: {

@@ -300,3 +300,5 @@ export function getActiveElements<T extends Record<string, any>>(
   const results = db.query<T, []>(`SELECT * FROM ${table} WHERE active = 1`).all()
   return results
 }
+
+

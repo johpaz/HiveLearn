@@ -10,17 +10,13 @@
  */
 
 import { logger, redact } from '../utils/logger';
-import { getOrGenerateCorrelationId, generateCorrelationId } from '../utils/correlation-id';
 
 const log = logger.child('request-logger');
-
-
 
 interface RequestLogMeta {
   method: string;
   url: string;
   path: string;
-  correlationId: string;
   userAgent?: string;
   ip?: string;
   body?: unknown;
@@ -68,11 +64,9 @@ function shouldRedactBody(path: string, method: string): boolean {
  * Log de inicio de request
  */
 export function logRequestStart(req: Request): { 
-  correlationId: string; 
   startTime: number;
   path: string;
 } {
-  const correlationId = getOrGenerateCorrelationId(req);
   const startTime = Date.now();
   const url = req.url;
   const path = extractPath(url);
@@ -81,13 +75,12 @@ export function logRequestStart(req: Request): {
     method: req.method,
     url,
     path,
-    correlationId,
     userAgent: req.headers.get('user-agent') || undefined,
   };
 
   log.debug('← Request started', meta);
 
-  return { correlationId, startTime, path };
+  return { startTime, path };
 }
 
 /**
@@ -95,7 +88,6 @@ export function logRequestStart(req: Request): {
  */
 export function logRequestSuccess(
   startTime: number,
-  correlationId: string,
   path: string,
   statusCode: number,
   responseSize?: number
@@ -106,7 +98,6 @@ export function logRequestSuccess(
     method: 'GET', // Se debería pasar el método real
     url: path,
     path,
-    correlationId,
     duration,
     statusCode,
   };
@@ -126,8 +117,7 @@ export function logRequestSuccess(
  * Log de body de request (redactado si es sensible)
  */
 export async function logRequestBody(
-  req: Request,
-  correlationId: string
+  req: Request
 ): Promise<void> {
   const path = extractPath(req.url);
   const shouldRedact = shouldRedactBody(path, req.method);
@@ -155,7 +145,6 @@ export async function logRequestBody(
     const displayBody = shouldRedact ? (redact({ body }) as any).body : body;
 
     log.debug('Request body', {
-      correlationId,
       path,
       contentType,
       body: displayBody,
@@ -163,7 +152,6 @@ export async function logRequestBody(
   } catch (error) {
     // No fallar si no podemos leer el body
     log.debug('Could not read request body', {
-      correlationId,
       path,
       error: (error as Error).message,
     });
@@ -191,16 +179,16 @@ export function withRequestLogging<T extends (req: Request) => Promise<Response>
   const { logBody = true, slowThresholdMs = 1000 } = options;
 
   return (async (req: Request): Promise<Response> => {
-    const { correlationId, startTime, path } = logRequestStart(req);
+    const { startTime, path } = logRequestStart(req);
 
     // Loggear body si está habilitado
     if (logBody) {
-      await logRequestBody(req, correlationId);
+      await logRequestBody(req);
     }
 
     const response = await handler(req);
     
-    logRequestSuccess(startTime, correlationId, path, response.status);
+    logRequestSuccess(startTime, path, response.status);
     
     return response;
   }) as T;

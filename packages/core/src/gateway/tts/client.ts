@@ -8,7 +8,7 @@ const TTS_URL = process.env.TTS_URL ?? "http://localhost:5500"
 
 export async function isTTSAvailable(): Promise<boolean> {
   try {
-    const res = await fetch(`${TTS_URL}/health`, {
+    const res = await fetch(`${TTS_URL}/voices`, {
       signal: AbortSignal.timeout(500),
     })
     return res.ok

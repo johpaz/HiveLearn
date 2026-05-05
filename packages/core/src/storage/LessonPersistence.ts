@@ -109,7 +109,7 @@ export class LessonPersistence {
       profile.nickname,
       profile.avatar,
       profile.edad,
-      profile.estado,
+      profile.estado ?? 'onboarding',
       profile.alumnoId,
       profile.alumnoId,
       profile.alumnoId,
@@ -122,8 +122,7 @@ export class LessonPersistence {
     return {
       alumnoId: row.alumno_id,
       nombre: row.nombre,
-      nickname: row.nickname || row.apodo,
-      apodo: row.apodo || '',
+      nickname: row.nickname || row.apodo || '',
       avatar: row.avatar,
       edad: row.edad,
       estado: row.estado,
@@ -217,13 +216,15 @@ export class LessonPersistence {
   }
 
   /** Crea sesión desde el onboarding con tema y objetivo reales */
-  createSessionWithMeta(sessionId: string, alumnoId: string, tema: string, objetivo: string): void {
+  createSessionWithMeta(sessionId: string | undefined, alumnoId: string, tema: string, objetivo: string): string {
     this.ensureStudentProfile(alumnoId)
+    const sid = sessionId ?? crypto.randomUUID()
     this.db.query(`
       INSERT OR IGNORE INTO hl_sessions
         (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
       VALUES (?, ?, NULL, ?, ?, 0, 'Aprendiz', '[]', 0, NULL, 0)
-    `).run(sessionId, alumnoId, tema, objetivo)
+    `).run(sid, alumnoId, tema, objetivo)
+    return sid
   }
 
   /** Actualiza la columna individual del agente en hl_sessions (progreso incremental del swarm) */
@@ -512,7 +513,6 @@ export class LessonPersistence {
         alumnoId,
         nombre: fieldValue,
         nickname: fieldValue,
-        apodo: fieldValue,
         avatar: 'tigre_azul',
         edad: 0,
         estado: 'onboarding',
@@ -874,14 +874,14 @@ export class LessonPersistence {
     const params: any[] = []
 
     if (opts?.q) {
-      sql += ` AND (p.nombre LIKE ? OR p.nickname LIKE ? OR p.apodo LIKE ?)`
+      sql += ` AND (p.nombre LIKE ? OR p.nickname LIKE ?)`
       const like = `%${opts.q}%`
-      params.push(like, like, like)
+      params.push(like, like)
     }
 
     if (opts?.nickname) {
-      sql += ` AND (p.nickname = ? OR p.apodo = ? OR p.nombre = ?)`
-      params.push(opts.nickname, opts.nickname, opts.nickname)
+      sql += ` AND (p.nickname = ? OR p.nombre = ?)`
+      params.push(opts.nickname, opts.nickname)
     }
 
     sql += ` ORDER BY s.created_at DESC`

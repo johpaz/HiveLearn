@@ -13,8 +13,17 @@ import { logger } from '../utils/logger'
 import { runHiveLearnAgent } from '../agent/runner'
 import { AGENT_IDS } from '../agent/registry'
 import { LessonPersistence } from '../storage/LessonPersistence'
+import { getDb } from '../storage/sqlite'
 import { hlSwarmEmitter } from '../events/swarm-events'
 import type { MundoEvento, A2UIMessage } from '../types/a2ui-mundo.types'
+import {
+  buscarAlumnoPorNickname,
+  crearAlumno,
+  actualizarAlumno,
+  type StudentProfile,
+} from '../skills/gestionar-alumnos.skill'
+import { runSwarmGeneration } from '../swarm/swarm-generator'
+import { synthesize } from '../gateway/tts/logic'
 
 const log = logger.child('program-ws')
 
@@ -468,6 +477,284 @@ export async function reanudarPrograma(
 ): Promise<void> {
   // TODO: reconstruir sesión desde BD y continuar
   sendError(ws, 'Reanudación aún no implementada.', true)
+}
+
+// ─── Helpers para respuestas WS ──────────────────────────────────────────────
+
+function sendReply(ws: ServerWebSocket<any>, tipo: string, payload: Record<string, any>) {
+  ws.send(JSON.stringify({ tipo, payload, timestamp: new Date().toISOString() }))
+}
+
+// ─── Handlers CRUD ───────────────────────────────────────────────────────────
+
+async function handleBuscarNickname(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const nickname = data.nickname?.trim()
+    if (!nickname) {
+      sendReply(ws, 'buscar_nickname_result', { ok: false, error: 'Nickname requerido' })
+      return
+    }
+    const profile = await buscarAlumnoPorNickname(nickname)
+    sendReply(ws, 'buscar_nickname_result', {
+      ok: true,
+      found: !!profile,
+      profile,
+    })
+  } catch (err) {
+    log.error('[program] Error en buscar_nickname', { error: (err as Error).message })
+    sendReply(ws, 'buscar_nickname_result', { ok: false, error: 'Error interno del servidor' })
+  }
+}
+
+async function handleCrearAlumno(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { nombre, nickname, edad } = data
+    if (!nombre?.trim() || !nickname?.trim() || !edad) {
+      sendReply(ws, 'crear_alumno_result', { ok: false, error: 'Nombre, nickname y edad son requeridos' })
+      return
+    }
+    const alumnoId = crypto.randomUUID()
+    const avatar = Number(edad) <= 12 ? '🧒' : Number(edad) <= 17 ? '🧑' : '👤'
+    await crearAlumno({
+      alumnoId,
+      nombre: nombre.trim(),
+      nickname: nickname.trim(),
+      avatar,
+      edad: Number(edad),
+      estado: 'activo',
+      sesionesTotal: 0,
+      xpAcumulado: 0,
+      idioma: 'es',
+      intereses: [],
+      avatarConfigJson: null,
+      ritmoAtencion: 'normal',
+      estiloAprendizaje: 'mixto',
+      necesidadesEsp: 0,
+      accesibilidadJson: '{}',
+      creadoEn: new Date().toISOString(),
+      ultimoAcceso: new Date().toISOString(),
+    } as StudentProfile)
+    sendReply(ws, 'crear_alumno_result', {
+      ok: true,
+      alumnoId,
+      perfil: {
+        alumnoId,
+        nombre: nombre.trim(),
+        nickname: nickname.trim(),
+        avatar,
+        edad: Number(edad),
+        estado: 'activo',
+        sesionesTotal: 0,
+        xpAcumulado: 0,
+      },
+    })
+  } catch (err) {
+    log.error('[program] Error en crear_alumno', { error: (err as Error).message })
+    sendReply(ws, 'crear_alumno_result', { ok: false, error: 'Error al crear alumno' })
+  }
+}
+
+async function handleActualizarAlumno(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { alumnoId, ...updates } = data
+    if (!alumnoId) {
+      sendReply(ws, 'actualizar_alumno_result', { ok: false, error: 'alumnoId requerido' })
+      return
+    }
+    await actualizarAlumno(alumnoId, updates)
+    sendReply(ws, 'actualizar_alumno_result', { ok: true })
+  } catch (err) {
+    log.error('[program] Error en actualizar_alumno', { error: (err as Error).message })
+    sendReply(ws, 'actualizar_alumno_result', { ok: false, error: 'Error al actualizar alumno' })
+  }
+}
+
+async function handleCrearSesion(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { alumnoId, sessionId, tema, objetivo } = data
+    if (!alumnoId || !sessionId || !tema?.trim()) {
+      sendReply(ws, 'crear_sesion_result', { ok: false, error: 'alumnoId, sessionId y tema son requeridos' })
+      return
+    }
+    const persistence = new LessonPersistence()
+    persistence.createSessionWithMeta(sessionId, alumnoId, tema.trim(), objetivo?.trim() || `Aprender ${tema.trim()}`)
+    persistence.saveProgram(sessionId, alumnoId, sessionId, '{}', 0)
+    sendReply(ws, 'crear_sesion_result', {
+      ok: true,
+      sessionId,
+      programa_uuid: sessionId,
+    })
+  } catch (err) {
+    log.error('[program] Error en crear_sesion', { error: (err as Error).message })
+    sendReply(ws, 'crear_sesion_result', { ok: false, error: 'Error al crear sesión' })
+  }
+}
+
+async function handleIniciarSesion(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const sessionId = data.session_id || crypto.randomUUID()
+    const alumnoId = data.alumno_id
+    log.info('[program] Sesión de juego iniciada', { sessionId, alumnoId })
+    sendReply(ws, 'iniciar_sesion_result', {
+      ok: true,
+      sessionId,
+      mensaje: 'Sesión de juego iniciada',
+    })
+  } catch (err) {
+    log.error('[program] Error en iniciar_sesion', { error: (err as Error).message })
+    sendReply(ws, 'iniciar_sesion_result', { ok: false, error: 'Error al iniciar sesión' })
+  }
+}
+
+async function handleIniciarGeneracion(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { perfil, meta, sessionId, alumnoId } = data
+    if (!perfil || !meta) {
+      sendReply(ws, 'generacion_iniciada', { ok: false, error: 'perfil y meta son requeridos' })
+      return
+    }
+    const swarmId = sessionId ?? `swarm-${Date.now()}`
+    runSwarmGeneration(perfil, meta, swarmId).catch(
+      (e: Error) => log.error('Swarm generation failed', { swarmId, error: e.message })
+    )
+    sendReply(ws, 'generacion_iniciada', { ok: true, swarmId })
+  } catch (err) {
+    log.error('[program] Error en iniciar_generacion', { error: (err as Error).message })
+    sendReply(ws, 'generacion_iniciada', { ok: false, error: 'Error al iniciar generación' })
+  }
+}
+
+async function handleObtenerPrograma(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { alumnoId } = data
+    if (!alumnoId) {
+      sendReply(ws, 'programa_recibido', { ok: false, error: 'alumnoId requerido' })
+      return
+    }
+    const persistence = new LessonPersistence()
+    const sessions = persistence.getAllSessions({ nickname: undefined })
+    const alumnoSessions = sessions.filter((s: any) => s.alumno_id === alumnoId)
+    if (alumnoSessions.length === 0) {
+      sendReply(ws, 'programa_recibido', { ok: false, error: 'No hay sesiones para este alumno' })
+      return
+    }
+    const latestSession = alumnoSessions[alumnoSessions.length - 1]
+    sendReply(ws, 'programa_recibido', {
+      ok: true,
+      sessionId: latestSession.session_id,
+      programa_uuid: latestSession.session_id,
+    })
+  } catch (err) {
+    log.error('[program] Error en obtener_programa', { error: (err as Error).message })
+    sendReply(ws, 'programa_recibido', { ok: false, error: 'Error al obtener programa' })
+  }
+}
+
+async function handleSyncProgress(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { alumnoId, racha, zonaActual, modulosCompletados, beeState, dificultadActual, xpAcumulado } = data
+    if (!alumnoId) {
+      sendReply(ws, 'progreso_sync_ok', { ok: false, error: 'alumnoId requerido' })
+      return
+    }
+    const db = getDb()
+    const sets: string[] = []
+    const values: any[] = []
+    if (racha !== undefined) { sets.push('racha_actual = ?'); values.push(racha) }
+    if (zonaActual !== undefined) { sets.push('zona_actual = ?'); values.push(zonaActual) }
+    if (modulosCompletados !== undefined) { sets.push('modulos_completados_json = ?'); values.push(JSON.stringify(modulosCompletados)) }
+    if (beeState !== undefined) { sets.push('bee_state = ?'); values.push(beeState) }
+    if (dificultadActual !== undefined) { sets.push('dificultad_actual = ?'); values.push(dificultadActual) }
+    if (xpAcumulado !== undefined) { sets.push('xp_acumulado = ?'); values.push(xpAcumulado) }
+    if (sets.length > 0) {
+      sets.push('updated_at = CURRENT_TIMESTAMP')
+      values.push(alumnoId)
+      db.query(`UPDATE hl_student_profiles SET ${sets.join(', ')} WHERE alumno_id = ?`).run(...values)
+    }
+    sendReply(ws, 'progreso_sync_ok', { ok: true })
+  } catch (err) {
+    log.error('[program] Error en sync_progress', { error: (err as Error).message })
+    sendReply(ws, 'progreso_sync_ok', { ok: false, error: 'Error al sincronizar progreso' })
+  }
+}
+
+async function handleTTS(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { text, voice = 'sorah' } = data
+    if (!text?.trim()) {
+      sendReply(ws, 'tts:error', { error: 'Texto requerido para síntesis' })
+      return
+    }
+    const audio = await synthesize(text.trim(), voice)
+    const audioBase64 = Buffer.from(audio).toString('base64')
+    sendReply(ws, 'tts:audio', { audioBase64, format: 'wav' })
+  } catch (err) {
+    log.error('[program] Error en tts:synthesize', { error: (err as Error).message })
+    sendReply(ws, 'tts:error', { error: (err as Error).message })
+  }
+}
+
+// ─── Router principal ────────────────────────────────────────────────────────
+
+export async function handleProgramMessage(
+  ws: ServerWebSocket<any>,
+  data: any
+): Promise<void> {
+  const tipo = data?.tipo || data?.type
+
+  switch (tipo) {
+    case 'buscar_nickname':
+      await handleBuscarNickname(ws, data)
+      break
+    case 'crear_alumno':
+      await handleCrearAlumno(ws, data)
+      break
+    case 'actualizar_alumno':
+      await handleActualizarAlumno(ws, data)
+      break
+    case 'crear_sesion':
+      await handleCrearSesion(ws, data)
+      break
+    case 'iniciar_sesion':
+      await handleIniciarSesion(ws, data)
+      break
+    case 'iniciar_generacion':
+      await handleIniciarGeneracion(ws, data)
+      break
+    case 'obtener_programa':
+      await handleObtenerPrograma(ws, data)
+      break
+    case 'sync_progress':
+      await handleSyncProgress(ws, data)
+      break
+    case 'tts:synthesize':
+      await handleTTS(ws, data)
+      break
+    case 'iniciar_programa':
+      await iniciarPrograma(ws, {
+        perfil: data.perfil,
+        meta: data.meta,
+        session_id: data.session_id,
+        alumno_id: data.alumno_id,
+      })
+      break
+    case 'accion':
+    case 'responder': {
+      const payload = data.payload?.mundo_evento?.datos || data
+      await procesarRespuesta(ws, {
+        session_id: data.session_id || payload.session_id,
+        respuesta: String(data.respuesta || payload.respuesta || ''),
+        zona_numero: Number(data.zona_numero ?? payload.zona_numero ?? 0),
+      })
+      break
+    }
+    case 'heartbeat':
+      ws.send(JSON.stringify({ tipo: 'pong', timestamp: Date.now() }))
+      break
+    default:
+      log.warn('[program] Mensaje no reconocido', { tipo })
+      sendReply(ws, 'error', { ok: false, error: `Tipo de mensaje no reconocido: ${tipo}` })
+  }
 }
 
 // ─── Cleanup ─────────────────────────────────────────────────────────────────

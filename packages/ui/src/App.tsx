@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-route
 import { lazy, Suspense } from "react";
 import { Outlet } from "react-router-dom";
 import { Navbar, LandingLayout, AppLayout } from "@/components";
+import { useRioLive } from "@/hooks/useRioLive";
 
 // Lazy load pages con named exports
 const LandingPage = lazy(() => import("@/pages/LandingPage").then(m => ({ default: m.LandingPage })));
@@ -15,6 +16,12 @@ const SessionsListScreen = lazy(() => import("@/pages/SessionsListScreen").then(
 const RioMundoPage = lazy(() => import("@/pages/RioMundoPage").then(m => ({ default: m.RioMundoPage })));
 
 const queryClient = new QueryClient();
+
+// Mantiene el WebSocket conectado globalmente desde el inicio
+function WsConnection() {
+  useRioLive();
+  return null;
+}
 
 // Wrapper para LandingPage con navegación
 function LandingPageWrapper() {
@@ -52,6 +59,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <BrowserRouter>
+          <WsConnection />
           <Suspense fallback={
             <div className="flex items-center justify-center h-screen bg-background">
               <div className="text-center">

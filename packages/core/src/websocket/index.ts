@@ -11,6 +11,6 @@ export {
   isWebSocketRoute,
 } from './routes'
 export { handleOnboardingInit, handleOnboardingUserMessage } from './onboarding-handler'
-export { iniciarPrograma, procesarRespuesta, pausarPrograma, reanudarPrograma, cleanupProgramSession } from './program-handler'
+export { iniciarPrograma, procesarRespuesta, pausarPrograma, reanudarPrograma, cleanupProgramSession, handleProgramMessage } from './program-handler'
 export { startLessonSession, handleLessonMessage, closeLessonSession } from './lesson-handler'
 export { activateMonitor, deactivateMonitor, handleMonitorFrame } from './monitor-handler'

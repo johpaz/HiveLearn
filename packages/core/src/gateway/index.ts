@@ -13,11 +13,9 @@ const log = logger.child('server')
 
 const PORT = process.env.HIVELEARN_PORT ? parseInt(process.env.HIVELEARN_PORT) : 8787
 const HOST = process.env.HIVELEARN_HOST || '0.0.0.0'
-const isDev = process.env.NODE_ENV === 'development'
 
 async function main() {
   log.info('🐝 HiveLearn Server starting...')
-  log.info(`📍 Mode: ${isDev ? 'Development' : 'Production'}`)
 
   // Inicializar base de datos
   try {
@@ -27,6 +25,7 @@ async function main() {
     // Inicializar schemas
     initHiveLearnStorage(db)
     log.info('✅ Database schemas initialized')
+
   } catch (error) {
     log.error('❌ Database initialization failed', { error: (error as Error).message })
     process.exit(1)
@@ -44,12 +43,6 @@ async function main() {
   })
 
   log.info(`✅ Server listening on http://${HOST}:${PORT}`)
-
-  if (isDev) {
-    log.info('🔨 Development mode: UI served from Vite (localhost:5173)')
-  } else {
-    log.info('📦 Production mode: UI served from static files')
-  }
 
   log.info('📚 API endpoints:')
   log.info('   GET  /api/hivelearn/config')

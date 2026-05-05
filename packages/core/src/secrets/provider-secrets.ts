@@ -12,7 +12,6 @@
 
 import { getDb } from '../storage/sqlite'
 import { logger } from '../utils/logger'
-import { getCurrentCorrelationId } from '../utils/correlation-id'
 
 const log = logger.child('provider-secrets')
 
@@ -39,7 +38,6 @@ export async function storeProviderApiKey(
   providerId: string,
   apiKey: string
 ): Promise<void> {
-  const correlationId = getCurrentCorrelationId()
   const startTime = Date.now()
   const secretId = makeSecretId(providerId)
   
@@ -47,7 +45,6 @@ export async function storeProviderApiKey(
     providerId, 
     service: secretId.service,
     name: secretId.name,
-    correlationId,
   })
 
   try {
@@ -63,14 +60,13 @@ export async function storeProviderApiKey(
       providerId, 
       service: secretId.service,
       duration,
-      correlationId,
     })
 
     // Marcar en BD que tiene key (sin guardar el valor)
     const db = getDb()
     db.run('UPDATE providers SET active = 1 WHERE id = ?', [providerId])
     
-    log.debug('[store] Database updated', { providerId, correlationId })
+    log.debug('[store] Database updated', { providerId })
   } catch (error) {
     const duration = Date.now() - startTime
     log.error('[store] Failed to store API key', {
@@ -79,7 +75,6 @@ export async function storeProviderApiKey(
       error: (error as Error).message,
       stack: (error as Error).stack,
       duration,
-      correlationId,
       platform: process.platform,
     })
     throw new Error(`Failed to store API key for provider ${providerId}: ${(error as Error).message}`)
@@ -93,7 +88,6 @@ export async function storeProviderApiKey(
 export async function getProviderApiKey(
   providerId: string
 ): Promise<string | null> {
-  const correlationId = getCurrentCorrelationId()
   const startTime = Date.now()
   const secretId = makeSecretId(providerId)
   
@@ -101,7 +95,6 @@ export async function getProviderApiKey(
     providerId, 
     service: secretId.service,
     name: secretId.name,
-    correlationId,
   })
 
   try {
@@ -118,7 +111,6 @@ export async function getProviderApiKey(
       providerId, 
       found,
       duration,
-      correlationId,
     })
     
     return apiKey
@@ -130,7 +122,6 @@ export async function getProviderApiKey(
       error: (error as Error).message,
       stack: (error as Error).stack,
       duration,
-      correlationId,
       platform: process.platform,
     })
     return null
@@ -143,11 +134,8 @@ export async function getProviderApiKey(
 export async function hasProviderApiKey(
   providerId: string
 ): Promise<boolean> {
-  const correlationId = getCurrentCorrelationId()
-  
   log.debug('[has] Checking API key existence', { 
     providerId, 
-    correlationId,
   })
 
   try {
@@ -157,7 +145,6 @@ export async function hasProviderApiKey(
     log.debug('[has] API key check result', { 
       providerId, 
       hasKey,
-      correlationId,
     })
     
     return hasKey
@@ -165,7 +152,6 @@ export async function hasProviderApiKey(
     log.error('[has] Failed to check API key', {
       providerId,
       error: (error as Error).message,
-      correlationId,
     })
     return false
   }
@@ -177,7 +163,6 @@ export async function hasProviderApiKey(
 export async function deleteProviderApiKey(
   providerId: string
 ): Promise<void> {
-  const correlationId = getCurrentCorrelationId()
   const startTime = Date.now()
   const secretId = makeSecretId(providerId)
   
@@ -185,7 +170,6 @@ export async function deleteProviderApiKey(
     providerId, 
     service: secretId.service,
     name: secretId.name,
-    correlationId,
   })
 
   try {
@@ -200,7 +184,6 @@ export async function deleteProviderApiKey(
       providerId, 
       deleted,
       duration,
-      correlationId,
     })
 
     // Limpiar en BD
@@ -210,7 +193,7 @@ export async function deleteProviderApiKey(
       [providerId]
     )
     
-    log.debug('[delete] Database updated', { providerId, correlationId })
+    log.debug('[delete] Database updated', { providerId })
   } catch (error) {
     const duration = Date.now() - startTime
     log.error('[delete] Failed to delete API key', {
@@ -219,7 +202,6 @@ export async function deleteProviderApiKey(
       error: (error as Error).message,
       stack: (error as Error).stack,
       duration,
-      correlationId,
       platform: process.platform,
     })
     throw new Error(`Failed to delete API key for provider ${providerId}: ${(error as Error).message}`)
@@ -230,9 +212,7 @@ export async function deleteProviderApiKey(
  * Lista todos los providers que tienen API keys almacenadas
  */
 export async function listProvidersWithKeys(): Promise<string[]> {
-  const correlationId = getCurrentCorrelationId()
-  
-  log.debug('[list] Listing providers with keys', { correlationId })
+  log.debug('[list] Listing providers with keys')
 
   try {
     const db = getDb()
@@ -249,7 +229,6 @@ export async function listProvidersWithKeys(): Promise<string[]> {
     log.info('[list] Providers with keys', { 
       count: providersWithKeys.length,
       providers: providersWithKeys,
-      correlationId,
     })
 
     return providersWithKeys
@@ -257,7 +236,6 @@ export async function listProvidersWithKeys(): Promise<string[]> {
     log.error('[list] Failed to list providers with keys', {
       error: (error as Error).message,
       stack: (error as Error).stack,
-      correlationId,
     })
     return []
   }

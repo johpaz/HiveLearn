@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { useRioMundoStore } from '@/store/rioMundoStore'
+import type { StudentProfile } from '@hivelearn/core'
 
 // ─── Color Palettes ─────────────────────────────────────────────────────────
 
@@ -166,6 +167,31 @@ export function RioLogin() {
 
   // ─── Step 1: Nickname lookup ─────────────────────────────────────────────
 
+  const sendWsMessage = useRioMundoStore.getState().sendWsMessage
+
+  const loginSearchResult = useRioMundoStore(s => s.loginSearchResult)
+
+  // Watch WS search results
+  useEffect(() => {
+    if (!loginSearchResult) return
+
+    if (loginSearchResult.found && loginSearchResult.profile) {
+      setExistingProfile(loginSearchResult.profile as ExistingProfile)
+      setNickname(loginSearchResult.profile.nickname)
+      setAlumnoId(loginSearchResult.profile.alumnoId)
+      setPerfil(loginSearchResult.profile as StudentProfile)
+      setStep('existing_welcome')
+    } else {
+      setNickname(inputNickname.trim())
+      setNewNombre(inputNickname.trim())
+      setStep('new_profile')
+    }
+    setIsLoading(false)
+    // Reset so this effect doesn't fire again
+    useRioMundoStore.getState().setLoginSearchResult(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loginSearchResult])
+
   const handleNicknameSubmit = useCallback(async () => {
     if (!inputNickname.trim()) {
       setError('Escribe tu apodo para empezar')
@@ -179,32 +205,20 @@ export function RioLogin() {
     setIsLoading(true)
     setError(null)
 
-    try {
-      const res = await fetch(`/api/hivelearn/student-by-nickname?nickname=${encodeURIComponent(inputNickname.trim())}`)
-      const data = await res.json()
-
-      if (data.found && data.profile) {
-        // Existing student
-        setExistingProfile(data.profile)
-        setNickname(data.profile.nickname)
-        setAlumnoId(data.profile.alumnoId)
-        setPerfil(data.profile)
-        setStep('existing_welcome')
-      } else {
-        // New student
-        setNickname(inputNickname.trim())
-        setNewNombre(inputNickname.trim())
-        setStep('new_profile')
-      }
-    } catch {
-      // Offline mode — treat as new student
+    const sendWs = useRioMundoStore.getState().sendWsMessage
+    if (sendWs) {
+      sendWs({
+        tipo: 'buscar_nickname',
+        nickname: inputNickname.trim(),
+      })
+    } else {
+      // Offline — treat as new student
       setNickname(inputNickname.trim())
       setNewNombre(inputNickname.trim())
       setStep('new_profile')
-    } finally {
       setIsLoading(false)
     }
-  }, [inputNickname, setNickname, setAlumnoId, setPerfil])
+  }, [inputNickname, setNickname])
 
   // ─── Step 2A: Existing student — Welcome back ────────────────────────────
 
@@ -221,15 +235,16 @@ export function RioLogin() {
     const sessionId = crypto.randomUUID()
     const objetivo = objetivoInput.trim() || `Aprender ${temaInput.trim()}`
 
-    try {
-      // Create session on server
-      await fetch('/api/hivelearn/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alumnoId, sessionId, tema: temaInput.trim(), objetivo }),
+    // Create session on server via WS (fire and forget)
+    const sendWs = useRioMundoStore.getState().sendWsMessage
+    if (sendWs) {
+      sendWs({
+        tipo: 'crear_sesion',
+        alumnoId,
+        sessionId,
+        tema: temaInput.trim(),
+        objetivo,
       })
-    } catch {
-      // Offline — session will be created locally
     }
 
     // Update store
@@ -271,19 +286,15 @@ export function RioLogin() {
     const sessionId = crypto.randomUUID()
     const edad = Number(newEdad)
 
-    try {
-      // Create student profile on server
-      await fetch('/api/hivelearn/student-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: newNombre.trim(),
-          nickname: inputNickname.trim(),
-          edad,
-        }),
+    // Create student profile on server via WS (fire and forget)
+    const sendWs = useRioMundoStore.getState().sendWsMessage
+    if (sendWs) {
+      sendWs({
+        tipo: 'crear_alumno',
+        nombre: newNombre.trim(),
+        nickname: inputNickname.trim(),
+        edad,
       })
-    } catch {
-      // Offline — profile saved locally
     }
 
     // Update store

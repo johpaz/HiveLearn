@@ -40,9 +40,19 @@ export async function handleWebSocketOpen(
   log.info('[ws] Client connected', {
     path: pathname,
     sessionId,
-
-
   })
+
+  // Register session by path
+  if (pathname.includes('hivelearn-program') && sessionId) {
+    sessions.programSessions.set(sessionId, ws)
+    log.debug('[ws] Registered program session', { sessionId })
+  } else if (pathname.includes('hivelearn-onboarding') && sessionId) {
+    sessions.onboardingSessions.set(sessionId, ws)
+  } else if (pathname.includes('hivelearn-lesson') && sessionId) {
+    sessions.lessonSessions.set(sessionId, ws)
+  } else if (pathname.includes('hivelearn-events')) {
+    sessions.eventSubscribers.add(ws)
+  }
 
   // Send connection acknowledgment con configuración
   ws.send(JSON.stringify({
@@ -56,20 +66,6 @@ export async function handleWebSocketOpen(
     timestamp: new Date().toISOString(),
   }))
 
-  // Register session based on path
-  if (pathname.includes('onboarding') && sessionId) {
-    sessions.onboardingSessions.set(sessionId, ws)
-    log.debug('[ws] Registered onboarding session', { sessionId })
-  } else if (pathname.includes('lesson') && sessionId) {
-    sessions.lessonSessions.set(sessionId, ws)
-    log.debug('[ws] Registered lesson session', { sessionId })
-  } else if (pathname.includes('program') && sessionId) {
-    sessions.programSessions.set(sessionId, ws)
-    log.debug('[ws] Registered program session', { sessionId })
-  } else if (pathname.includes('events')) {
-    sessions.eventSubscribers.add(ws)
-    log.debug('[ws] Registered event subscriber')
-  }
 }
 
 /**

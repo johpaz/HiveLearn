@@ -53,30 +53,36 @@ Antes de iniciar una tarea compleja, define en voz alta qué significa completar
 El flujo principal de la aplicacion es unificado a traves del mundo rio isometrico. Ya no existen pantallas separadas de swarm, lecciones, o onboarding.
 
 ```
-Landing (/) → Nueva Sesion → Rio (/rio)
+Landing (/) → Nueva Sesion → Rio (/rio) siempre conectada al ws
 ```
 
 
 ### `/rio` — MUNDO PRINCIPAL
 - Pantalla completa, sin layout. Todo el aprendizaje ocurre aqui.
-- Componente: `RioMundo` dentro de `RioMundoPage`.
+- Componente: `RioMundo` dentro de `RioMundoPage`. conectada al ws sin sesion.
 - Flujos internos:
-  1. **Login**: nickname lookup → avatar select → entering_world
-  2. **Onboarding bee**: conversacion guiada nombre/edad/tema/objetivo/estilo (eso reemplaza la pagina `/onboarding` que ya no existe)
-  3. **Exploracion libre**: WASD para caminar, Shift para correr
-  4. **Interaccion con portales**: pararse sobre tile `portal_zona` → "Presiona E" → zoom in → overlay A2UI con contenido de la zona
-  5. **Respuestas**: el overlay A2UI envia respuestas via `RioA2UIBridge` → WS → servidor
-  6. **Progreso del swarm**: los tributarios se activan (agua fluye) conforme los agentes completan modulos via WS
+  1. **Login**: nickname lookup(si existe traer los datos y pasarlos al storage para crear la sesion, se crea en la otra pantalla de juego, si no existe entra al avatar select y crea alumno) → avatar select → entering_world aca se hacen las preguntas de que quiere aprender y para que, guarda la sesion inicia el juego, debe tener indicador de conexion a ws con la velocidad.
+  2. **Onboarding bee**: conversacion guiada si no existe  nombre/edad/tema/objetivo/estilo se guarda en la bd,  si existe se saluda con el nombre y se pregunta tema/objetivo / estilo y crea la sesion en bd por ws.) Debe tener boton de salir y el boton de config sonidos,etc.
+  3. **Exploracion libre**: WASD para caminar, Shift para correr,debe tener indicador de conexion a ws con la velocidad.
+  4. **Interaccion con portales**: pararse sobre tile `portal_zona` → "Presiona E" → zoom in → overlay A2UI con contenido de la zona,debe tener indicador de conexion a ws con la velocidad.
+  5. **Respuestas**: el overlay A2UI envia respuestas via `RioA2UIBridge` → WS → servidor,debe tener indicador de conexion a ws con la velocidad.
+  6. **Progreso del swarm**: los tributarios se activan (agua fluye) conforme los agentes completan modulos via WS,debe tener indicador de conexion a ws con la velocidad.
 
 #
 ### Store unificado
-- `rioMundoStore.ts` (Zustand + persist) maneja TODO el estado: login, onboarding, mapa, jugador, camara, XP, vidas, tributarios, portales, WS, A2UI.
-- `lessonStore.ts` y `mundoStore.ts` existen pero son legado. No agregar funcionalidad nueva ahi.
+- `rioMundoStore.ts` (Zustand + persist) maneja TODO el estado: login, onboarding, mapa, jugador, camara, XP, vidas, tributarios, portales, WS, A2UI, pero debe guardarse en la bd debe mostrar opcion de salir de la sesion del juego queda almacenado el avance en la bd.
+- `lessonStore.ts` y `mundoStore.ts` existen pero son legado. No agregar funcionalidad nueva ahi, depregado eliminar.
 
 ### Key files
-- `packages/ui/src/canvaslearn/rio/` — mundo rio isometrico completo
+- `packages/ui/src/canvaslearn/rio/` — mundo rio isometrico completo conexion por ws siempre sin sesion es solo la conexion al juego.
 - `packages/ui/src/store/rioMundoStore.ts` — store unificado
 - `packages/ui/src/pages/RioMundoPage.tsx` — pagina orquestadora (WS, bridge, sesion)
 - `packages/ui/src/canvaslearn/rio/portal/PortalOverlay.tsx` — overlay de contenido al entrar a zona
 - `packages/ui/src/hooks/useRioLive.ts` — hook WS para eventos del swarm
 - `packages/ui/src/hooks/useTTSSpeak.ts` — TTS con Piper + fallback navegador
+
+## Infraestructura y Puertos
+
+- **Puerto del servidor (backend/gateway): 8787** — NO MODIFICAR. El CLI (`packages/cli`) siempre usa este puerto.
+- **Puerto del Vite dev server: 5173** — Configurado en `packages/ui/vite.config.ts` con proxy a `localhost:8787`.
+- Assets estáticos (audio, imágenes) se sirven desde `packages/ui/public/` y se copian a `dist/` en build.

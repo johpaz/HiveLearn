@@ -26,21 +26,20 @@ export interface StudentProfile {
   alumnoId: string
   nombre: string
   nickname: string
-  apodo: string
   avatar: string
   edad: number
-  estado: EstadoAlumno
-  sesionesTotal: number
-  xpAcumulado: number
-  idioma: string
-  intereses: string[]
-  avatarConfigJson: string | null
-  ritmoAtencion: string
-  estiloAprendizaje: string
-  necesidadesEsp: number
-  accesibilidadJson: string
-  creadoEn: string
-  ultimoAcceso: string
+  estado?: EstadoAlumno
+  sesionesTotal?: number
+  xpAcumulado?: number
+  idioma?: string
+  intereses?: string[]
+  avatarConfigJson?: string | null
+  ritmoAtencion?: string
+  estiloAprendizaje?: string
+  necesidadesEsp?: number
+  accesibilidadJson?: string
+  creadoEn?: string
+  ultimoAcceso?: string
 }
 
 export interface PerfilAdaptacion {

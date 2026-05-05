@@ -11,11 +11,10 @@ const log = logger.child('skill:gestionar-alumnos')
 
 export interface StudentProfile {
   id?: number
-  alumnoId: string
+  alumnoId?: string
   nombre: string
   nickname: string
-  apodo: string
-  avatar: string
+  avatar?: string
   edad: number
   estado?: 'onboarding' | 'activo' | 'inactivo'
   sesionesTotal?: number
@@ -36,31 +35,32 @@ export interface StudentProfile {
  */
 export async function crearAlumno(perfil: StudentProfile): Promise<{ ok: boolean; alumnoId: string }> {
   const db = getDb()
-  
+  const alumnoId = perfil.alumnoId ?? crypto.randomUUID()
+
   try {
     db.query(`
       INSERT INTO hl_student_profiles (alumno_id, nombre, nickname, apodo, avatar, edad, estado, sesiones_total, xp_acumulado, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run(
-      perfil.alumnoId,
+      alumnoId,
       perfil.nombre,
       perfil.nickname,
       perfil.nickname,
-      perfil.avatar,
+      perfil.avatar ?? '👤',
       perfil.edad,
       perfil.estado || 'onboarding',
       perfil.sesionesTotal || 0,
       perfil.xpAcumulado || 0
     )
-    
-    log.info('[gestionar-alumnos] Alumno creado', { 
-      alumnoId: perfil.alumnoId,
+
+    log.info('[gestionar-alumnos] Alumno creado', {
+      alumnoId,
       nombre: perfil.nombre,
       nickname: perfil.nickname,
       edad: perfil.edad,
     })
-    
-    return { ok: true, alumnoId: perfil.alumnoId }
+
+    return { ok: true, alumnoId }
   } catch (error) {
     log.error('[gestionar-alumnos] Error al crear alumno', {
       error: (error as Error).message,
@@ -87,8 +87,7 @@ export async function obtenerAlumno(alumnoId: string): Promise<StudentProfile | 
     return {
       alumnoId: student.alumno_id,
       nombre: student.nombre,
-      nickname: student.nickname || student.apodo,
-      apodo: student.apodo || '',
+      nickname: student.nickname || student.apodo || '',
       avatar: student.avatar,
       edad: student.edad,
       estado: student.estado,
@@ -184,7 +183,6 @@ export async function obtenerOCrearAlumno(alumnoId: string, defaults: Partial<St
     alumnoId,
     nombre: defaults.nombre || 'Estudiante',
     nickname: defaults.nickname || 'Estudiante',
-    apodo: defaults.apodo || defaults.nickname || 'Estudiante',
     avatar: defaults.avatar || 'default',
     edad: defaults.edad || 18,
     estado: 'onboarding',
@@ -220,8 +218,7 @@ export async function buscarAlumnoPorNickname(nickname: string): Promise<Student
     return {
       alumnoId: student.alumno_id,
       nombre: student.nombre,
-      nickname: student.nickname || student.apodo,
-      apodo: student.apodo || '',
+      nickname: student.nickname || student.apodo || '',
       avatar: student.avatar,
       edad: student.edad,
       estado: student.estado,

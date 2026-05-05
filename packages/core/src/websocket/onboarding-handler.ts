@@ -200,7 +200,6 @@ export async function handleOnboardingUserMessage(
     alumnoId,
     nombre,
     nickname,
-    apodo: nickname,
     avatar: avatarEmoji,
     edad,
     estado: 'activo',

@@ -14,22 +14,17 @@ export interface RioLiveState {
   currentAgentName: string | null
   error: string | null
   a2uiMessages: any[]
-  startGeneration: (perfil: any, meta: string) => Promise<void>
   sendRespuesta: (moduloUuid: string, nodoId: string, respuesta: any, intentos: number) => void
+  sendWsMessage: (msg: { tipo: string; [k: string]: any }) => void
 }
 
 function getWsUrl(path: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = import.meta.env.DEV
-    ? `${window.location.hostname}:8787`
-    : window.location.host
-  return `${protocol}//${host}${path}`
+  return `${protocol}//${window.location.host}${path}`
 }
 
-export function useRioLive(
-  sessionId: string | null,
-  alumnoId: string | null,
-): RioLiveState {
+export function useRioLive(): RioLiveState {
+
   const [isConnected, setIsConnected] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null)
@@ -55,31 +50,20 @@ export function useRioLive(
   // ─── Program WebSocket (hivelearn-program) ─────────────────────────────────
 
   const connectProgramWs = useCallback(() => {
-    if (!sessionId || !alumnoId || unmountedRef.current) return
+    if (unmountedRef.current) return
 
     try {
-      const url = getWsUrl(`/ws/hivelearn-program?sessionId=${sessionId}`)
+      const url = getWsUrl('/hivelearn-program')
       const ws = new WebSocket(url)
       wsRef.current = ws
 
-      ws.onerror = () => {
-        // Silenciar errores de conexión — el reintentador los maneja
-      }
-
       ws.onopen = () => {
+        console.log('[WS] /hivelearn-program connected')
         if (unmountedRef.current) { ws.close(); return }
         setIsConnected(true)
+        useRioMundoStore.getState().setWsStatus('connected')
         setError(null)
         reconnectDelayRef.current = BASE_RECONNECT_MS
-
-        // Start session
-        ws.send(JSON.stringify({
-          tipo: 'iniciar_sesion',
-          session_id: sessionId,
-          alumno_id: alumnoId,
-          payload: {},
-          timestamp: new Date().toISOString(),
-        }))
 
         // Ping interval
         pingTimerRef.current = setInterval(() => {
@@ -92,12 +76,74 @@ export function useRioLive(
       ws.onmessage = (e) => {
         if (unmountedRef.current) return
         try {
-          const message: ServerMessage = JSON.parse(e.data as string)
+          const message = JSON.parse(e.data as string) as any
 
-          // Dispatch to A2UI bridge
+          // Handle store-updating message types
+          switch (message.tipo) {
+            case 'buscar_nickname_result': {
+              const store = useRioMundoStore.getState()
+              if (message.payload?.ok && message.payload?.found && message.payload?.profile) {
+                store.setPerfil(message.payload.profile)
+                store.setAlumnoId(message.payload.profile.alumnoId)
+                store.setNickname(message.payload.profile.nickname)
+              }
+              store.setLoginSearchResult({
+                found: !!message.payload?.found,
+                profile: message.payload?.profile,
+              })
+              return
+            }
+            case 'crear_alumno_result': {
+              const store = useRioMundoStore.getState()
+              if (message.payload?.ok && message.payload?.perfil) {
+                store.setPerfil(message.payload.perfil)
+                store.setAlumnoId(message.payload.perfil.alumnoId)
+              }
+              return
+            }
+            case 'crear_sesion_result': {
+              const store = useRioMundoStore.getState()
+              if (message.payload?.ok && message.payload?.sessionId) {
+                store.setSessionId(message.payload.sessionId)
+              }
+              return
+            }
+            case 'generacion_iniciada': {
+              if (message.payload?.ok) {
+                useRioMundoStore.getState().setIsGenerating(true)
+                setIsGenerating(true)
+              }
+              return
+            }
+            case 'programa_recibido': {
+              const store = useRioMundoStore.getState()
+              if (message.payload?.ok && message.payload?.programa_uuid) {
+                store.setProgramaUuid(message.payload.programa_uuid)
+              }
+              return
+            }
+            case 'tts:audio': {
+              if (message.payload?.audioBase64) {
+                useRioMundoStore.getState().enqueueTtsAudio(message.payload.audioBase64)
+              }
+              return
+            }
+            case 'tts:error': {
+              console.warn('[WS] TTS error:', message.payload?.error)
+              return
+            }
+            case 'connected': {
+              if (message.connectionId) {
+                useRioMundoStore.getState().setWsConnectionId(message.connectionId)
+              }
+              return
+            }
+          }
+
+          // Dispatch to A2UI bridge for mundo/evento/contenido messages
           const bridge = getBridge()
           if (bridge) {
-            bridge.procesarMensajeServidor(message)
+            bridge.procesarMensajeServidor(message as ServerMessage)
           }
         } catch {
           // Malformed JSON — ignore
@@ -107,6 +153,7 @@ export function useRioLive(
       ws.onclose = () => {
         if (unmountedRef.current) return
         setIsConnected(false)
+        useRioMundoStore.getState().setWsStatus('disconnected')
         if (pingTimerRef.current) clearInterval(pingTimerRef.current)
         pingTimerRef.current = null
 
@@ -117,13 +164,12 @@ export function useRioLive(
       }
 
       ws.onerror = () => {
-        setError('Error de conexion')
-        ws.close()
+        // Silenciar — onclose maneja reconnexión
       }
     } catch {
-      setError('No se pudo conectar')
+      // Silenciar — onclose maneja reconnexión
     }
-  }, [sessionId, alumnoId, getBridge])
+  }, [getBridge])
 
   // ─── Events WebSocket (hivelearn-events) ───────────────────────────────────
 
@@ -131,12 +177,13 @@ export function useRioLive(
     if (unmountedRef.current) return
 
     try {
-      const url = getWsUrl('/hivelearn-events?sessionId=hl-rio')
+      const url = getWsUrl('/hivelearn-events')
       const ws = new WebSocket(url)
       eventsWsRef.current = ws
 
       ws.onopen = () => {
         if (unmountedRef.current) { ws.close(); return }
+        useRioMundoStore.getState().setWsStatus('connected')
 
         eventsPingTimerRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -217,6 +264,7 @@ export function useRioLive(
 
       ws.onclose = () => {
         if (unmountedRef.current) return
+        useRioMundoStore.getState().setWsStatus('disconnected')
         if (eventsPingTimerRef.current) clearInterval(eventsPingTimerRef.current)
         eventsPingTimerRef.current = null
 
@@ -233,39 +281,35 @@ export function useRioLive(
     }
   }, [getBridge])
 
-  // ─── Start program generation ────────────────────────────────────────────────
+  // ─── Send raw message via WS ─────────────────────────────────────────────────
 
-  const startGeneration = useCallback(async (perfil: any, meta: string) => {
-    if (!sessionId || !alumnoId) return
-
-    try {
-      const res = await fetch('/api/hivelearn/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          perfil,
-          meta,
-          sessionId,
-          alumnoId,
-        }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        useRioMundoStore.getState().setIsGenerating(true)
-        setIsGenerating(true)
-      }
-    } catch (err) {
-      setError('Error al iniciar la generacion')
+  const sendWsMessage = useCallback((msg: { tipo: string; [k: string]: any }) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn('[WS] Not connected, cannot send:', msg.tipo)
+      return
     }
-  }, [sessionId, alumnoId])
+    const state = useRioMundoStore.getState()
+    wsRef.current.send(JSON.stringify({
+      ...msg,
+      connectionId: state.wsConnectionId,
+      timestamp: new Date().toISOString(),
+    }))
+  }, [])
 
   // ─── Send response via WS ────────────────────────────────────────────────────
 
   const sendRespuesta = useCallback((moduloUuid: string, nodoId: string, respuesta: any, intentos: number) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
 
+    const state = useRioMundoStore.getState()
+    const sessionId = state.sessionId
+    const alumnoId = state.alumnoId
+    const connectionId = state.wsConnectionId
+    if (!sessionId || !alumnoId) return
+
     wsRef.current.send(JSON.stringify({
       tipo: 'accion',
+      connectionId,
       session_id: sessionId,
       alumno_id: alumnoId,
       payload: {
@@ -282,16 +326,21 @@ export function useRioLive(
       },
       timestamp: new Date().toISOString(),
     }))
-  }, [sessionId, alumnoId])
+  }, [])
+
+  // ─── Register sendWsMessage in store ─────────────────────────────────────────
+
+  useEffect(() => {
+    useRioMundoStore.getState().setSendWsMessage(sendWsMessage)
+  }, [sendWsMessage])
 
   // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     unmountedRef.current = false
 
-    if (sessionId && alumnoId) {
-      connectProgramWs()
-    }
+    // SIEMPRE conectar al WS del programa desde el inicio
+    connectProgramWs()
     connectEventsWs()
 
     return () => {
@@ -303,7 +352,7 @@ export function useRioLive(
       wsRef.current?.close()
       eventsWsRef.current?.close()
     }
-  }, [sessionId, alumnoId, connectProgramWs, connectEventsWs])
+  }, [connectProgramWs, connectEventsWs])
 
   return {
     isConnected,
@@ -312,7 +361,7 @@ export function useRioLive(
     currentAgentName,
     error,
     a2uiMessages,
-    startGeneration,
     sendRespuesta,
+    sendWsMessage,
   }
 }

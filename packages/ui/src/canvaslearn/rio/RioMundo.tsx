@@ -555,19 +555,15 @@ export function RioMundo() {
       }
     }
 
-    // Create student profile on server
-    try {
-      await fetch('/api/hivelearn/student-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: data.nombre || data.nickname || 'Estudiante',
-          nickname: data.nombre || data.nickname || 'Estudiante',
-          edad: data.edad || 18,
-        }),
+    // Create student profile on server via WS
+    const sendWs = useRioMundoStore.getState().sendWsMessage
+    if (sendWs) {
+      sendWs({
+        tipo: 'crear_alumno',
+        nombre: data.nombre || data.nickname || 'Estudiante',
+        nickname: data.nombre || data.nickname || 'Estudiante',
+        edad: data.edad || 18,
       })
-    } catch {
-      // Offline — profile saved locally
     }
   }, [])
 

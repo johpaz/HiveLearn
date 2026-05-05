@@ -27,16 +27,12 @@ export async function startGateway(config: HiveLearnConfig): Promise<void> {
 
   const PORT = config.gateway?.port || parseInt(process.env.HIVELEARN_PORT || '8787')
   const HOST = config.gateway?.host || process.env.HIVELEARN_HOST || '0.0.0.0'
-  const nodeEnv = process.env.NODE_ENV
-  const isDev = nodeEnv === 'development'
 
   // Setup global error handlers
   setupGlobalErrorHandlers()
   log.info('✅ Global error handlers registered')
 
   log.info('🐝 HiveLearn Gateway starting...', {
-    NODE_ENV: nodeEnv || 'undefined',
-    mode: isDev ? 'Development' : 'Production',
     port: PORT,
     host: HOST,
   })
@@ -102,13 +98,6 @@ export async function startGateway(config: HiveLearnConfig): Promise<void> {
 
     isRunning = true
     log.info(`✅ Gateway listening on http://${HOST}:${PORT}`)
-
-    if (isDev) {
-      log.info('🔨 Development mode: UI served from Vite dev server')
-      log.info('📝 Logs will be written to ~/.hivelearn/logs/')
-    } else {
-      log.info('📦 Production mode: UI served from static files')
-    }
 
     // Log startup summary
     log.info('📊 Startup summary', {

@@ -99,6 +99,7 @@ const initialState: State = {
   programa: null,
   tema: null,
   meta: '',
+  wsConnectionId: null,
 
   loginPhase: 'title_screen',
 
@@ -109,6 +110,7 @@ const initialState: State = {
 
   audioSettings: { ...DEFAULT_AUDIO_SETTINGS },
   wsStatus: 'disconnected' as WsStatus,
+  sendWsMessage: null,
 
   mundoListo: false,
   bienvenidaMostrada: false,
@@ -163,6 +165,9 @@ const initialState: State = {
   logroActivo: null,
   isGenerating: false,
 
+  loginSearchResult: null,
+  ttsAudioQueue: [],
+
   tiempoInicioSesion: null,
   tiempoSesion: 0,
 
@@ -189,6 +194,7 @@ export interface RioMundoStore extends State {
   setMeta: (meta: string) => void
   setTema: (tema: string) => void
   setProvider: (providerId: string, modelId: string | null) => void
+  setWsConnectionId: (id: string | null) => void
 
   // ─── Audio & Connection ────────────────────────────────────────────────────
   setAudioSettings: (settings: Partial<AudioSettings>) => void
@@ -198,6 +204,7 @@ export interface RioMundoStore extends State {
   setAudioManager: (am: AudioManager | null) => void
   setAudioReady: (ready: boolean) => void
   setBeeLoaderVisible: (visible: boolean) => void
+  setSendWsMessage: (fn: ((msg: { tipo: string; [k: string]: any }) => void) | null) => void
 
   // ─── Onboarding ──────────────────────────────────────────────────────────────
   setOnboardingStep: (step: OnboardingStep) => void
@@ -271,6 +278,13 @@ export interface RioMundoStore extends State {
   setCoordinatorStatus: (status: CoordinatorState['status'], currentWorker?: string | null) => void
   setIsGenerating: (isGenerating: boolean) => void
 
+  // ─── Login WS Result ─────────────────────────────────────────────────────────
+  setLoginSearchResult: (result: { found: boolean; profile?: StudentProfile } | null) => void
+
+  // ─── TTS ─────────────────────────────────────────────────────────────────────
+  enqueueTtsAudio: (audioBase64: string) => void
+  shiftTtsAudio: () => { audioBase64: string } | undefined
+
   // ─── Restore ──────────────────────────────────────────────────────────────────
   restoreSession: (data: Partial<State>) => void
   reset: () => void
@@ -307,6 +321,7 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
   setMeta: (meta) => set({ meta }),
   setTema: (tema) => set({ tema }),
   setProvider: (selectedProviderId, selectedModelId) => set({ selectedProviderId, selectedModelId }),
+  setWsConnectionId: (wsConnectionId) => set({ wsConnectionId }),
 
   // ─── Audio & Connection ──────────────────────────────────────────────────────
 
@@ -323,6 +338,7 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
   setAudioManager: (audioManager) => set({ audioManager }),
   setAudioReady: (audioReady) => set({ audioReady }),
   setBeeLoaderVisible: (beeLoaderVisible) => set({ beeLoaderVisible }),
+  setSendWsMessage: (sendWsMessage) => set({ sendWsMessage }),
 
   // ─── Onboarding ───────────────────────────────────────────────────────────────
 
@@ -536,6 +552,23 @@ export const useRioMundoStore = create<RioMundoStore>()(persist((set, get) => ({
     },
   })),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
+
+  // ─── Login WS Result ─────────────────────────────────────────────────────────
+
+  setLoginSearchResult: (loginSearchResult) => set({ loginSearchResult }),
+
+  // ─── TTS ─────────────────────────────────────────────────────────────────────
+
+  enqueueTtsAudio: (audioBase64) => set((s) => ({
+    ttsAudioQueue: [...s.ttsAudioQueue, { audioBase64 }],
+  })),
+  shiftTtsAudio: () => {
+    const item = get().ttsAudioQueue[0]
+    if (item) {
+      set((s) => ({ ttsAudioQueue: s.ttsAudioQueue.slice(1) }))
+    }
+    return item
+  },
 
   // ─── Restore ──────────────────────────────────────────────────────────────────
 
