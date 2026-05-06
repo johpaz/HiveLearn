@@ -66,10 +66,11 @@ export class RioBee {
     if (this.destinationX !== null && this.destinationY !== null) {
       this.targetX = this.destinationX
       this.targetY = this.destinationY
-      
-      // Verificar si llegó al destino
-      const dist = Math.hypot(this.targetX - playerState.x, this.targetY - playerState.y)
-      if (dist < 2) {
+
+      // Verificar si la ABEJA llegó al destino (comparar posición de pantalla)
+      const targetScreen = this.renderer.isoToScreen(this.destinationX, this.destinationY)
+      const dist = Math.hypot(this.container.x - targetScreen.x, this.container.y - targetScreen.y)
+      if (dist < 10) {
         // Llegó al destino
         this.destinationX = null
         this.destinationY = null

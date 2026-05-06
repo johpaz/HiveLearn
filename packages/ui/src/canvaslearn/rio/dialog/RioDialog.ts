@@ -7,7 +7,7 @@ export class RioDialog {
   private app: Application
   private renderer: IsometricRenderer
   private container: Container
-  private activeBubbles: Map<string, { container: Container; createdAt: number; duration: number }> = new Map()
+  private activeBubbles: Map<string, { container: Container; createdAt: number; duration: number; anchorIsoX?: number; anchorIsoY?: number }> = new Map()
 
   constructor(app: Application, renderer: IsometricRenderer) {
     this.app = app
@@ -58,10 +58,15 @@ export class RioDialog {
     textObj.position.set(-textWidth / 2, -bgHeight + padding)
     bubbleContainer.addChild(textObj)
 
+    // Iniciar con escala 0 para efecto pop de entrada
+    bubbleContainer.scale.set(0)
+
     this.activeBubbles.set(bubble.id, {
       container: bubbleContainer,
       createdAt: Date.now(),
       duration: bubble.duration,
+      anchorIsoX: bubble.anchorIsoX,
+      anchorIsoY: bubble.anchorIsoY,
     })
 
     this.container.addChild(bubbleContainer)
@@ -103,17 +108,23 @@ export class RioDialog {
         screenPos = this.renderer.isoToScreen(playerState.x, playerState.y - 2)
       }
 
+      // Pop-in scale animation (0→1 en 200ms)
+      const age = now - bubble.createdAt
+      const popProgress = Math.min(1, age / 200)
+      const popScale = popProgress < 1 ? (1.1 - 0.1 * popProgress) * popProgress : 1
+      bubble.container.scale.set(popScale)
+
       // Float animation
       const floatY = Math.sin(now / 800 + bubble.createdAt) * 3
       bubble.container.position.set(screenPos.x, screenPos.y - 60 + floatY)
 
       // Remove expired bubbles
-      if (now - bubble.createdAt > bubble.duration) {
+      if (age > bubble.duration) {
         this.removeBubble(id)
       }
 
       // Fade out near end
-      const remaining = bubble.duration - (now - bubble.createdAt)
+      const remaining = bubble.duration - age
       if (remaining < 500) {
         bubble.container.alpha = remaining / 500
       }

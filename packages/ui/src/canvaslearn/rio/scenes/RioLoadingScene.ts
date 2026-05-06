@@ -172,6 +172,7 @@ export class RioLoadingScene {
         if (this.fadeAlpha <= 0) {
           this.fadeAlpha = 0
           if (this.onLoadComplete) this.onLoadComplete()
+          return  // no acceder a container después de que onLoadComplete lo destruye
         }
       }
 

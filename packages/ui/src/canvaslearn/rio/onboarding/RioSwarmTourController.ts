@@ -110,6 +110,9 @@ export class RioSwarmTourController {
 
     const store = useRioMundoStore.getState()
 
+    // Zoom in al llegar al agente
+    store.setCamaraZoom(1.8)
+
     // Mensaje del coordinador presentando al agente
     const introText = `Este es el Agente ${agent.name}.`
     this.showCoordinatorMessage(introText, 4000)
@@ -117,7 +120,7 @@ export class RioSwarmTourController {
 
     await this.wait(500)
 
-    // El agente muestra su descripción en burbuja
+    // El agente muestra su descripción en burbuja anclada sobre su posición
     if (this.dialogRef) {
       this.dialogRef.showAgentMessage(agent.id, agent.description, isoX, isoY, 6000)
     }
@@ -126,7 +129,11 @@ export class RioSwarmTourController {
     // Marcar como visitado
     store.marcarAgenteVisitado(agent.id)
 
-    await this.wait(3000)
+    await this.wait(2000)
+
+    // Restaurar zoom antes de ir al siguiente
+    store.setCamaraZoom(1.0)
+    await this.wait(500)
 
     // Avanzar al siguiente
     this.currentStep++

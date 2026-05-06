@@ -87,16 +87,23 @@ export function RioWelcomeOverlay({ onStart, onContinue, onConfig }: RioWelcomeO
     return () => clearTimeout(t)
   }, [])
 
-  const handleStart = useCallback(() => {
-    // Iniciar música de bienvenida al primer click del usuario
-    useRioMundoStore.getState().audioManager?.playMusic('titleMusic')
+  const handleStart = useCallback(async () => {
+    const am = useRioMundoStore.getState().audioManager
+    if (am) {
+      // Reanudar AudioContext dentro del gesto del usuario antes de reproducir
+      await am.ensureCtx()
+      am.playMusic('titleMusic')
+    }
     setIsEntering(true)
     setTimeout(() => onStart(), 800)
   }, [onStart])
 
-  const handleContinue = useCallback(() => {
-    // Iniciar música de bienvenida al primer click del usuario
-    useRioMundoStore.getState().audioManager?.playMusic('titleMusic')
+  const handleContinue = useCallback(async () => {
+    const am = useRioMundoStore.getState().audioManager
+    if (am) {
+      await am.ensureCtx()
+      am.playMusic('titleMusic')
+    }
     setIsEntering(true)
     setTimeout(() => onContinue?.(), 800)
   }, [onContinue])

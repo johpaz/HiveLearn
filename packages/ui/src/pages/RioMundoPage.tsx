@@ -28,6 +28,8 @@ export function RioMundoPage() {
     setTema,
   } = useRioMundoStore()
 
+  const generationEverStartedRef = useRef(false)
+
   // ─── Create A2UI Bridge ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -146,17 +148,23 @@ export function RioMundoPage() {
   // ─── Fetch program when generation completes ─────────────────────────────────
 
   useEffect(() => {
-    if (!isGenerating && sessionId && !programaUuid && alumnoId) {
-      // Generation might have completed, request program via WS
-      const sendWs = useRioMundoStore.getState().sendWsMessage
-      if (sendWs) {
-        sendWs({
-          tipo: 'obtener_programa',
-          alumnoId,
-        })
-      }
+    if (isGenerating) {
+      generationEverStartedRef.current = true
     }
-  }, [isGenerating, sessionId, programaUuid, alumnoId])
+  }, [isGenerating])
+
+  useEffect(() => {
+    // Solo solicitar programa si ya empezó la generación y acaba de completarse
+    if (loginPhase !== 'in_world') return
+    if (!generationEverStartedRef.current) return
+    if (isGenerating) return
+    if (!sessionId || !alumnoId || programaUuid) return
+
+    const sendWs = useRioMundoStore.getState().sendWsMessage
+    if (sendWs) {
+      sendWs({ tipo: 'obtener_programa', alumnoId })
+    }
+  }, [loginPhase, isGenerating, sessionId, programaUuid, alumnoId])
 
   // ─── Handle WS errors ───────────────────────────────────────────────────────
 
