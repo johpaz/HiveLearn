@@ -148,36 +148,69 @@ export async function loadTiledMap(url: string): Promise<IsoMap> {
   return tiledToIsoMap(raw)
 }
 
+function findObjectByName(raw: TiledTilemap, name: string): { x: number; y: number } | null {
+  const objects = raw.layers.find(l => l.type === 'objectgroup')
+  if (!objects?.objects) return null
+  const obj = objects.objects.find(o => (o.name || '').toLowerCase() === name)
+  if (!obj) return null
+  return {
+    x: Math.floor(obj.x / raw.tilewidth),
+    y: Math.floor(obj.y / raw.tileheight),
+  }
+}
+
+export async function loadProgramaMap(url: string): Promise<ProgramaMapData> {
+  const res = await fetch(url, { cache: 'no-cache' })
+  if (!res.ok) {
+    throw new Error(`TiledMapLoader: HTTP ${res.status} cargando ${url}`)
+  }
+  const raw = await res.json() as TiledTilemap
+  const map = tiledToIsoMap(raw)
+  const beeAnchor = findObjectByName(raw, 'bee_anchor')
+    || { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) - 2 }
+  return { map, beeAnchor }
+}
+
 /**
- * Mapa por defecto (12x12) usado como fallback si no hay TMJ disponible.
- * Una habitación con piso de pasto, bordes de piedra, spawn en (6,9), bee en (6,4).
+ * Mapa por defecto (16x16) usado como fallback si no hay TMJ disponible.
+ * Claro de bosque: árboles en bordes, camino del spawn al claro, flores esparcidas.
  */
-export function buildDefaultProgramaMap(): IsoMap {
-  const SIZE = 12
+export function buildDefaultProgramaMap(): ProgramaMapData {
+  const SIZE = 16
   const tiles: IsoTile[][] = []
+  const flowerSpots = new Set(['3,4', '5,2', '12,4', '4,9', '12,9', '11,11'])
+  const bushSpots = new Set(['6,3', '13,7', '2,10', '11,12'])
   for (let y = 0; y < SIZE; y++) {
     const row: IsoTile[] = []
     for (let x = 0; x < SIZE; x++) {
       const isBorder = x === 0 || y === 0 || x === SIZE - 1 || y === SIZE - 1
-      const isPath = (x === 6 && y >= 4 && y <= 9)
-      const isFlowers = (x === 4 && y === 5) || (x === 8 && y === 5)
-      const type: TileType = isBorder ? 'piedra' : isPath ? 'camino' : isFlowers ? 'flores' : 'pasto'
-      row.push({
-        x,
-        y,
-        type,
-        elevation: isBorder ? 1 : 0,
-        walkable: !isBorder,
-      })
+      const isPath = x === 8 && y >= 8 && y <= SIZE - 2
+      const key = `${x},${y}`
+      let type: TileType = 'pasto'
+      let walkable = true
+      let elevation = 0
+      if (isBorder) {
+        type = 'arbol'; walkable = false; elevation = 2
+      } else if (isPath) {
+        type = 'camino'
+      } else if (flowerSpots.has(key)) {
+        type = 'flores'
+      } else if (bushSpots.has(key)) {
+        type = 'arbusto'
+      }
+      row.push({ x, y, type, elevation, walkable })
     }
     tiles.push(row)
   }
   return {
-    width: SIZE,
-    height: SIZE,
-    tiles,
-    spawn: { x: 6, y: 9 },
-    riverPath: [],
-    tributaries: [],
+    map: {
+      width: SIZE,
+      height: SIZE,
+      tiles,
+      spawn: { x: 8, y: 14 },
+      riverPath: [],
+      tributaries: [],
+    },
+    beeAnchor: { x: 8, y: 7 },
   }
 }
