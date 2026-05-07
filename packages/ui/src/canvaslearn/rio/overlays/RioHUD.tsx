@@ -1,7 +1,58 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRioMundoStore } from '@/store/rioMundoStore'
 import { RIO_NIVELES } from '../types'
+
+const MINIMAP_COLORS: Record<string, string> = {
+  pasto: '#3a5f3a', tierra: '#8b6f47', agua: '#3b6e8f', agua_profunda: '#1e3a5f',
+  montana: '#666', piedra: '#888', camino: '#c4a878', arena: '#d4be7a',
+  arbol: '#2d4a2d', arbusto: '#4a6a3a', flores: '#d4a8b8',
+  portal_zona: '#fbbf24', puente: '#a08060', desembo_roca: '#9c8060', cascada: '#5a8db5', barro: '#6b4a2a', tronco: '#5a3e1f',
+}
+
+function Minimap() {
+  const mapa = useRioMundoStore(s => s.mapa)
+  const jugadorX = useRioMundoStore(s => s.jugador.x)
+  const jugadorY = useRioMundoStore(s => s.jugador.y)
+  const tributaries = useRioMundoStore(s => s.tributaries)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !mapa || !mapa.tiles?.length) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const cols = mapa.tiles[0].length
+    const rows = mapa.tiles.length
+    const cellW = canvas.width / cols
+    const cellH = canvas.height / rows
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        ctx.fillStyle = MINIMAP_COLORS[mapa.tiles[y][x].type] || '#000'
+        ctx.fillRect(x * cellW, y * cellH, Math.ceil(cellW), Math.ceil(cellH))
+      }
+    }
+    // Portales
+    for (const t of tributaries) {
+      if (!t.portalPos) continue
+      ctx.fillStyle = t.estado === 'fluyendo' ? '#fbbf24' : t.estado === 'completado' ? '#4ade80' : '#888'
+      ctx.beginPath()
+      ctx.arc((t.portalPos.x + 0.5) * cellW, (t.portalPos.y + 0.5) * cellH, 2.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    // Jugador
+    ctx.fillStyle = '#ff3366'
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc((jugadorX + 0.5) * cellW, (jugadorY + 0.5) * cellH, 3, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }, [mapa, jugadorX, jugadorY, tributaries])
+
+  return <canvas ref={canvasRef} width={120} height={120} className="block" />
+}
 
 function AudioControl() {
   const [showControls, setShowControls] = useState(false)
@@ -195,11 +246,9 @@ export function RioHUD() {
         </div>
       </div>
 
-      {/* Mini-map placeholder */}
-      <div className="absolute bottom-4 right-4 w-32 h-32 bg-[#0a0e27]/80 backdrop-blur-sm rounded-xl border border-[#fbbf24]/30 pointer-events-auto">
-        <div className="flex items-center justify-center h-full text-[#888] text-xs">
-          🗺️ Mini-mapa
-        </div>
+      {/* Mini-map */}
+      <div className="absolute bottom-4 right-4 w-32 h-32 bg-[#0a0e27]/80 backdrop-blur-sm rounded-xl border border-[#fbbf24]/30 pointer-events-auto p-1 flex items-center justify-center">
+        <Minimap />
       </div>
     </div>
   )

@@ -85,13 +85,22 @@ export function RioMundo() {
   const loadingSceneRef = useRef<RioLoadingScene | null>(null)
   const audioManagerRef = useRef<AudioManager | null>(null)
   const mouseTargetRef = useRef<{ x: number; y: number } | null>(null)
+  const clickHandlerRef = useRef<((e: MouseEvent) => void) | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [showWelcome, setShowWelcome] = useState(true)
+  // En /rio nunca se muestra welcome/login: el flujo welcome→login→onboarding
+  // vive en /programa. Aquí el alumno llega con programaUuid ya listo.
+  const [showWelcome, setShowWelcome] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
   const [showLoading, setShowLoading] = useState(false)
   const [showTourSkip, setShowTourSkip] = useState(false)
   const [showTourNext, setShowTourNext] = useState(false)
+  const [portalFlash, setPortalFlash] = useState(false)
+
+  const triggerPortalFlash = useCallback(() => {
+    setPortalFlash(true)
+    setTimeout(() => setPortalFlash(false), 500)
+  }, [])
   const { speak: beeSpeak } = useTTSSpeak()
 
   const {
@@ -119,10 +128,11 @@ export function RioMundo() {
     app.init({
       width: window.innerWidth,
       height: window.innerHeight,
-      backgroundColor: 0x0a0e27,
-      antialias: false,
+      background: 0x0a0e27,
+      antialias: true,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
+      powerPreference: 'high-performance',
     }).then(() => {
       if (!containerRef.current) return
       const canvas = app.canvas as HTMLCanvasElement
@@ -328,13 +338,19 @@ export function RioMundo() {
     }
 
     const canvas = appRef.current?.canvas
-    if (canvas) {
-      canvas.addEventListener('click', handleClick)
+    if (!canvas) return
+
+    // Guard against StrictMode double-mount: remove any previous handler first
+    if (clickHandlerRef.current) {
+      canvas.removeEventListener('click', clickHandlerRef.current)
     }
+    clickHandlerRef.current = handleClick
+    canvas.addEventListener('click', handleClick)
 
     return () => {
-      if (canvas) {
-        canvas.removeEventListener('click', handleClick)
+      canvas.removeEventListener('click', handleClick)
+      if (clickHandlerRef.current === handleClick) {
+        clickHandlerRef.current = null
       }
     }
   }, [isReady])
@@ -388,9 +404,33 @@ export function RioMundo() {
 
         if (dx !== 0 || dy !== 0) {
           const speed = state.jugador.animation === 'correr' ? ISO_CONFIG.PLAYER_RUN_SPEED : ISO_CONFIG.PLAYER_SPEED
-          const newX = state.jugador.x + dx * speed * dt
-          const newY = state.jugador.y + dy * speed * dt
+          const candidateX = state.jugador.x + dx * speed * dt
+          const candidateY = state.jugador.y + dy * speed * dt
 
+          // Collision check — slide-along against blocked tiles
+          const map = mapRef.current
+          const isWalkable = (x: number, y: number) => {
+            const tx = Math.round(x)
+            const ty = Math.round(y)
+            return !!map?.tiles[ty]?.[tx]?.walkable
+          }
+
+          let newX = state.jugador.x
+          let newY = state.jugador.y
+          let blocked = false
+          if (isWalkable(candidateX, candidateY)) {
+            newX = candidateX
+            newY = candidateY
+          } else if (isWalkable(candidateX, state.jugador.y)) {
+            newX = candidateX
+          } else if (isWalkable(state.jugador.x, candidateY)) {
+            newY = candidateY
+          } else {
+            blocked = true
+            mouseTargetRef.current = null
+          }
+
+          // Update direction based on intent (even if blocked)
           if (Math.abs(dx) > Math.abs(dy)) {
             useRioMundoStore.getState().setJugadorDireccion(dx > 0 ? 'e' : 'w')
           } else if (dy !== 0) {
@@ -403,8 +443,14 @@ export function RioMundo() {
             }
           }
 
-          useRioMundoStore.getState().setJugadorPosicion(newX, newY)
-          useRioMundoStore.getState().setJugadorAnimacion(state.jugador.animation === 'correr' ? 'correr' : 'caminar')
+          if (blocked) {
+            if (state.jugador.animation !== 'idle') {
+              useRioMundoStore.getState().setJugadorAnimacion('idle')
+            }
+          } else {
+            useRioMundoStore.getState().setJugadorPosicion(newX, newY)
+            useRioMundoStore.getState().setJugadorAnimacion(state.jugador.animation === 'correr' ? 'correr' : 'caminar')
+          }
         } else {
           if (state.jugador.animation === 'caminar' || state.jugador.animation === 'correr') {
             useRioMundoStore.getState().setJugadorAnimacion('idle')
@@ -412,12 +458,13 @@ export function RioMundo() {
         }
       }
 
-      // Update camera
+      // Update camera — always follow the player so they can see where they walk.
       if (cameraRef.current && rendererRef.current) {
         const screenPos = rendererRef.current.isoToScreen(state.jugador.x, state.jugador.y)
-        useRioMundoStore.getState().setCamaraTarget(screenPos.x, screenPos.y)
+        cameraRef.current.setTarget(screenPos.x, screenPos.y)
         cameraRef.current.setZoom(state.camara.targetZoom)
         cameraRef.current.update(dt)
+        useRioMundoStore.getState().setCamaraTarget(screenPos.x, screenPos.y)
       }
 
       // Update player sprite
@@ -623,17 +670,9 @@ export function RioMundo() {
       })
     }
 
-    // Iniciar Swarm Tour en lugar de ir directo a in_world
-    if (beeRef.current && dialogRef.current && swarmBeesRef.current) {
-      tourRef.current.setRefs(beeRef.current, dialogRef.current, swarmBeesRef.current)
-      tourRef.current.setSpeakFunction(beeSpeak)
-      tourRef.current.setOnShowNextButton(setShowTourNext)
-      setShowTourSkip(true)
-      tourRef.current.start()
-    } else {
-      // Fallback si no hay refs: ir directo a in_world
-      useRioMundoStore.getState().setLoginPhase('in_world')
-    }
+    // El swarm tour fue reemplazado por el minimundo /programa: ir directo a in_world.
+    // (Si por alguna razón este handler se ejecuta sin programa, RioMundoPage redirige.)
+    useRioMundoStore.getState().setLoginPhase('in_world')
   }, [beeSpeak])
 
   // ─── Portal interaction ─────────────────────────────────────────────────────
@@ -687,6 +726,12 @@ export function RioMundo() {
             store.openPortal(portalZone, tributary.moduloUuid || '', 2.0)
             store.setJugadorAnimacion('interactuando')
             store.setBeeState('talking')
+
+            // Visual flash overlay to signal portal entry
+            triggerPortalFlash()
+
+            // Audio cue (reuses applause SFX as a confirmation)
+            audioManagerRef.current?.playSFX('sfx_applause').catch(() => {})
 
             if (dialogRef.current) {
               dialogRef.current.showBeeMessage(`Entrando a ${tributary.name || `Zona ${portalZone}`}...`, 2000)
@@ -781,6 +826,12 @@ export function RioMundo() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden" ref={containerRef}>
+      {/* Portal entry flash */}
+      {portalFlash && (
+        <div className="absolute inset-0 z-[60] pointer-events-none bg-white animate-[fadeOut_500ms_ease-out_forwards]" style={{ animation: 'portalFlashFade 500ms ease-out forwards' }} />
+      )}
+      <style>{`@keyframes portalFlashFade { 0% { opacity: 0.8 } 100% { opacity: 0 } }`}</style>
+
       {/* BeeLoader — bloquea hasta que audio esté listo */}
       {useRioMundoStore(s => s.beeLoaderVisible) && <BeeLoader />}
 

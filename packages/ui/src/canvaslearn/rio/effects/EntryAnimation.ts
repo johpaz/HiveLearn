@@ -22,6 +22,7 @@ export class RioEntryAnimation {
   private camera: RioCamera
   private container: Container
   private overlay: Graphics
+  private sparkleGraphics: Graphics
   private sparkles: Sparkle[] = []
   private active: boolean = false
   private startTime: number = 0
@@ -53,6 +54,9 @@ export class RioEntryAnimation {
     this.overlay.fill({ color: 0x0a0e27, alpha: 1.0 })
     this.overlay.pivot.set(window.innerWidth * 1.5, window.innerHeight * 1.5)
     this.container.addChild(this.overlay)
+
+    this.sparkleGraphics = new Graphics()
+    this.container.addChild(this.sparkleGraphics)
   }
 
   start(water?: RioWaterSystem, player?: RioPlayer, bee?: RioBee) {
@@ -97,42 +101,33 @@ export class RioEntryAnimation {
       this.overlay.alpha = 0
     }
 
-    // Update sparkles
-    this.container.removeChildren()
-    if (this.overlay.alpha > 0) {
-      this.container.addChild(this.overlay)
-    }
-
+    // Update sparkles using pooled Graphics (no per-frame allocation)
     const dtMs = 16
     for (let i = this.sparkles.length - 1; i >= 0; i--) {
       const s = this.sparkles[i]
       s.life += dtMs
       s.x += s.vx * dtMs
       s.y += s.vy * dtMs
+      if (s.life >= s.maxLife) this.sparkles.splice(i, 1)
+    }
 
-      if (s.life >= s.maxLife) {
-        this.sparkles.splice(i, 1)
-        continue
-      }
-
+    this.sparkleGraphics.clear()
+    for (const s of this.sparkles) {
       const lifeRatio = s.life / s.maxLife
       const alpha = 1.0 - lifeRatio
       const screen = this.renderer.isoToScreen(s.x, s.y)
-
-      const g = new Graphics()
       const size = s.size * (1 - lifeRatio * 0.5)
 
-      g.moveTo(screen.x, screen.y - size)
-      g.lineTo(screen.x + size * 0.3, screen.y - size * 0.3)
-      g.lineTo(screen.x + size, screen.y)
-      g.lineTo(screen.x + size * 0.3, screen.y + size * 0.3)
-      g.lineTo(screen.x, screen.y + size)
-      g.lineTo(screen.x - size * 0.3, screen.y + size * 0.3)
-      g.lineTo(screen.x - size, screen.y)
-      g.lineTo(screen.x - size * 0.3, screen.y - size * 0.3)
-      g.closePath()
-      g.fill({ color: s.color, alpha })
-      this.container.addChild(g)
+      this.sparkleGraphics.moveTo(screen.x, screen.y - size)
+      this.sparkleGraphics.lineTo(screen.x + size * 0.3, screen.y - size * 0.3)
+      this.sparkleGraphics.lineTo(screen.x + size, screen.y)
+      this.sparkleGraphics.lineTo(screen.x + size * 0.3, screen.y + size * 0.3)
+      this.sparkleGraphics.lineTo(screen.x, screen.y + size)
+      this.sparkleGraphics.lineTo(screen.x - size * 0.3, screen.y + size * 0.3)
+      this.sparkleGraphics.lineTo(screen.x - size, screen.y)
+      this.sparkleGraphics.lineTo(screen.x - size * 0.3, screen.y - size * 0.3)
+      this.sparkleGraphics.closePath()
+      this.sparkleGraphics.fill({ color: s.color, alpha })
     }
 
     if (progress >= 1 && this.sparkles.length === 0) {

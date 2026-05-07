@@ -181,6 +181,18 @@ export function useRioLive(): RioLiveState {
               }
               return
             }
+            case 'agente_completado': {
+              const p = message.payload || {}
+              if (p.ok && p.agentId) {
+                useRioMundoStore.getState().dispatchTourAgentResult(
+                  p.agentId,
+                  p.outputSnippet || '',
+                  p.zonas,
+                  p.structureCtx,
+                )
+              }
+              return
+            }
           }
 
           // Dispatch to A2UI bridge for mundo/evento/contenido messages

@@ -92,6 +92,15 @@ export function RioMundoPage() {
     }
   }, [loginPhase, alumnoId, sessionId])
 
+  // ─── Redirigir a /programa si no hay programa listo ─────────────────────────
+  // /rio es solo el mundo de juego. Welcome, login y creación viven en /programa.
+  // Si llegamos aquí sin programaUuid, volvemos a /programa.
+
+  useEffect(() => {
+    if (programaUuid) return
+    navigate('/programa', { replace: true })
+  }, [programaUuid, navigate])
+
   // ─── Start program generation after onboarding ──────────────────────────────
 
   useEffect(() => {
@@ -129,13 +138,8 @@ export function RioMundoPage() {
         tema,
         objetivo,
       })
-      sendWs({
-        tipo: 'iniciar_generacion',
-        perfil: perfilData,
-        meta: metaStr,
-        sessionId,
-        alumnoId,
-      })
+      // El tour interactivo ejecuta cada agente vía 'ejecutar_agente'.
+      // No disparar runSwarmGeneration en paralelo — el alumno controla el ritmo.
     }
   }, [loginPhase, sessionId, alumnoId, programaUuid])
 

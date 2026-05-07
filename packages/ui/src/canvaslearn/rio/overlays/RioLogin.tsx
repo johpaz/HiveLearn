@@ -155,21 +155,22 @@ export function RioLogin() {
   const [temaInput, setTemaInput] = useState('')
   const [objetivoInput, setObjetivoInput] = useState('')
 
-  // Check if we should skip to existing (from store restore)
+  // Check if we should skip to existing (from store restore) — wait for WS connection
+  const wsStatus = useRioMundoStore(s => s.wsStatus)
   useEffect(() => {
     const store = useRioMundoStore.getState()
-    if (store.nickname && store.perfil?.alumnoId) {
-      setInputNickname(store.nickname)
-      setExistingProfile(store.perfil as ExistingProfile)
-      // Alumno existente restaurado: saltar directo al mundo
-      updateOnboarding({
-        nombre: store.perfil.nombre,
-        edad: store.perfil.edad,
-      })
-      setLoginPhase('entering_world')
-    }
+    if (!store.nickname || !store.perfil?.alumnoId) return
+    if (wsStatus !== 'connected') return
+
+    setInputNickname(store.nickname)
+    setExistingProfile(store.perfil as ExistingProfile)
+    updateOnboarding({
+      nombre: store.perfil.nombre,
+      edad: store.perfil.edad,
+    })
+    setLoginPhase('entering_world')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [wsStatus])
 
   // ─── Step 1: Nickname lookup ─────────────────────────────────────────────
 

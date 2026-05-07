@@ -100,7 +100,7 @@ export class RioSwarmBees {
     this.createBee('hl-coordinator-agent', coordinatorPos.x, coordinatorPos.y)
 
     const workerIds = agentIds.filter(id => id !== 'hl-coordinator-agent')
-    const beesPerZone = Math.ceil((workerIds.length) / Math.max(1, tributaries.length))
+    const beesPerZone = Math.ceil(workerIds.length / Math.max(1, tributaries.length))
 
     for (let i = 0; i < workerIds.length; i++) {
       const agentId = workerIds[i]
@@ -108,8 +108,10 @@ export class RioSwarmBees {
       const tributary = tributaries[zoneIdx]
 
       if (tributary && tributary.portalPos) {
-        const offsetAngle = (i % beesPerZone) * (Math.PI * 2 / beesPerZone)
-        const offsetRadius = 1.5 + (i % beesPerZone) * 0.5
+        const slotInZone = i % beesPerZone
+        // Distribute evenly around portal with staggered radii to avoid overlap
+        const offsetAngle = (slotInZone / beesPerZone) * Math.PI * 2 + (zoneIdx * 0.7)
+        const offsetRadius = 2.5 + slotInZone * 0.8
         const homeX = tributary.portalPos.x + Math.cos(offsetAngle) * offsetRadius
         const homeY = tributary.portalPos.y + Math.sin(offsetAngle) * offsetRadius
 
@@ -131,8 +133,8 @@ export class RioSwarmBees {
     const beeColor = AGENT_COLORS[agentId] || 0xFFC107
 
     const glow = new Graphics()
-    glow.circle(0, 0, 14)
-    glow.fill({ color: beeColor, alpha: 0.08 })
+    glow.circle(0, 0, 18)
+    glow.fill({ color: beeColor, alpha: 0.15 })
     container.addChild(glow)
 
     const wings = new Graphics()
@@ -149,9 +151,10 @@ export class RioSwarmBees {
     const name = AGENT_NAMES[agentId] || agentId.split('-')[1] || '?'
     const labelStyle = new TextStyle({
       fontFamily: 'Arial, sans-serif',
-      fontSize: 8,
-      fill: 0xAAAAAA,
+      fontSize: 11,
+      fill: 0xDDDDDD,
       align: 'center',
+      dropShadow: { color: 0x000000, blur: 2, distance: 1, alpha: 0.8 },
     })
     const label = new Text({ text: name, style: labelStyle })
     label.anchor.set(0.5)
@@ -230,12 +233,12 @@ export class RioSwarmBees {
     const beeColor = AGENT_COLORS[bee.agentId] || 0xFFC107
     if (bee.status === 'completed') {
       bee.glow.clear()
-      bee.glow.circle(0, 0, 14)
-      bee.glow.fill({ color: 0x4CAF50, alpha: 0.1 })
+      bee.glow.circle(0, 0, 22)
+      bee.glow.fill({ color: 0x4CAF50, alpha: 0.25 })
     } else if (bee.status === 'running' || bee.status === 'thinking' || bee.status === 'tool_call') {
       bee.glow.clear()
-      bee.glow.circle(0, 0, 14)
-      bee.glow.fill({ color: beeColor, alpha: 0.12 })
+      bee.glow.circle(0, 0, 20)
+      bee.glow.fill({ color: beeColor, alpha: 0.28 })
     }
   }
 
@@ -253,25 +256,17 @@ export class RioSwarmBees {
 
       bee.container.zIndex = bee.homeY
 
-      const wingOffset = Math.sin(time / 40 + bee.phase) * 4
+      const isActive = bee.status === 'running' || bee.status === 'thinking' || bee.status === 'tool_call'
+      const wingSpeed = isActive ? 40 : 80
+      const wingOffset = Math.sin(time / wingSpeed + bee.phase) * (isActive ? 5 : 3)
+      const wingAlpha = isActive ? 0.5 : bee.status === 'completed' ? 0.25 : 0.3
       bee.wings.clear()
-      if (bee.status === 'running' || bee.status === 'thinking' || bee.status === 'tool_call') {
-        bee.wings.moveTo(-3, -4)
-        bee.wings.bezierCurveTo(-10, -8 + wingOffset * 0.3, -12, -1 + wingOffset * 0.3, -5, -3)
-        bee.wings.fill({ color: 0xE3F2FD, alpha: 0.4 })
-        bee.wings.moveTo(3, -4)
-        bee.wings.bezierCurveTo(10, -8 + wingOffset * 0.3, 12, -1 + wingOffset * 0.3, 5, -3)
-        bee.wings.fill({ color: 0xE3F2FD, alpha: 0.4 })
-      } else if (bee.status === 'completed') {
-        bee.wings.moveTo(-3, -3)
-        bee.wings.lineTo(-7, -6)
-        bee.wings.lineTo(-5, -2)
-        bee.wings.fill({ color: 0xE3F2FD, alpha: 0.2 })
-        bee.wings.moveTo(3, -3)
-        bee.wings.lineTo(7, -6)
-        bee.wings.lineTo(5, -2)
-        bee.wings.fill({ color: 0xE3F2FD, alpha: 0.2 })
-      }
+      bee.wings.moveTo(-3, -4)
+      bee.wings.bezierCurveTo(-10, -8 + wingOffset * 0.3, -12, -1 + wingOffset * 0.3, -5, -3)
+      bee.wings.fill({ color: 0xE3F2FD, alpha: wingAlpha })
+      bee.wings.moveTo(3, -4)
+      bee.wings.bezierCurveTo(10, -8 + wingOffset * 0.3, 12, -1 + wingOffset * 0.3, 5, -3)
+      bee.wings.fill({ color: 0xE3F2FD, alpha: wingAlpha })
 
       if (bee.status === 'pending') {
         bee.glow.alpha = 0.05 + Math.sin(time / 400) * 0.04

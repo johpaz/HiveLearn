@@ -134,8 +134,28 @@ Diseña la estructura del Mundo de Aprendizaje PixiJS en formato JSON.
                         structureOutput.match(/\{[\s\S]*\}/)
       const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : structureOutput
       estructura = JSON.parse(jsonStr)
-    } catch {
-      log.error('[program] Error parseando estructura', { output: structureOutput.slice(0, 200) })
+    } catch (parseErr) {
+      log.error('[program] Error parseando estructura', {
+        output: structureOutput.slice(0, 200),
+        error: (parseErr as Error).message,
+      })
+      session.ws.send(JSON.stringify({
+        tipo: 'error',
+        agente_id: AGENT_IDS.coordinator,
+        payload: {
+          mundo_evento: {
+            tipo: 'mundo:error',
+            datos: {
+              codigo: 'estructura_invalida',
+              mensaje: 'No se pudo parsear la estructura del programa devuelta por el agente.',
+              recuperable: true,
+              accion_sugerida: 'reintentar',
+              detalle: structureOutput.slice(0, 400),
+            },
+          },
+        },
+        timestamp: new Date().toISOString(),
+      }))
       return null
     }
 
@@ -858,6 +878,110 @@ async function handleReanudarSesion(ws: ServerWebSocket<any>, data: any): Promis
   }
 }
 
+async function handleEjecutarAgente(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { sessionId, agentId, meta, perfil, structureCtx = '' } = data
+    if (!sessionId || !agentId) {
+      sendReply(ws, 'agente_completado', { ok: false, error: 'sessionId y agentId son requeridos' })
+      return
+    }
+
+    const nombre = perfil?.nombre || perfil?.nickname || 'Alumno'
+    const edad = perfil?.edad ?? 18
+    const alumnoId = perfil?.alumnoId || sessionId
+
+    const base = `Perfil: nombre=${nombre}, edad=${edad}.\nMeta: ${meta}`
+    let taskDescription: string
+    switch (agentId) {
+      case AGENT_IDS.profile:
+        taskDescription = `${base}\nConstruye el perfil de adaptación pedagógica para este alumno.`
+        break
+      case AGENT_IDS.intent:
+        taskDescription = `${base}\nExtrae tema, nivel previo y tono adecuado para la sesión.`
+        break
+      case AGENT_IDS.structure:
+        taskDescription = `${base}\nDiseña la estructura del Mundo de Aprendizaje con 5-8 zonas en formato JSON.`
+        break
+      case AGENT_IDS.gamification:
+        taskDescription = `${base}${structureCtx ? '\n' + structureCtx : ''}\nDefine XP por zona, logros desbloqueables y nivel final.`
+        break
+      case AGENT_IDS.evaluation:
+        taskDescription = `${base}${structureCtx ? '\n' + structureCtx : ''}\nPrepara 5 preguntas de evaluación final sobre el tema.`
+        break
+      case AGENT_IDS.feedback:
+        taskDescription = `${base}\nPrepara mensajes de feedback motivador para diferentes situaciones.`
+        break
+      default: {
+        const type = agentId.replace('hl-', '').replace('-agent', '')
+        taskDescription = `${base}${structureCtx ? '\n' + structureCtx : ''}\nPrepara contenido pedagógico de tipo "${type}" para el tema.`
+      }
+    }
+
+    log.info('[program] ejecutar_agente', { sessionId, agentId })
+    hlSwarmEmitter.emit('worker:task_started', { workerId: agentId, workerName: agentId, swarmId: sessionId })
+
+    const t0 = Date.now()
+    const persistence = new LessonPersistence()
+    persistence.createEarlySession(sessionId, alumnoId)
+
+    const output = await runHiveLearnAgent({
+      agentId,
+      taskDescription,
+      systemPrompt: '',
+      tools: [],
+      threadId: sessionId,
+    })
+
+    const agentKey = agentId.replace('hl-', '').replace('-agent', '')
+    persistence.saveAgentOutput(sessionId, agentId, agentId, JSON.stringify({ output }), Date.now() - t0)
+    persistence.updateSessionAgentSlot(sessionId, agentKey, output)
+
+    const reply: Record<string, any> = {
+      ok: true,
+      agentId,
+      outputSnippet: output.slice(0, 300),
+    }
+
+    if (agentId === AGENT_IDS.structure) {
+      try {
+        const jsonMatch = output.match(/```json\n?([\s\S]*?)\n?```/) || output.match(/\{[\s\S]*\}/)
+        const jsonStr = jsonMatch ? (jsonMatch[1] ?? jsonMatch[0]) : output
+        const estructura = JSON.parse(jsonStr)
+        const totalZonas = estructura.zonas?.length ?? 0
+        const rangoEdad = edad <= 12 ? 'ninos' : edad <= 17 ? 'jovenes' : 'adulto'
+        const curriculoId = persistence.saveCurriculum(
+          sessionId,
+          JSON.stringify(perfil ?? {}),
+          JSON.stringify(estructura.zonas ?? []),
+          totalZonas,
+          rangoEdad,
+          null,
+        )
+        persistence.updateSessionCurriculum(sessionId, curriculoId)
+        persistence.updateProgramSchema(sessionId, jsonStr, totalZonas)
+        reply.zonas = totalZonas
+        reply.structureCtx = jsonStr.slice(0, 800)
+        log.info('[program] estructura guardada', { sessionId, zonas: totalZonas })
+      } catch (parseErr) {
+        log.warn('[program] no se pudo parsear estructura', { error: (parseErr as Error).message })
+      }
+    }
+
+    hlSwarmEmitter.emit('worker:task_completed', {
+      workerId: agentId,
+      workerName: agentId,
+      swarmId: sessionId,
+      progress: 1,
+      outputSnippet: reply.outputSnippet,
+    })
+
+    sendReply(ws, 'agente_completado', reply)
+  } catch (err) {
+    log.error('[program] Error en ejecutar_agente', { error: (err as Error).message })
+    sendReply(ws, 'agente_completado', { ok: false, error: 'Error ejecutando agente' })
+  }
+}
+
 async function handleSalirSesion(ws: ServerWebSocket<any>, data: any): Promise<void> {
   try {
     const { sessionId, alumnoId } = data
@@ -909,6 +1033,9 @@ export async function handleProgramMessage(
       break
     case 'reanudar_sesion':
       await handleReanudarSesion(ws, data)
+      break
+    case 'ejecutar_agente':
+      await handleEjecutarAgente(ws, data)
       break
     case 'salir_sesion':
       await handleSalirSesion(ws, data)

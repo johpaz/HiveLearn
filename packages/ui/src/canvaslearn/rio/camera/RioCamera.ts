@@ -47,10 +47,11 @@ export class RioCamera {
   }
 
   update(dt: number) {
-    // Smooth follow
-    this.x += (this.targetX - this.x) * this.smoothing
-    this.y += (this.targetY - this.y) * this.smoothing
-    this.zoom += (this.targetZoom - this.zoom) * this.smoothing
+    // dt-independent smoothing: same feel at any framerate
+    const factor = Math.min(1, this.smoothing * dt * 60)
+    this.x += (this.targetX - this.x) * factor
+    this.y += (this.targetY - this.y) * factor
+    this.zoom += (this.targetZoom - this.zoom) * factor
 
     // Apply bounds
     this.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, this.x))

@@ -51,9 +51,18 @@ export class RioA2UIBridge {
     const store = useRioMundoStore.getState()
     store.agregarXP(event.datos.nivel_previo === 'principiante' ? 50 : 25)
     store.setBienvenidaMostrada(true)
+    if (event.datos.programa_uuid) {
+      store.setProgramaUuid(event.datos.programa_uuid)
+    }
+    if (event.datos.tema) {
+      store.setTema(event.datos.tema)
+    }
 
-    // Activate first tributary (zone 1)
-    this.activarTributarioEnMundo(1, event.datos.tema || 'Bienvenida')
+    // Activate first tributary (zone 1) if there's a map already loaded.
+    // The /programa minimundo has no tributaries — skip in that case.
+    if (store.mapa && store.mapa.tributaries.length > 0) {
+      this.activarTributarioEnMundo(1, event.datos.tema || 'Bienvenida')
+    }
   }
 
   private procesarContenido(messages: any[]): void {
@@ -154,13 +163,28 @@ export class RioA2UIBridge {
 
       case 'mundo:actualizar_estado':
         break
-      case 'mundo:error':
+      case 'mundo:error': {
+        const datos = (event as any).datos || {}
+        store.setProgramaError({
+          code: datos.codigo || 'desconocido',
+          message: datos.mensaje || 'Error en el mundo',
+          detail: datos.detalle,
+        })
+        store.setIsGenerating(false)
         break
+      }
     }
   }
 
   private procesarError(payload: any): void {
     console.error('[RioBridge] Error del servidor:', payload)
+    const datos = payload?.mundo_evento?.datos || {}
+    useRioMundoStore.getState().setProgramaError({
+      code: datos.codigo || 'desconocido',
+      message: datos.mensaje || 'Error del servidor',
+      detail: datos.detalle,
+    })
+    useRioMundoStore.getState().setIsGenerating(false)
     if (this.rioRef.dialog) {
       this.rioRef.dialog.showBeeMessage('Hubo un error. Intenta de nuevo.', 3000)
     }

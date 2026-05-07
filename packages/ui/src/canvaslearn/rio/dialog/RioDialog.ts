@@ -25,22 +25,24 @@ export class RioDialog {
 
     // Background
     const bg = new Graphics()
-    const maxWidth = 200
+    const maxWidth = 220
+    const minWidth = 80
     const padding = 12
 
     // Text
     const style = new TextStyle({
       fontFamily: 'Arial, sans-serif',
-      fontSize: 14,
+      fontSize: 13,
       fill: 0x1a1a2e,
       wordWrap: true,
       wordWrapWidth: maxWidth - padding * 2,
+      leading: 2,
     })
 
     const textObj = new Text({ text: bubble.text, style })
     const textWidth = textObj.width
     const textHeight = textObj.height
-    const bgWidth = textWidth + padding * 2
+    const bgWidth = Math.min(maxWidth, Math.max(minWidth, textWidth + padding * 2))
     const bgHeight = textHeight + padding * 2
 
     // Bubble shape
@@ -115,8 +117,8 @@ export class RioDialog {
       bubble.container.scale.set(popScale)
 
       // Float animation
-      const floatY = Math.sin(now / 800 + bubble.createdAt) * 3
-      bubble.container.position.set(screenPos.x, screenPos.y - 60 + floatY)
+      const floatY = Math.sin(now / 800 + bubble.createdAt) * 4
+      bubble.container.position.set(screenPos.x, screenPos.y - 90 + floatY)
 
       // Remove expired bubbles
       if (age > bubble.duration) {

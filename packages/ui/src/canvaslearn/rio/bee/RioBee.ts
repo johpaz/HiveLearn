@@ -114,9 +114,13 @@ export class RioBee {
     this.wingAngle = Math.sin(time / 50) * 0.8
     this.drawWings(time)
 
-    // Glow pulse
-    const glowAlpha = 0.1 + Math.sin(time / 500) * 0.05
-    this.glow.alpha = glowAlpha
+    // Glow pulse — amplitude and speed vary by state
+    const glowPulse = beeState === 'celebrating'
+      ? 0.35 + Math.sin(time / 200) * 0.15
+      : beeState === 'talking'
+        ? 0.2 + Math.sin(time / 600) * 0.05
+        : 0.1 + Math.sin(time / 500) * 0.05
+    this.glow.alpha = glowPulse
 
     // State-based effects
     if (beeState !== this.lastState) {
@@ -192,15 +196,26 @@ export class RioBee {
   }
 
   private onStateChange(newState: BeeState) {
+    this.glow.clear()
     switch (newState) {
       case 'celebrating':
-        // Particle burst effect
-        break
-      case 'pointing':
-        // Point toward target
+        this.glow.circle(0, 0, 32)
+        this.glow.fill({ color: 0xFFD700, alpha: 0.45 })
+        this.glow.circle(0, 0, 20)
+        this.glow.fill({ color: 0xFFF176, alpha: 0.3 })
         break
       case 'talking':
-        // Hover in place, face player
+        this.glow.circle(0, 0, 22)
+        this.glow.fill({ color: 0xFFA726, alpha: 0.25 })
+        break
+      case 'guiding':
+      case 'flying_ahead':
+        this.glow.circle(0, 0, 26)
+        this.glow.fill({ color: 0x80DEEA, alpha: 0.35 })
+        break
+      default:
+        this.glow.circle(0, 0, 20)
+        this.glow.fill({ color: 0xFFD700, alpha: 0.15 })
         break
     }
   }

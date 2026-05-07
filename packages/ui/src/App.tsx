@@ -14,6 +14,7 @@ const HowToUsePage = lazy(() => import("@/pages/HowToUsePage").then(m => ({ defa
 const ProviderSelectScreen = lazy(() => import("@/pages/HiveLearnConfigPage").then(m => ({ default: m.HiveLearnConfigPage })));
 const SessionsListScreen = lazy(() => import("@/pages/SessionsListScreen").then(m => ({ default: m.SessionsListScreen })));
 const RioMundoPage = lazy(() => import("@/pages/RioMundoPage").then(m => ({ default: m.RioMundoPage })));
+const ProgramaMundoPage = lazy(() => import("@/pages/ProgramaMundoPage").then(m => ({ default: m.ProgramaMundoPage })));
 
 const queryClient = new QueryClient();
 
@@ -29,7 +30,7 @@ function LandingPageWrapper() {
 
   return (
     <LandingPage
-      onStart={() => navigate('/rio')}
+      onStart={() => navigate('/programa')}
       onSessions={() => navigate('/sessions')}
       onHowToUse={() => navigate('/how-to-use')}
     />
@@ -48,7 +49,7 @@ function HowToUsePageWrapper() {
   return (
     <HowToUsePage
       onBack={() => navigate(-1)}
-      onStart={() => navigate('/rio')}
+      onStart={() => navigate('/programa')}
     />
   );
 }
@@ -84,6 +85,9 @@ function App() {
 
               {/* Standalone: Rio mundo — pantalla completa sin layout */}
               <Route path="/rio" element={<RioMundoPage />} />
+
+              {/* Standalone: Programa — minimundo de creación del programa */}
+              <Route path="/programa" element={<ProgramaMundoPage />} />
 
               {/* 404 */}
               <Route path="*" element={<Navigate to="/" replace />} />

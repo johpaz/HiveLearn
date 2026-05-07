@@ -50,8 +50,12 @@ function animateWater(base: number, time: number): number {
   const r = (base >> 16) & 0xFF
   const g = (base >> 8) & 0xFF
   const b = base & 0xFF
-  const shimmer = Math.sin(time / 800) * 10
-  return ((r & 0xFF) << 16) | ((Math.min(255, g + shimmer) & 0xFF) << 8) | ((Math.min(255, b + shimmer * 0.5)) & 0xFF)
+  const shimmer = Math.sin(time / 800) * 20
+  return (
+    (Math.max(0, Math.min(255, r)) << 16) |
+    ((Math.max(0, Math.min(255, g + shimmer)) & 0xFF) << 8) |
+    (Math.max(0, Math.min(255, b + shimmer * 0.5)) & 0xFF)
+  )
 }
 
 export class IsometricRenderer {

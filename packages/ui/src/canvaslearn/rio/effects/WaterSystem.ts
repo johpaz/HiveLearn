@@ -29,6 +29,8 @@ export class RioWaterSystem {
   private app: Application
   private renderer: IsometricRenderer
   private container: Container
+  private particleGraphics: Graphics
+  private splashGraphics: Graphics
   private particles: WaterParticle[] = []
   private splashes: Splash[] = []
   private maxParticles: number = 300
@@ -40,6 +42,13 @@ export class RioWaterSystem {
     this.renderer = renderer
     this.container = new Container()
     this.container.zIndex = 500
+
+    // Single pooled Graphics — cleared and redrawn each frame instead of creating new objects
+    this.particleGraphics = new Graphics()
+    this.splashGraphics = new Graphics()
+    this.container.addChild(this.particleGraphics)
+    this.container.addChild(this.splashGraphics)
+
     renderer.getEntityContainer().addChild(this.container)
   }
 
@@ -53,16 +62,14 @@ export class RioWaterSystem {
     for (let i = 0; i < count; i++) {
       if (this.particles.length >= this.maxParticles) break
 
-      // Pick a random point along the river path
       const pathIdx = Math.floor(Math.random() * this.map.riverPath.length)
       const point = this.map.riverPath[pathIdx]
 
-      // Flow direction: river flows from top to bottom (south)
       const particle: WaterParticle = {
         x: point.x + (Math.random() - 0.5) * 3,
         y: point.y,
         vx: (Math.random() - 0.5) * 0.02,
-        vy: 0.05 + Math.random() * 0.03, // Flow south
+        vy: 0.05 + Math.random() * 0.03,
         life: 0,
         maxLife: 3000 + Math.random() * 2000,
         size: 1 + Math.random() * 2,
@@ -82,7 +89,7 @@ export class RioWaterSystem {
       const pathIdx = Math.floor(Math.random() * tributary.path.length)
       const point = tributary.path[pathIdx]
 
-      // Flow from branch point outward
+      // Flow from branch point OUTWARD (downstream toward portal)
       const dx = point.x - tributary.branchPoint.x
       const dy = point.y - tributary.branchPoint.y
       const dist = Math.sqrt(dx * dx + dy * dy) || 1
@@ -90,12 +97,12 @@ export class RioWaterSystem {
       const particle: WaterParticle = {
         x: point.x + (Math.random() - 0.5) * 2,
         y: point.y + (Math.random() - 0.5),
-        vx: -(dx / dist) * 0.03,
-        vy: -(dy / dist) * 0.03,
+        vx: (dx / dist) * 0.03,   // downstream (was negated → upstream bug)
+        vy: (dy / dist) * 0.03,
         life: 0,
         maxLife: 2000 + Math.random() * 1500,
         size: 1 + Math.random() * 1.5,
-        alpha: 0.3 + Math.random() * 0.3,
+        alpha: 0.35 + Math.random() * 0.35,
         color: tributary.estado === 'completado' ? 0x66BB6A : 0x90CAF9,
       }
       this.particles.push(particle)
@@ -117,7 +124,6 @@ export class RioWaterSystem {
   update(dt: number, time: number) {
     this.time = time
 
-    // Spawn new particles
     this.spawnRiverParticles(3)
 
     if (this.map) {
@@ -128,9 +134,10 @@ export class RioWaterSystem {
       }
     }
 
-    // Update particles
     const dtMs = dt * 1000 / 60
-    this.container.removeChildren()
+
+    // Draw all particles to one persistent Graphics (avoids creating/destroying thousands of GPU objects)
+    this.particleGraphics.clear()
 
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]
@@ -147,13 +154,13 @@ export class RioWaterSystem {
       const alpha = p.alpha * (1 - lifeRatio * 0.5)
 
       const screen = this.renderer.isoToScreen(p.x, p.y)
-      const g = new Graphics()
-      g.circle(screen.x, screen.y, p.size)
-      g.fill({ color: p.color, alpha })
-      this.container.addChild(g)
+      this.particleGraphics.circle(screen.x, screen.y, p.size)
+      this.particleGraphics.fill({ color: p.color, alpha })
     }
 
-    // Update splashes
+    // Draw splashes to second persistent Graphics
+    this.splashGraphics.clear()
+
     for (let i = this.splashes.length - 1; i >= 0; i--) {
       const s = this.splashes[i]
       const elapsed = Date.now() - s.createdAt
@@ -168,14 +175,9 @@ export class RioWaterSystem {
       s.alpha = 0.6 * (1 - progress)
 
       const screen = this.renderer.isoToScreen(s.x, s.y)
-      const g = new Graphics()
-      g.circle(screen.x, screen.y, s.radius * (ISO_CONFIG.TILE_WIDTH / 2))
-      g.stroke({ width: 1, color: 0x90CAF9, alpha: s.alpha })
-      this.container.addChild(g)
+      this.splashGraphics.circle(screen.x, screen.y, s.radius * (ISO_CONFIG.TILE_WIDTH / 2))
+      this.splashGraphics.stroke({ width: 1, color: 0x90CAF9, alpha: s.alpha })
     }
-
-    // Depth sort
-    this.container.sortChildren()
   }
 
   destroy() {

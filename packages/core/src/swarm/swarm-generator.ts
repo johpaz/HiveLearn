@@ -19,17 +19,9 @@ const WORKER_AGENTS: string[] = [
   AGENT_IDS.exercise,
   AGENT_IDS.quiz,
   AGENT_IDS.challenge,
-  AGENT_IDS.code,
-  AGENT_IDS.svg,
-  AGENT_IDS.gif,
-  AGENT_IDS.infographic,
-  AGENT_IDS.image,
-  AGENT_IDS.audio,
   AGENT_IDS.gamification,
   AGENT_IDS.evaluation,
   AGENT_IDS.feedback,
-  AGENT_IDS.monitor,
-  AGENT_IDS.visionPedagogica,
 ]
 
 function buildTaskDescription(agentId: string, perfil: StudentProfile, meta: string, structureCtx: string): string {
@@ -129,6 +121,7 @@ export async function runSwarmGeneration(
         workerName: agentId,
         swarmId,
         progress: completed / total,
+        outputSnippet: output.slice(0, 300),
       })
     } catch (e) {
       failed++

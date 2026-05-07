@@ -24,6 +24,7 @@ import type {
 } from '../canvaslearn/rio/types'
 import { RIO_NIVELES, DEFAULT_AVATAR, ISO_CONFIG, DEFAULT_AUDIO_SETTINGS } from '../canvaslearn/rio/types'
 import type { AudioManager } from '../canvaslearn/rio/audio/AudioManager'
+import { generateRioMundo } from '../canvaslearn/rio/world/RiverGenerator'
 
 // ─── Level helpers ───────────────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ const initialSwarmProgress: SwarmProgressWorld = {
   currentAgentId: null,
   currentAgentName: null,
   completedAgents: [],
-  totalAgents: 19,
+  totalAgents: 10,
   percentComplete: 0,
   lastCompletedZone: null,
 }
@@ -158,7 +159,7 @@ const initialState: State = {
     status: 'idle' as CoordinatorState['status'],
     currentWorker: null,
     activeWorkers: [],
-    totalWorkers: 19,
+    totalWorkers: 10,
   },
 
   xpFloat: null,
@@ -172,9 +173,12 @@ const initialState: State = {
   tourAgentesVisitados: [] as string[],
   tourSkipeado: false,
   tourAgenteActual: null as string | null,
+  tourAgentResults: {} as Record<string, { outputSnippet: string; zonas?: number; structureCtx?: string }>,
 
   loginSearchResult: null,
   ttsAudioQueue: [],
+
+  programaError: null,
 
   tiempoInicioSesion: null,
   tiempoSesion: 0,
@@ -297,6 +301,8 @@ export interface RioMundoStore extends State {
   marcarAgenteVisitado: (agentId: string) => void
   setTourAgenteActual: (agentId: string | null) => void
   finalizarTour: () => void
+  dispatchTourAgentResult: (agentId: string, outputSnippet: string, zonas?: number, structureCtx?: string) => void
+  actualizarTributarios: (zonaCount: number) => void
 
   // ─── Login WS Result ─────────────────────────────────────────────────────────
   setLoginSearchResult: (result: { found: boolean; profile?: StudentProfile } | null) => void
@@ -304,6 +310,9 @@ export interface RioMundoStore extends State {
   // ─── TTS ─────────────────────────────────────────────────────────────────────
   enqueueTtsAudio: (audioBase64: string) => void
   shiftTtsAudio: () => { audioBase64: string } | undefined
+
+  // ─── Programa error ──────────────────────────────────────────────────────────
+  setProgramaError: (err: { code: string; message: string; detail?: string } | null) => void
 
   // ─── Restore ──────────────────────────────────────────────────────────────────
   restoreSession: (data: Partial<State>) => void
@@ -608,6 +617,16 @@ export const useRioMundoStore = create<RioMundoStore>()((set, get) => ({
     tourAgenteActual: null,
     loginPhase: 'in_world',
   }),
+  dispatchTourAgentResult: (agentId, outputSnippet, zonas, structureCtx) => set((s) => ({
+    tourAgentResults: {
+      ...s.tourAgentResults,
+      [agentId]: { outputSnippet, zonas, structureCtx },
+    },
+  })),
+  actualizarTributarios: (zonaCount) => {
+    const newMapa = generateRioMundo(zonaCount)
+    set({ mapa: newMapa, tributaries: newMapa.tributaries })
+  },
 
   // ─── Login WS Result ─────────────────────────────────────────────────────────
 
@@ -625,6 +644,10 @@ export const useRioMundoStore = create<RioMundoStore>()((set, get) => ({
     }
     return item
   },
+
+  // ─── Programa error ──────────────────────────────────────────────────────────
+
+  setProgramaError: (programaError) => set({ programaError }),
 
   // ─── Restore ──────────────────────────────────────────────────────────────────
 

@@ -75,13 +75,14 @@ export function generateRioMundo(
       if (distToEdge === 0) type = 'montana'
       else if (distToEdge <= 1) type = 'piedra'
       else if (rng() < 0.35) type = 'pasto'
+      else type = 'tierra'
 
       tiles[y][x] = {
         x,
         y,
         type,
         elevation: type === 'montana' ? 3 : type === 'piedra' ? 1 : 0,
-        walkable: type !== 'montana' && type !== 'agua_profunda',
+        walkable: type !== 'montana',
       }
     }
   }
@@ -130,29 +131,42 @@ export function generateRioMundo(
     }
   }
 
-  // Bridge tiles where river crosses a camino
-  for (let y = 0; y < H; y++) {
+  // Cross-river bridges every ~8 tiles so the player can reach both banks.
+  const bridgeYs: number[] = []
+  for (let y = 4; y < H - 4; y += 8) {
+    bridgeYs.push(y)
+  }
+  for (const by of bridgeYs) {
+    // Find the river horizontal extent at this row
+    let minX = -1, maxX = -1
     for (let x = 0; x < W; x++) {
-      if (tiles[y][x].type === 'agua' && y > 0 && y < H - 1) {
-        if (tiles[y - 1][x].type === 'camino' || tiles[y + 1][x].type === 'camino') {
-          // This is probably a river crossing - not needed yet but mark it
-        }
+      if (tiles[by][x].type === 'agua' || tiles[by][x].type === 'agua_profunda') {
+        if (minX === -1) minX = x
+        maxX = x
+      }
+    }
+    if (minX === -1) continue
+    // Replace the water with puente tiles + extend onto banks
+    for (let x = minX - 1; x <= maxX + 1; x++) {
+      if (x < 0 || x >= W) continue
+      const t = tiles[by][x].type
+      if (t === 'agua' || t === 'agua_profunda' || t === 'arena' || t === 'tierra' || t === 'pasto') {
+        tiles[by][x] = { x, y: by, type: 'puente', elevation: 1, walkable: true }
       }
     }
   }
 
-  // Spawn point at river mouth (bottom)
-  const spawn = { x: riverPath[0].x, y: riverPath[0].y - 2 }
+  // Spawn point on the bank next to the river mouth (offset horizontally to avoid water)
+  const riverMouth = riverPath[0]
+  const spawn = { x: riverMouth.x + 5, y: riverMouth.y - 1 }
 
-  // Clear path around spawn
-  for (let dy = -3; dy <= 1; dy++) {
+  // Clear landing area — replace everything (including water) with walkable camino
+  for (let dy = -2; dy <= 1; dy++) {
     for (let dx = -2; dx <= 2; dx++) {
       const sx = spawn.x + dx
       const sy = spawn.y + dy
       if (sx >= 0 && sx < W && sy >= 0 && sy < H) {
-        if (tiles[sy][sx].type !== 'agua' && tiles[sy][sx].type !== 'agua_profunda') {
-          tiles[sy][sx] = { x: sx, y: sy, type: 'camino', elevation: 0, walkable: true }
-        }
+        tiles[sy][sx] = { x: sx, y: sy, type: 'camino', elevation: 0, walkable: true }
       }
     }
   }
@@ -231,7 +245,10 @@ export function generateRioMundo(
         const vy = point.y + dy
         if (vx >= 0 && vx < W && vy >= 0 && vy < H && rng() < 0.3) {
           if (tiles[vy][vx].type === 'pasto' || tiles[vy][vx].type === 'tierra') {
-            tiles[vy][vx] = { x: vx, y: vy, type: rng() < 0.5 ? 'arbusto' : 'flores', elevation: 0, walkable: false }
+            const isFlower = rng() >= 0.5
+            tiles[vy][vx] = isFlower
+              ? { x: vx, y: vy, type: 'flores', elevation: 0, walkable: true }
+              : { x: vx, y: vy, type: 'arbusto', elevation: 0, walkable: false }
           }
         }
       }

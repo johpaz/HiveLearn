@@ -253,6 +253,7 @@ export interface RioMundoState {
   tourAgentesVisitados: string[]
   tourSkipeado: boolean
   tourAgenteActual: string | null
+  tourAgentResults: Record<string, { outputSnippet: string; zonas?: number; structureCtx?: string }>
 
   // ─── UI Feedback ──────────────────────────────────────────────────────────────
   xpFloat: { id: string; isoX: number; isoY: number; xp: number; key: number } | null
@@ -265,6 +266,9 @@ export interface RioMundoState {
 
   // ─── TTS Audio Queue ─────────────────────────────────────────────────────────
   ttsAudioQueue: Array<{ audioBase64: string }>
+
+  // ─── Programa creation error ─────────────────────────────────────────────────
+  programaError: { code: string; message: string; detail?: string } | null
 
   // ─── Audio ───────────────────────────────────────────────────────────────────
   audioManager: import('./audio/AudioManager').AudioManager | null
