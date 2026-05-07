@@ -73,6 +73,8 @@ export function ProgramaMundoPage() {
     if (alumnoCreatedRef.current) return
     const store = useRioMundoStore.getState()
     if (store.alumnoId) {
+      // Alumno ya existe en BD (vino de buscar_nickname). Solo asegurar sessionId.
+      if (!store.sessionId) setSessionId(crypto.randomUUID())
       alumnoCreatedRef.current = true
       return
     }
@@ -99,7 +101,9 @@ export function ProgramaMundoPage() {
 
     const sendWs = store.sendWsMessage
     if (sendWs) {
-      sendWs({ tipo: 'crear_alumno', nombre: o.nombre, nickname: nick, edad: o.edad })
+      // CRÍTICO: incluir alumnoId para que backend cree el alumno con el mismo ID.
+      // Si no, backend genera otro y el iniciar_programa siguiente falla con FK.
+      sendWs({ tipo: 'crear_alumno', alumnoId: newAlumnoId, nombre: o.nombre, nickname: nick, edad: o.edad })
     }
     alumnoCreatedRef.current = true
   }, [setAlumnoId, setNickname, setSessionId, setPerfil])
@@ -244,14 +248,64 @@ export function ProgramaMundoPage() {
   }, [phase])
 
   // ─── Pergamino submit ────────────────────────────────────────────────────────
+  // En 'nickname' hacemos buscar_nickname primero. Si existe, useRioLive setea
+  // perfil/alumnoId/nickname y poblamos onboarding; el conversation salta a tema.
+  // Si no existe, tratamos el nickname como nombre nuevo y avanzamos a edad.
 
   const handlePergaminoSubmit = useCallback((value: string) => {
-    const result = conversationRef.current.submitText(value)
+    const trimmed = (value ?? '').trim()
+    if (phase === 'nickname') {
+      if (trimmed.length < 2) {
+        // Dejar que submitText devuelva el error y se muestre
+        conversationRef.current.submitText(trimmed)
+        return
+      }
+      const sendWs = useRioMundoStore.getState().sendWsMessage
+      if (!sendWs) {
+        // Sin WS: tratar como nuevo
+        conversationRef.current.submitText(trimmed)
+        return
+      }
+      pendingNicknameRef.current = trimmed
+      setLookupPending(true)
+      sendWs({ tipo: 'buscar_nickname', nickname: trimmed })
+      return
+    }
+    const result = conversationRef.current.submitText(trimmed)
     if (!result.ok && result.error) {
-      // Mostramos error inline en el pergamino — pero ya el componente lo gestiona
       console.warn('[ProgramaMundoPage] pergamino error:', result.error)
     }
-  }, [])
+  }, [phase])
+
+  // ─── Reaccionar al resultado del lookup ─────────────────────────────────────
+
+  useEffect(() => {
+    if (!lookupPending) return
+    if (!loginSearchResult) return
+
+    const found = !!(loginSearchResult.found && loginSearchResult.profile)
+    setLookupPending(false)
+    useRioMundoStore.getState().setLoginSearchResult(null)
+
+    const pending = pendingNicknameRef.current
+    pendingNicknameRef.current = null
+
+    if (found) {
+      // useRioLive ya seteó perfil + alumnoId + nickname en el store.
+      // Poblar onboarding para que firstPending salte nombre/edad.
+      const profile = loginSearchResult.profile!
+      useRioMundoStore.getState().updateOnboarding({
+        nombre: profile.nombre,
+        edad: profile.edad ?? 18,
+      })
+      // Re-iniciar conversation; firstPending recalcula y va a avatar/tema/etc.
+      conversationRef.current.start()
+    } else if (pending) {
+      // Alumno nuevo: persistir el nickname como nombre y avanzar a edad.
+      useRioMundoStore.getState().setNickname(pending)
+      conversationRef.current.submitText(pending)
+    }
+  }, [lookupPending, loginSearchResult])
 
   // ─── Welcome buttons handlers ───────────────────────────────────────────────
 
