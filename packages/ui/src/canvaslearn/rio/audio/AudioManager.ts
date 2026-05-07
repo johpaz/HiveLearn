@@ -8,8 +8,8 @@ export interface AudioSettings {
 }
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
-  musicVolume: 0.7,
-  sfxVolume: 0.8,
+  musicVolume: 70,
+  sfxVolume: 80,
   musicMuted: false,
   sfxMuted: false,
 }
@@ -122,17 +122,16 @@ export class AudioManager {
           throw new Error('AudioContext is closed')
         }
 
-        // Use promise-based decodeAudioData with callback fallback
-        // NOTE: decodeAudioData detaches the ArrayBuffer, so we need a copy for fallback
+        // decodeAudioData SIEMPRE detacha el ArrayBuffer al llamarse (incluso en fallo),
+        // así que la copia debe hacerse ANTES del primer intento.
+        const fallbackBuffer = arrayBuffer.slice(0)
         let audioBuffer: AudioBuffer
         try {
           audioBuffer = await this.ctx!.decodeAudioData(arrayBuffer)
         } catch (decodeError) {
           console.warn(`[AudioManager] Promise-based decode failed for ${key}, trying callback...`, decodeError)
-          // Use a copy since the original buffer may have been detached
-          const arrayBufferCopy = arrayBuffer.slice(0)
           audioBuffer = await new Promise((resolve, reject) => {
-            this.ctx!.decodeAudioData(arrayBufferCopy, resolve, reject)
+            this.ctx!.decodeAudioData(fallbackBuffer, resolve, reject)
           })
         }
         

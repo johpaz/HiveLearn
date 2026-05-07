@@ -309,6 +309,9 @@ export interface RioMundoStore extends State {
   restoreSession: (data: Partial<State>) => void
   reset: () => void
   resetCompleto: () => void
+
+  // ─── Session Exit ─────────────────────────────────────────────────────────────
+  salirSesion: () => void
 }
 
 let xpFloatKey = 0
@@ -375,7 +378,9 @@ export const useRioMundoStore = create<RioMundoStore>()((set, get) => ({
   updateOnboarding: (data) => set((s) => ({
     onboarding: { ...s.onboarding, ...data },
   })),
-  completeOnboarding: () => set({ loginPhase: 'entering_world' }),
+  completeOnboarding: () => set((s) =>
+    s.loginPhase === 'onboarding_chat' ? { loginPhase: 'entering_world' } : {}
+  ),
 
   // ─── World ─────────────────────────────────────────────────────────────────────
 
@@ -638,5 +643,26 @@ export const useRioMundoStore = create<RioMundoStore>()((set, get) => ({
   })),
 
   resetCompleto: () => set(initialState),
+
+  salirSesion: () => {
+    const state = get()
+    // Notificar al servidor para pausar la sesión en BD
+    if (state.sendWsMessage && state.sessionId) {
+      state.sendWsMessage({
+        tipo: 'salir_sesion',
+        sessionId: state.sessionId,
+        alumnoId: state.alumnoId,
+      })
+    }
+    // Limpiar estado local (mantiene provider/modelo/instanceId)
+    set((s) => ({
+      ...initialState,
+      selectedProviderId: s.selectedProviderId,
+      selectedModelId: s.selectedModelId,
+      instanceId: s.instanceId,
+      audioManager: s.audioManager,
+      audioSettings: s.audioSettings,
+    }))
+  },
 
 }))

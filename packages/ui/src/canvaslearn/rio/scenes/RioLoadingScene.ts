@@ -176,6 +176,7 @@ export class RioLoadingScene {
         }
       }
 
+      if (!this.container) return
       this.container.alpha = this.fadeAlpha
 
       this.progress += (this.targetProgress - this.progress) * 0.05

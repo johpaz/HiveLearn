@@ -91,6 +91,7 @@ export function RioMundo() {
   const [showLogin, setShowLogin] = useState(false)
   const [showLoading, setShowLoading] = useState(false)
   const [showTourSkip, setShowTourSkip] = useState(false)
+  const [showTourNext, setShowTourNext] = useState(false)
   const { speak: beeSpeak } = useTTSSpeak()
 
   const {
@@ -124,7 +125,12 @@ export function RioMundo() {
       autoDensity: true,
     }).then(() => {
       if (!containerRef.current) return
-      containerRef.current.appendChild(app.canvas as HTMLCanvasElement)
+      const canvas = app.canvas as HTMLCanvasElement
+      canvas.style.display = 'block'
+      canvas.style.position = 'absolute'
+      canvas.style.top = '0'
+      canvas.style.left = '0'
+      containerRef.current.appendChild(canvas)
 
       appRef.current = app
 
@@ -172,6 +178,9 @@ export function RioMundo() {
       loadingSceneRef.current?.destroy()
       audioManagerRef.current?.destroy()
       audioManagerRef.current = null
+      useRioMundoStore.getState().setAudioManager(null)
+      useRioMundoStore.getState().setAudioReady(false)
+      useRioMundoStore.getState().setBeeLoaderVisible(true)
       swarmBeesRef.current?.destroy()
       entryAnimRef.current?.destroy()
       waterRef.current?.destroy()
@@ -293,7 +302,7 @@ export function RioMundo() {
 
     const handleClick = (e: MouseEvent) => {
       const state = useRioMundoStore.getState()
-      if (state.loginPhase !== 'in_world' && state.loginPhase !== 'entering_world' && state.loginPhase !== 'swarm_tour') return
+      if (state.loginPhase !== 'in_world' && state.loginPhase !== 'entering_world' && state.loginPhase !== 'swarm_tour' && state.loginPhase !== 'onboarding_chat') return
       if (!rendererRef.current || !cameraRef.current) return
 
       const canvasRect = appRef.current?.canvas?.getBoundingClientRect()
@@ -355,7 +364,7 @@ export function RioMundo() {
         let dx = 0
         let dy = 0
 
-        if (state.loginPhase === 'in_world' || state.loginPhase === 'entering_world' || state.loginPhase === 'swarm_tour') {
+        if (state.loginPhase === 'in_world' || state.loginPhase === 'entering_world' || state.loginPhase === 'swarm_tour' || state.loginPhase === 'onboarding_chat') {
           if (keys.has('w') || keys.has('arrowup')) dy -= 1
           if (keys.has('s') || keys.has('arrowdown')) dy += 1
           if (keys.has('a') || keys.has('arrowleft')) dx -= 1
@@ -569,6 +578,17 @@ export function RioMundo() {
     }
   }, [loginPhase])
 
+  // ─── Camera zoom por fase de login ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isReady) return
+    if (loginPhase === 'onboarding_chat') {
+      useRioMundoStore.getState().setCamaraZoom(1.8)
+    } else if (loginPhase === 'in_world') {
+      useRioMundoStore.getState().setCamaraZoom(1.0)
+    }
+  }, [loginPhase, isReady])
+
   // ─── Handle onboarding complete ──────────────────────────────────────────────
 
   const handleOnboardingComplete = useCallback(async (data: Record<string, string | number>) => {
@@ -607,6 +627,7 @@ export function RioMundo() {
     if (beeRef.current && dialogRef.current && swarmBeesRef.current) {
       tourRef.current.setRefs(beeRef.current, dialogRef.current, swarmBeesRef.current)
       tourRef.current.setSpeakFunction(beeSpeak)
+      tourRef.current.setOnShowNextButton(setShowTourNext)
       setShowTourSkip(true)
       tourRef.current.start()
     } else {
@@ -808,13 +829,25 @@ export function RioMundo() {
         />
       )}
 
-      {/* Swarm Tour Skip Button */}
+      {/* Swarm Tour controls */}
       {showTourSkip && (
-        <div className="absolute top-4 left-4 z-50 pointer-events-auto">
+        <div className="absolute top-4 left-4 z-50 pointer-events-auto flex flex-col gap-2">
+          {showTourNext && (
+            <button
+              onClick={() => {
+                tourRef.current.requestNext()
+              }}
+              className="px-5 py-2.5 bg-[#fbbf24] hover:bg-[#f59e0b] text-[#0a0e27] rounded-xl text-sm font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 shadow-lg shadow-[#fbbf24]/30 flex items-center gap-2"
+            >
+              <span>Siguiente</span>
+              <span className="text-base">→</span>
+            </button>
+          )}
           <button
             onClick={() => {
               tourRef.current.skip()
               setShowTourSkip(false)
+              setShowTourNext(false)
             }}
             className="px-4 py-2 bg-[#1a1f3a]/80 backdrop-blur-sm border border-[#fbbf24]/30 text-[#fbbf24] hover:bg-[#1a1f3a] rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
           >

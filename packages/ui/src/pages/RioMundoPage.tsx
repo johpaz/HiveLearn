@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { RioMundo } from '@/canvaslearn/rio'
 import { RioA2UIBridge } from '@/canvaslearn/rio/protocol/RioA2UIBridge'
 import { useRioMundoStore } from '@/store/rioMundoStore'
-import { useRioLive } from '@/hooks/useRioLive'
 import { ConnectionIndicator } from '@/components/ConnectionIndicator'
 
 export function RioMundoPage() {
@@ -50,16 +49,11 @@ export function RioMundoPage() {
     }
   }, [sessionId, alumnoId])
 
-  // ─── Connect WebSocket ──────────────────────────────────────────────────────
+  // ─── WS state from store (connection managed globally by WsConnection in App) ─
 
-  const {
-    isConnected,
-    isGenerating,
-    currentAgentId,
-    currentAgentName,
-    error: wsError,
-    a2uiMessages,
-  } = useRioLive()
+  const isConnected = useRioMundoStore(s => s.wsStatus === 'connected')
+  const isGenerating = useRioMundoStore(s => s.isGenerating)
+  const currentAgentName = useRioMundoStore(s => s.swarmProgress.currentAgentName)
 
   // ─── Handle login phase transitions ────────────────────────────────────────
 
@@ -165,15 +159,6 @@ export function RioMundoPage() {
       sendWs({ tipo: 'obtener_programa', alumnoId })
     }
   }, [loginPhase, isGenerating, sessionId, programaUuid, alumnoId])
-
-  // ─── Handle WS errors ───────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (wsError && isConnected) {
-      // Connection was working but now has an error - show briefly
-      console.warn('[RioMundoPage] WS error:', wsError)
-    }
-  }, [wsError, isConnected])
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#1a3c2a]">

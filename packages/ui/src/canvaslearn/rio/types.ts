@@ -247,6 +247,13 @@ export interface RioMundoState {
   agentStatuses: Record<string, AgentStatus>
   coordinatorState: CoordinatorState
 
+  // ─── Swarm Tour ──────────────────────────────────────────────────────────────
+  tourActivo: boolean
+  tourStep: number
+  tourAgentesVisitados: string[]
+  tourSkipeado: boolean
+  tourAgenteActual: string | null
+
   // ─── UI Feedback ──────────────────────────────────────────────────────────────
   xpFloat: { id: string; isoX: number; isoY: number; xp: number; key: number } | null
   nivelUpActivo: boolean

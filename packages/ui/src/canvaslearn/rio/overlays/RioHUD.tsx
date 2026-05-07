@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useRioMundoStore } from '@/store/rioMundoStore'
 import { RIO_NIVELES } from '../types'
 
@@ -89,6 +90,7 @@ function AudioControl() {
 }
 
 export function RioHUD() {
+  const navigate = useNavigate()
   const {
     nickname,
     xpTotal,
@@ -96,12 +98,16 @@ export function RioHUD() {
     progresoNivel,
     vidas,
     racha,
-    mejorRacha,
     tributaries,
-    zonaActual,
-    beeState,
-    dialogBubbles,
+    salirSesion,
   } = useRioMundoStore()
+
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
+
+  const handleSalir = useCallback(() => {
+    salirSesion()
+    navigate('/')
+  }, [salirSesion, navigate])
 
   const nivelInfo = RIO_NIVELES.find(n => n.nivel === nivelActual) || RIO_NIVELES[0]
   const completedZones = tributaries.filter(t => t.estado === 'completado').length
@@ -109,6 +115,30 @@ export function RioHUD() {
 
   return (
     <div className="absolute inset-0 pointer-events-none">
+      {/* Exit confirmation dialog */}
+      {showExitConfirm && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-auto">
+          <div className="bg-[#0a0e27] border border-[#fbbf24]/40 rounded-2xl p-6 w-72 shadow-2xl">
+            <p className="text-white font-bold text-center mb-1">¿Salir del juego?</p>
+            <p className="text-[#888] text-sm text-center mb-5">Tu progreso se guarda automáticamente.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="flex-1 py-2 rounded-xl bg-white/10 text-white text-sm font-semibold hover:bg-white/20 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSalir}
+                className="flex-1 py-2 rounded-xl bg-red-500/80 text-white text-sm font-semibold hover:bg-red-500 transition-colors"
+              >
+                Salir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top bar */}
       <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
         {/* Left: Level & XP */}
@@ -128,7 +158,7 @@ export function RioHUD() {
           </div>
         </div>
 
-        {/* Right: Lives, Streak & Audio */}
+        {/* Right: Lives, Streak, Audio & Exit */}
         <div className="flex items-center gap-2">
           <div className="bg-[#0a0e27]/80 backdrop-blur-sm rounded-xl border border-[#fbbf24]/30 px-4 py-2 pointer-events-auto">
             <div className="flex items-center gap-4">
@@ -147,6 +177,13 @@ export function RioHUD() {
             </div>
           </div>
           <AudioControl />
+          <button
+            onClick={() => setShowExitConfirm(true)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 hover:bg-red-500/20 hover:border-red-500/40 transition-colors pointer-events-auto"
+            title="Salir del juego"
+          >
+            <span className="text-sm">🚪</span>
+          </button>
         </div>
       </div>
 

@@ -52,6 +52,8 @@ export function useRioLive(): RioLiveState {
 
   const connectProgramWs = useCallback(() => {
     if (unmountedRef.current) return
+    // Evitar conexión duplicada si ya hay una activa o conectándose
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED && wsRef.current.readyState !== WebSocket.CLOSING) return
 
     try {
       const url = getWsUrl('/hivelearn-program')
@@ -216,6 +218,8 @@ export function useRioLive(): RioLiveState {
 
   const connectEventsWs = useCallback(() => {
     if (unmountedRef.current) return
+    // Evitar conexión duplicada si ya hay una activa o conectándose
+    if (eventsWsRef.current && eventsWsRef.current.readyState !== WebSocket.CLOSED && eventsWsRef.current.readyState !== WebSocket.CLOSING) return
 
     try {
       const url = getWsUrl('/hivelearn-events')

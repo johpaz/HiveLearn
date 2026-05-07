@@ -749,8 +749,7 @@ async function handleObtenerPrograma(ws: ServerWebSocket<any>, data: any): Promi
       ok: true,
       sessionId: latestSession.session_id,
       programa_uuid: latestSession.session_id,
-      tema: latestSession.tema || '',
-      objetivo: latestSession.objetivo || '',
+      tema: latestSession.meta || '',
       xp_total: latestSession.xp_total ?? 0,
       nodos_completados: latestSession.nodos_completados ?? 0,
       total_nodos: latestSession.total_nodos ?? 0,
@@ -819,27 +818,10 @@ async function handleReanudarSesion(ws: ServerWebSocket<any>, data: any): Promis
     // 1. Buscar sesión activa del alumno
     const activeSession = persistence.getActiveSession(alumnoId)
 
-    // 2. Si no hay activa, buscar la última sesión completada
+    // 2. Si no hay activa, buscar la última sesión (activa o completada)
     let sessionData = activeSession
     if (!sessionData) {
-      const row = persistence.db.query(
-        `SELECT * FROM hl_sessions WHERE alumno_id = ? ORDER BY created_at DESC LIMIT 1`
-      ).get(alumnoId) as Record<string, any> | undefined
-      if (row) {
-        sessionData = {
-          sessionId: row.session_id,
-          alumnoId: row.alumno_id,
-          curriculoId: row.curriculo_id,
-          xpTotal: row.xp_total,
-          nivelAlcanzado: row.nivel_alcanzado,
-          logrosJson: row.logros_json,
-          nodosCompletados: row.nodos_completados,
-          evaluacionPuntaje: row.evaluacion_puntaje,
-          completada: !!row.completada,
-          tema: row.tema || '',
-          objetivo: row.objetivo || '',
-        }
-      }
+      sessionData = persistence.getLastSessionForAlumno(alumnoId)
     }
 
     if (!sessionData) {
@@ -876,6 +858,25 @@ async function handleReanudarSesion(ws: ServerWebSocket<any>, data: any): Promis
   }
 }
 
+async function handleSalirSesion(ws: ServerWebSocket<any>, data: any): Promise<void> {
+  try {
+    const { sessionId, alumnoId } = data
+    if (!sessionId) {
+      sendReply(ws, 'salir_sesion_result', { ok: false, error: 'sessionId requerido' })
+      return
+    }
+    const persistence = new LessonPersistence()
+    // Pausa suave: guarda timestamp sin borrar datos
+    persistence.pauseSession(sessionId, data.lastNodeId || '', JSON.stringify({ alumnoId }))
+    // Limpiar sesión activa en memoria
+    activeSessions.delete(sessionId)
+    sendReply(ws, 'salir_sesion_result', { ok: true, sessionId })
+  } catch (err) {
+    log.error('[program] Error en salir_sesion', { error: (err as Error).message })
+    sendReply(ws, 'salir_sesion_result', { ok: false, error: 'Error al salir de sesión' })
+  }
+}
+
 // ─── Router principal ────────────────────────────────────────────────────────
 
 export async function handleProgramMessage(
@@ -908,6 +909,9 @@ export async function handleProgramMessage(
       break
     case 'reanudar_sesion':
       await handleReanudarSesion(ws, data)
+      break
+    case 'salir_sesion':
+      await handleSalirSesion(ws, data)
       break
     case 'sync_progress':
       await handleSyncProgress(ws, data)

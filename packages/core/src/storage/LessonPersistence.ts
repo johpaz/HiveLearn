@@ -738,6 +738,8 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
+      tema: row.tema || '',
+      objetivo: row.objetivo || '',
       nodosJson: row.nodos_json ?? '[]',
       topicSlug: row.topic_slug ?? null,
       metaAlumno: row.meta_alumno ?? '',
@@ -859,7 +861,30 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
+      tema: row.tema || '',
+      objetivo: row.objetivo || '',
     }))
+  }
+
+  /** Retorna la sesión más reciente de un alumno sin importar si está activa o completada */
+  getLastSessionForAlumno(alumnoId: string): SessionData | null {
+    const row = this.db.query(
+      `SELECT * FROM hl_sessions WHERE alumno_id = ? ORDER BY created_at DESC LIMIT 1`
+    ).get(alumnoId) as Record<string, any> | undefined
+    if (!row) return null
+    return {
+      sessionId: row.session_id,
+      alumnoId: row.alumno_id,
+      curriculoId: row.curriculo_id,
+      xpTotal: row.xp_total,
+      nivelAlcanzado: row.nivel_alcanzado,
+      logrosJson: row.logros_json,
+      nodosCompletados: row.nodos_completados,
+      evaluacionPuntaje: row.evaluacion_puntaje,
+      completada: !!row.completada,
+      tema: row.tema || '',
+      objetivo: row.objetivo || '',
+    }
   }
 
   /** Elimina una sesión y todos sus datos relacionados */

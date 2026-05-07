@@ -67,6 +67,7 @@ export interface MundoBienvenida {
     programa_uuid: string
     tema: string
     nivel_previo: string
+    reanudado?: boolean
   }
 }
 
@@ -85,6 +86,7 @@ export interface MundoAbrirModulo {
     tipo_pedagogico: 'concept' | 'exercise' | 'quiz' | 'challenge' | 'milestone'
     xp_recompensa: number
     animacion?: 'apertura' | 'deslizamiento' | 'explosion'
+    estado?: 'disponible' | 'completado' | 'bloqueado'
   }
 }
 

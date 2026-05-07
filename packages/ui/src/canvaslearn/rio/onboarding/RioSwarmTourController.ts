@@ -14,6 +14,9 @@ const TOUR_AGENTS = [
   { id: 'hl-feedback-agent', name: 'Feedback', description: 'Te doy retroalimentación para que sigas mejorando.' },
 ]
 
+// How long to wait before auto-advancing if the user doesn't click
+const NEXT_TIMEOUT_MS = 12000
+
 export class RioSwarmTourController {
   private beeRef: RioBee | null = null
   private dialogRef: RioDialog | null = null
@@ -22,6 +25,9 @@ export class RioSwarmTourController {
   private currentStep: number = 0
   private isRunning: boolean = false
   private skipped: boolean = false
+
+  private nextResolve: (() => void) | null = null
+  private onShowNextButtonFn: ((show: boolean) => void) | null = null
 
   setRefs(beeRef: RioBee, dialogRef: RioDialog, swarmBeesRef: RioSwarmBees) {
     this.beeRef = beeRef
@@ -33,6 +39,17 @@ export class RioSwarmTourController {
     this.speakFn = fn
   }
 
+  setOnShowNextButton(fn: (show: boolean) => void) {
+    this.onShowNextButtonFn = fn
+  }
+
+  requestNext() {
+    if (this.nextResolve) {
+      this.nextResolve()
+      this.nextResolve = null
+    }
+  }
+
   async start() {
     if (this.isRunning) return
     this.isRunning = true
@@ -42,14 +59,12 @@ export class RioSwarmTourController {
     const store = useRioMundoStore.getState()
     store.iniciarTour()
 
-    // Mensaje inicial del coordinador
     const intro = '¡Bienvenido al Enjambre! Te voy a presentar a cada agente que creará tu programa de aprendizaje. ¡Sígueme!'
     this.showCoordinatorMessage(intro)
     if (this.speakFn) await this.speakFn(intro)
 
     await this.wait(2000)
 
-    // Iniciar secuencia
     await this.visitNextAgent()
   }
 
@@ -59,10 +74,30 @@ export class RioSwarmTourController {
     store.skipTour()
     this.isRunning = false
 
-    // Cancelar flyTo de la abeja
+    // Resolve any pending "next" wait so the async chain doesn't hang
+    if (this.nextResolve) {
+      this.nextResolve()
+      this.nextResolve = null
+    }
+    this.onShowNextButtonFn?.(false)
+
     if (this.beeRef) {
       this.beeRef.cancelFlyTo()
     }
+  }
+
+  private waitForNext(): Promise<void> {
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        this.nextResolve = null
+        resolve()
+      }, NEXT_TIMEOUT_MS)
+
+      this.nextResolve = () => {
+        clearTimeout(timer)
+        resolve()
+      }
+    })
   }
 
   private async visitNextAgent() {
@@ -76,30 +111,23 @@ export class RioSwarmTourController {
     store.setTourStep(this.currentStep)
     store.setTourAgenteActual(agent.id)
 
-    // Obtener posición del agente en el mundo
     const agentPos = this.swarmBeesRef?.getBeePosition(agent.id)
     if (!agentPos) {
-      // Si no hay posición, saltar al siguiente
       this.currentStep++
       await this.visitNextAgent()
       return
     }
 
-    // La abeja coordinadora vuela hacia el agente
     const flyMessage = `Vamos a conocer al Agente ${agent.name}...`
     this.showCoordinatorMessage(flyMessage, 3000)
     if (this.speakFn) await this.speakFn(flyMessage)
 
-    // Teletransportar jugador cerca del agente (suavemente)
-    const playerState = store.jugador
     const targetX = agentPos.x + 3
     const targetY = agentPos.y + 3
     store.setJugadorPosicion(targetX, targetY)
 
-    // Abeja vuela al agente
     if (this.beeRef) {
       this.beeRef.flyTo(agentPos.x, agentPos.y, async () => {
-        // Al llegar, presentar al agente
         await this.presentAgent(agent, agentPos.x, agentPos.y)
       })
     }
@@ -110,32 +138,31 @@ export class RioSwarmTourController {
 
     const store = useRioMundoStore.getState()
 
-    // Zoom in al llegar al agente
     store.setCamaraZoom(1.8)
 
-    // Mensaje del coordinador presentando al agente
     const introText = `Este es el Agente ${agent.name}.`
     this.showCoordinatorMessage(introText, 4000)
     if (this.speakFn) await this.speakFn(introText)
 
     await this.wait(500)
 
-    // El agente muestra su descripción en burbuja anclada sobre su posición
     if (this.dialogRef) {
-      this.dialogRef.showAgentMessage(agent.id, agent.description, isoX, isoY, 6000)
+      this.dialogRef.showAgentMessage(agent.id, agent.description, isoX, isoY, NEXT_TIMEOUT_MS + 2000)
     }
     if (this.speakFn) await this.speakFn(agent.description)
 
-    // Marcar como visitado
     store.marcarAgenteVisitado(agent.id)
 
-    await this.wait(2000)
+    // Show "Siguiente" button and wait for user click (or auto-advance after timeout)
+    this.onShowNextButtonFn?.(true)
+    await this.waitForNext()
+    this.onShowNextButtonFn?.(false)
 
-    // Restaurar zoom antes de ir al siguiente
+    if (this.skipped) return
+
     store.setCamaraZoom(1.0)
     await this.wait(500)
 
-    // Avanzar al siguiente
     this.currentStep++
     await this.visitNextAgent()
   }
@@ -151,7 +178,6 @@ export class RioSwarmTourController {
 
     await this.wait(2000)
 
-    // Finalizar tour y pasar a in_world
     store.finalizarTour()
     this.isRunning = false
   }
