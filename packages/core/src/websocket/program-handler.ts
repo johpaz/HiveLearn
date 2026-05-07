@@ -296,10 +296,38 @@ export async function iniciarPrograma(
   data: { perfil: any; meta: string; session_id?: string; alumno_id?: string }
 ): Promise<void> {
   const sessionId = data.session_id || `prog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const alumnoId = data.alumno_id || `alumno-${Date.now()}`
+  const alumnoId = data.alumno_id || data.perfil?.alumnoId || `alumno-${Date.now()}`
   const nickname = data.perfil?.nickname || 'Alumno'
 
-  log.info('[program] Iniciando programa', { sessionId, meta: data.meta })
+  log.info('[program] Iniciando programa', { sessionId, alumnoId, meta: data.meta })
+
+  // Garantizar que el alumno existe en BD antes de crear sesión / currículo.
+  // Resuelve race condition cuando el cliente envía iniciar_programa antes
+  // de que crear_alumno haya completado la inserción.
+  try {
+    const persistence = new LessonPersistence()
+    const existing = persistence.getStudentProfile(alumnoId)
+    if (!existing) {
+      await crearAlumno({
+        alumnoId,
+        nombre: data.perfil?.nombre || nickname,
+        nickname,
+        avatar: data.perfil?.avatar || '👤',
+        edad: Number(data.perfil?.edad ?? 18),
+        estado: 'activo',
+        sesionesTotal: 0,
+        xpAcumulado: 0,
+      } as StudentProfile)
+      log.info('[program] Alumno auto-creado para iniciar_programa', { alumnoId })
+    }
+  } catch (err) {
+    log.error('[program] No se pudo asegurar alumno antes de iniciar', {
+      alumnoId,
+      error: (err as Error).message,
+    })
+    sendError(ws, 'No se pudo registrar el alumno antes de iniciar el programa.', true)
+    return
+  }
 
   const session: ProgramSession = {
     sessionId,
@@ -639,7 +667,18 @@ async function handleCrearAlumno(ws: ServerWebSocket<any>, data: any): Promise<v
       sendReply(ws, 'crear_alumno_result', { ok: false, error: 'Nombre, nickname y edad son requeridos' })
       return
     }
-    const alumnoId = crypto.randomUUID()
+    // Respetar el alumnoId del cliente si viene (evita mismatch con sesiones ya generadas localmente).
+    // Si ya existe en BD con ese ID, devolvemos el perfil existente (idempotente).
+    const persistence = new LessonPersistence()
+    const requestedId: string | undefined = data.alumnoId || data.alumno_id
+    if (requestedId) {
+      const existing = persistence.getStudentProfile(requestedId)
+      if (existing) {
+        sendReply(ws, 'crear_alumno_result', { ok: true, alumnoId: existing.alumnoId, perfil: existing })
+        return
+      }
+    }
+    const alumnoId = requestedId || crypto.randomUUID()
     const avatar = Number(edad) <= 12 ? '🧒' : Number(edad) <= 17 ? '🧑' : '👤'
     await crearAlumno({
       alumnoId,

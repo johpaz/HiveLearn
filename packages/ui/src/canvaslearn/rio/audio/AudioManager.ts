@@ -100,41 +100,58 @@ export class AudioManager {
     console.log(`[AudioManager] Starting sequential preload of ${entries.length} assets...`)
     
     for (const [key, url] of entries) {
+      // Si el ctx fue destruido entre iteraciones (componente desmontado), abortar.
+      if (!this.ctx || this.ctx.state === 'closed') {
+        console.warn(`[AudioManager] AudioContext unavailable, aborting preload at ${key}`)
+        return
+      }
       try {
         const resp = await fetch(url)
         const contentType = resp.headers.get('content-type') || 'unknown'
-        
+
         if (!resp.ok) {
           throw new Error(`HTTP ${resp.status}: ${resp.statusText} (Type: ${contentType})`)
         }
-        
+
+        // Detectar HTML (SPA fallback del dev server) — saltear sin lanzar
+        if (contentType.includes('text/html')) {
+          console.warn(`[AudioManager] Skipping ${key}: server returned HTML (asset not served at ${url})`)
+          continue
+        }
+
         const arrayBuffer = await resp.arrayBuffer()
         if (arrayBuffer.byteLength === 0) {
           throw new Error(`Empty buffer received for ${url}`)
+        }
+
+        // Re-check ctx después del fetch (puede haberse cerrado)
+        if (!this.ctx || this.ctx.state === 'closed') {
+          console.warn(`[AudioManager] AudioContext closed during fetch of ${key}, aborting`)
+          return
         }
 
         // Log first bytes to identify content
         const bytes = new Uint8Array(arrayBuffer.slice(0, 16))
         const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')
         console.log(`[AudioManager] Loading ${key}: ${arrayBuffer.byteLength} bytes, type=${contentType}, magic=${hex}`)
-        
-        if (this.ctx?.state === 'closed') {
-          throw new Error('AudioContext is closed')
-        }
 
         // decodeAudioData SIEMPRE detacha el ArrayBuffer al llamarse (incluso en fallo),
         // así que la copia debe hacerse ANTES del primer intento.
         const fallbackBuffer = arrayBuffer.slice(0)
         let audioBuffer: AudioBuffer
         try {
-          audioBuffer = await this.ctx!.decodeAudioData(arrayBuffer)
+          audioBuffer = await this.ctx.decodeAudioData(arrayBuffer)
         } catch (decodeError) {
           console.warn(`[AudioManager] Promise-based decode failed for ${key}, trying callback...`, decodeError)
+          if (!this.ctx) {
+            console.warn(`[AudioManager] ctx vanished mid-decode for ${key}, aborting`)
+            return
+          }
           audioBuffer = await new Promise((resolve, reject) => {
             this.ctx!.decodeAudioData(fallbackBuffer, resolve, reject)
           })
         }
-        
+
         this.buffers.set(key, audioBuffer)
       } catch (e) {
         console.warn(`[AudioManager] Failed to load: ${key} from ${url}`, e)

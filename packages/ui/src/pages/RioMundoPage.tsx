@@ -164,6 +164,21 @@ export function RioMundoPage() {
     }
   }, [loginPhase, isGenerating, sessionId, programaUuid, alumnoId])
 
+  // ─── Guard: no montar RioMundo (Pixi+audio) hasta tener programa ─────────────
+  // Si llegamos sin programa, el useEffect de arriba ya redirige a /programa.
+  // Mientras tanto, evitar inicializar Pixi y AudioManager en vano.
+
+  if (!programaUuid) {
+    return (
+      <div className="relative w-full h-screen overflow-hidden bg-[#0a0e27] flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-5xl mb-3 animate-bounce">🐝</div>
+          <p className="text-[#fbbf24] font-bold text-sm">Preparando tu programa…</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#1a3c2a]">
       <RioMundo />
