@@ -254,28 +254,33 @@ export function ProgramaMundoPage() {
 
   const handlePergaminoSubmit = useCallback((value: string) => {
     const trimmed = (value ?? '').trim()
-    if (phase === 'nickname') {
+    // Leer phase actual del controller (no del state, que puede estar stale en closure)
+    const currentPhase = conversationRef.current.getPhase()
+    console.log('[ProgramaMundoPage] pergamino submit', { phase: currentPhase, value: trimmed })
+
+    if (currentPhase === 'nickname') {
       if (trimmed.length < 2) {
-        // Dejar que submitText devuelva el error y se muestre
         conversationRef.current.submitText(trimmed)
         return
       }
       const sendWs = useRioMundoStore.getState().sendWsMessage
       if (!sendWs) {
-        // Sin WS: tratar como nuevo
+        console.warn('[ProgramaMundoPage] sendWs no disponible, tratando como alumno nuevo')
         conversationRef.current.submitText(trimmed)
         return
       }
       pendingNicknameRef.current = trimmed
       setLookupPending(true)
+      console.log('[ProgramaMundoPage] enviando buscar_nickname', { nickname: trimmed })
       sendWs({ tipo: 'buscar_nickname', nickname: trimmed })
       return
     }
+
     const result = conversationRef.current.submitText(trimmed)
     if (!result.ok && result.error) {
       console.warn('[ProgramaMundoPage] pergamino error:', result.error)
     }
-  }, [phase])
+  }, [])
 
   // ─── Reaccionar al resultado del lookup ─────────────────────────────────────
 

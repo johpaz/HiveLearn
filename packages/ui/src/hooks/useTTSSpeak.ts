@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useRioMundoStore } from '@/store/rioMundoStore'
 
-const TTS_TIMEOUT = 10000
-
 let audioContext: AudioContext | null = null
 let currentSource: AudioBufferSourceNode | null = null
 let audioQueue: ArrayBuffer[] = []
@@ -93,37 +91,18 @@ export function useTTSSpeak() {
 
     const sendWsMessage = useRioMundoStore.getState().sendWsMessage
     if (!sendWsMessage) {
-      fallbackBrowserSpeak(text)
+      // Sin WS: silencio. El fallback del navegador suena como pitido robótico.
       return
     }
 
-    // Send TTS request via WS
+    // Send TTS request via WS — Piper sintetiza en backend y devuelve PCM/WAV.
     sendWsMessage({
       tipo: 'tts:synthesize',
       text: text.trim(),
       voice: voice || 'sorah',
     })
-
-    // Fallback timeout: if no audio arrives in time, use browser TTS
-    const timeoutId = setTimeout(() => {
-      fallbackBrowserSpeak(text)
-    }, TTS_TIMEOUT)
-
-    // Store timeout to cancel if audio arrives
-    ;(useTTSSpeak as any)._pendingTimeouts = (useTTSSpeak as any)._pendingTimeouts || new Map()
-    ;(useTTSSpeak as any)._pendingTimeouts.set(text.trim(), timeoutId)
+    // Si Piper no responde, mantenemos silencio (sin fallback browser).
   }, [])
-
-  // Cancel pending timeout when audio arrives for this text
-  useEffect(() => {
-    const pending = (useTTSSpeak as any)._pendingTimeouts as Map<string, ReturnType<typeof setTimeout>> | undefined
-    if (pending && ttsAudioQueue.length > 0) {
-      // Just clear all pending timeouts when ANY audio arrives
-      // (Bee speaks one phrase at a time, so this is safe)
-      pending.forEach((id) => clearTimeout(id))
-      pending.clear()
-    }
-  }, [ttsAudioQueue])
 
   const stop = useCallback(() => {
     stopCurrent()
@@ -137,13 +116,3 @@ export function useTTSSpeak() {
   return { speak, stop, isSpeaking }
 }
 
-function fallbackBrowserSpeak(text: string) {
-  if ('speechSynthesis' in window) {
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'es-ES'
-    utterance.rate = 0.9
-    utterance.pitch = 1.1
-    speechSynthesis.cancel()
-    speechSynthesis.speak(utterance)
-  }
-}
