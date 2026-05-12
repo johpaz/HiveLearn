@@ -26,25 +26,35 @@ async function playNextInQueue(): Promise<void> {
   isPlaying = true
 
   const pcm = audioQueue.shift()!
-  const ctx = getAudioContext()
 
   try {
-    const buffer = await ctx.decodeAudioData(pcm)
-    const source = ctx.createBufferSource()
-    source.buffer = buffer
-    source.connect(ctx.destination)
-    currentSource = source
-
-    await new Promise<void>((resolve) => {
-      source.onended = () => {
-        currentSource = null
-        isPlaying = false
-        resolve()
-        playNextInQueue()
+    const audioManager = useRioMundoStore.getState().audioManager
+    if (audioManager) {
+      await audioManager.playTTS(pcm.slice(0))
+    } else {
+      const ctx = getAudioContext()
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
       }
-      source.start(0)
-    })
-  } catch {
+
+      const buffer = await ctx.decodeAudioData(pcm.slice(0))
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.connect(ctx.destination)
+      currentSource = source
+
+      await new Promise<void>((resolve) => {
+        source.onended = () => {
+          currentSource = null
+          resolve()
+        }
+        source.start(0)
+      })
+    }
+  } catch (err) {
+    console.warn('[TTS] No se pudo reproducir audio:', err)
+  } finally {
+    currentSource = null
     isPlaying = false
     playNextInQueue()
   }
@@ -115,4 +125,3 @@ export function useTTSSpeak() {
 
   return { speak, stop, isSpeaking }
 }
-

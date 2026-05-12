@@ -1,7 +1,11 @@
 import { useRioMundoStore } from '@/store/rioMundoStore'
-import type { RioDialog } from '../../rio/dialog/RioDialog'
-import type { SpiritCardConfig } from '../cards/SpiritCard'
-import { AVATAR_PRESETS } from '../cards/avatarPresets'
+import type { SpiritCardConfig } from '../props/SpiritCard3D'
+import { AVATAR_PRESETS } from './avatarPresets'
+
+// Interface mínima de "dialog" para mantener compat con código previo (no se usa en 3D, las burbujas son Html overlay).
+interface DialogLike {
+  showBeeMessage: (text: string, duration: number, isQuestion?: boolean) => void
+}
 
 export type Phase =
   | 'idle'
@@ -67,12 +71,12 @@ const PROMPTS: Record<Phase, string> = {
 export class ProgramaConversation {
   private phase: Phase = 'idle'
   private collected: CollectedData = {}
-  private dialogRef: RioDialog | null = null
+  private dialogRef: DialogLike | null = null
   private speakFn: ((text: string) => Promise<void>) | null = null
   private onPhaseChangeCb: ((phase: Phase) => void) | null = null
   private onCompleteCb: ((data: CollectedData) => void) | null = null
 
-  setRefs(dialog: RioDialog | null) {
+  setRefs(dialog: DialogLike | null) {
     this.dialogRef = dialog
   }
 

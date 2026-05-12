@@ -96,6 +96,7 @@ export function RioMundo() {
   const [showTourSkip, setShowTourSkip] = useState(false)
   const [showTourNext, setShowTourNext] = useState(false)
   const [portalFlash, setPortalFlash] = useState(false)
+  const audioManager = useRioMundoStore(s => s.audioManager)
 
   const triggerPortalFlash = useCallback(() => {
     setPortalFlash(true)
@@ -602,7 +603,7 @@ export function RioMundo() {
   // ─── Music transitions by login phase ───────────────────────────────────────
 
   useEffect(() => {
-    const am = useRioMundoStore.getState().audioManager
+    const am = audioManager
     if (!am) return
 
     switch (loginPhase) {
@@ -623,7 +624,7 @@ export function RioMundo() {
         }
         break
     }
-  }, [loginPhase])
+  }, [loginPhase, audioManager])
 
   // ─── Camera zoom por fase de login ──────────────────────────────────────────
 

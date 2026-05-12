@@ -29,6 +29,7 @@ export function listVoices(): string[] {
 export async function synthesize(text: string, voice: string = DEFAULT_VOICE): Promise<ArrayBuffer> {
   const piperPath = getPiperPath()
   const modelPath = join(VOICES_DIR, `${voice}.onnx`)
+  const input = text.endsWith("\n") ? text : `${text}\n`
 
   if (!existsSync(modelPath)) {
     throw new Error(`Voz no encontrada: ${voice}`)
@@ -37,14 +38,11 @@ export async function synthesize(text: string, voice: string = DEFAULT_VOICE): P
   const proc = Bun.spawn(
     [piperPath, "--model", modelPath, "--output-raw"],
     {
-      stdin: "pipe",
+      stdin: new TextEncoder().encode(input),
       stdout: "pipe",
       stderr: "pipe",
     }
   )
-
-  proc.stdin.write(new TextEncoder().encode(text))
-  proc.stdin.end()
 
   const [audioBuffer, exitCode] = await Promise.all([
     new Response(proc.stdout).arrayBuffer(),
@@ -54,6 +52,10 @@ export async function synthesize(text: string, voice: string = DEFAULT_VOICE): P
   if (exitCode !== 0) {
     const errText = await new Response(proc.stderr).text()
     throw new Error(`Piper error (exit ${exitCode}): ${errText}`)
+  }
+  if (audioBuffer.byteLength === 0) {
+    const errText = await new Response(proc.stderr).text()
+    throw new Error(`Piper no generó audio.${errText ? ` ${errText}` : ""}`)
   }
 
   // --output-raw devuelve PCM 16-bit LE 22050Hz mono — envolver en WAV header

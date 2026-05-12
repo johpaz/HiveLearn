@@ -359,15 +359,36 @@ export const useRioMundoStore = create<RioMundoStore>()((set, get) => ({
 
   // ─── Audio & Connection ──────────────────────────────────────────────────────
 
-  setAudioSettings: (settings) => set((s) => ({
-    audioSettings: { ...s.audioSettings, ...settings },
-  })),
-  toggleMusicMuted: () => set((s) => ({
-    audioSettings: { ...s.audioSettings, musicMuted: !s.audioSettings.musicMuted },
-  })),
-  toggleSFXMuted: () => set((s) => ({
-    audioSettings: { ...s.audioSettings, sfxMuted: !s.audioSettings.sfxMuted },
-  })),
+  setAudioSettings: (settings) => {
+    const state = get()
+    const next = { ...state.audioSettings, ...settings }
+    const am = state.audioManager
+    if (am) {
+      if (settings.musicVolume !== undefined) am.setMusicVolume(next.musicVolume / 100)
+      if (settings.sfxVolume !== undefined) am.setSFXVolume(next.sfxVolume / 100)
+      if (settings.musicMuted !== undefined && am.getSettings().musicMuted !== next.musicMuted) {
+        am.toggleMusicMuted()
+      }
+      if (settings.sfxMuted !== undefined && am.getSettings().sfxMuted !== next.sfxMuted) {
+        am.toggleSFXMuted()
+      }
+    }
+    set({ audioSettings: next })
+  },
+  toggleMusicMuted: () => {
+    const am = get().audioManager
+    const muted = am ? am.toggleMusicMuted() : !get().audioSettings.musicMuted
+    set((s) => ({
+      audioSettings: { ...s.audioSettings, musicMuted: muted },
+    }))
+  },
+  toggleSFXMuted: () => {
+    const am = get().audioManager
+    const muted = am ? am.toggleSFXMuted() : !get().audioSettings.sfxMuted
+    set((s) => ({
+      audioSettings: { ...s.audioSettings, sfxMuted: muted },
+    }))
+  },
   setWsStatus: (wsStatus) => set({ wsStatus }),
   setWsLatencyMs: (wsLatencyMs) => set({ wsLatencyMs }),
   setAudioManager: (audioManager) => set({ audioManager }),

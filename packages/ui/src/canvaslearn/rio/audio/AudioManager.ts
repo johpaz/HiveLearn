@@ -35,10 +35,16 @@ export class AudioManager {
   private crossfadeSource: AudioBufferSourceNode | null = null
   private sfxPoolIndex: number = 0
   private sfxPool: (AudioBufferSourceNode | null)[] = new Array(SFX_POOL_SIZE).fill(null)
-  private settings: AudioSettings = { ...DEFAULT_AUDIO_SETTINGS }
+  private settings: AudioSettings = {
+    musicVolume: DEFAULT_AUDIO_SETTINGS.musicVolume / 100,
+    sfxVolume: DEFAULT_AUDIO_SETTINGS.sfxVolume / 100,
+    musicMuted: DEFAULT_AUDIO_SETTINGS.musicMuted,
+    sfxMuted: DEFAULT_AUDIO_SETTINGS.sfxMuted,
+  }
   private ttsQueue: QueuedTTS[] = []
   private ttsPlaying: boolean = false
   private loaded: boolean = false
+  private pendingMusic: { mode: 'play' | 'crossfade'; key: string; durationMs?: number } | null = null
 
   async init(settings?: Partial<AudioSettings>) {
     if (this.ctx) return
@@ -101,7 +107,7 @@ export class AudioManager {
     
     for (const [key, url] of entries) {
       // Si el ctx fue destruido entre iteraciones (componente desmontado), abortar.
-      if (!this.ctx || this.ctx.state === 'closed') {
+      if (!this.ctx || (this.ctx as AudioContext).state === 'closed') {
         console.warn(`[AudioManager] AudioContext unavailable, aborting preload at ${key}`)
         return
       }
@@ -125,7 +131,7 @@ export class AudioManager {
         }
 
         // Re-check ctx después del fetch (puede haberse cerrado)
-        if (!this.ctx || this.ctx.state === 'closed') {
+        if (!this.ctx || (this.ctx as AudioContext).state === 'closed') {
           console.warn(`[AudioManager] AudioContext closed during fetch of ${key}, aborting`)
           return
         }
@@ -160,6 +166,16 @@ export class AudioManager {
 
     this.loaded = true
     console.log(`[AudioManager] Preload complete. Loaded ${this.buffers.size}/${entries.length} assets.`)
+
+    const pending = this.pendingMusic
+    this.pendingMusic = null
+    if (pending) {
+      if (pending.mode === 'play') {
+        await this.playMusic(pending.key)
+      } else {
+        await this.crossfadeMusic(pending.key, pending.durationMs)
+      }
+    }
   }
 
   async playMusic(key: string) {
@@ -168,13 +184,14 @@ export class AudioManager {
 
     if (this.currentMusicKey === key && this.currentMusicSource) return
 
-    this.stopMusic()
-
     const buffer = this.buffers.get(key)
     if (!buffer) {
+      if (!this.loaded) this.pendingMusic = { mode: 'play', key }
       console.warn(`[AudioManager] Buffer not found for music: ${key}`)
       return
     }
+
+    this.stopMusic()
 
     const source = this.ctx.createBufferSource()
     source.buffer = buffer
@@ -218,6 +235,7 @@ export class AudioManager {
 
     const newBuffer = this.buffers.get(toKey)
     if (!newBuffer) {
+      if (!this.loaded) this.pendingMusic = { mode: 'crossfade', key: toKey, durationMs }
       console.warn(`[AudioManager] Buffer not found for crossfade: ${toKey}`)
       return
     }
@@ -345,7 +363,7 @@ export class AudioManager {
     this.ttsPlaying = true
 
     const item = this.ttsQueue.shift()!
-    this.ensureCtx()
+    await this.ensureCtx()
 
     try {
       if (this.ctx) {
@@ -363,7 +381,9 @@ export class AudioManager {
           this.processTTSQueue()
         }
       } else {
+        this.ttsPlaying = false
         item.resolve()
+        this.processTTSQueue()
       }
     } catch {
       this.ttsPlaying = false
@@ -425,6 +445,7 @@ export class AudioManager {
     }
     this.sfxPool.fill(null)
     this.ttsQueue = []
+    this.pendingMusic = null
     this.buffers.clear()
     if (this.ctx) {
       this.ctx.close()

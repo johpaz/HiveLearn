@@ -1,32 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRioMundoStore } from '@/store/rioMundoStore'
-import { ProgramaMundo, type ProgramaMundoRefs, type ProgramaMode } from '@/canvaslearn/programa/ProgramaMundo'
-import { ProgramaProgressHUD } from '@/canvaslearn/programa/overlays/ProgramaProgressHUD'
-import { ProgramaHUD } from '@/canvaslearn/programa/overlays/ProgramaHUD'
-import { PergaminoInput } from '@/canvaslearn/programa/overlays/PergaminoInput'
-import { ProgramaConversation, type Phase } from '@/canvaslearn/programa/conversation/ProgramaConversation'
+import { ProgramaWorld, type ProgramaMode } from '@/canvaslearn/programa3d/ProgramaWorld'
+import { ProgressHUD } from '@/canvaslearn/programa3d/ui/ProgressHUD'
+import { HudOverlay } from '@/canvaslearn/programa3d/ui/HudOverlay'
+import { WelcomeOverlay } from '@/canvaslearn/programa3d/ui/WelcomeOverlay'
+import { ProgramaConversation, type Phase } from '@/canvaslearn/programa3d/conversation/ProgramaConversation'
 import { RioA2UIBridge, type RioBridgeRef } from '@/canvaslearn/rio/protocol/RioA2UIBridge'
 import { ConnectionIndicator } from '@/components/ConnectionIndicator'
 import { useTTSSpeak } from '@/hooks/useTTSSpeak'
+import { AudioManager } from '@/canvaslearn/rio/audio/AudioManager'
 
-type PageStage = 'welcome' | 'world'
+type Stage = 'welcome' | 'world'
 
 export function ProgramaMundoPage() {
   const navigate = useNavigate()
   const conversationRef = useRef(new ProgramaConversation())
   const bridgeRef = useRef<RioA2UIBridge | null>(null)
   const rioBridgeObj = useRef<RioBridgeRef>({ renderer: null, dialog: null })
-  const worldRefs = useRef<ProgramaMundoRefs | null>(null)
   const generationStartedRef = useRef(false)
   const alumnoCreatedRef = useRef(false)
-  const cardsSpawnedForPhaseRef = useRef<Phase | null>(null)
   const pendingNicknameRef = useRef<string | null>(null)
+  const audioManagerRef = useRef<AudioManager | null>(null)
 
-  const [stage, setStage] = useState<PageStage>('welcome')
+  const [stage, setStage] = useState<Stage>('welcome')
   const [phase, setPhase] = useState<Phase>('idle')
-  const [worldReady, setWorldReady] = useState(false)
-  const [pergaminoAnchor, setPergaminoAnchor] = useState<{ x: number; y: number } | null>(null)
+  const [showWelcome, setShowWelcome] = useState(true)
   const [lookupPending, setLookupPending] = useState(false)
   const { speak: beeSpeak } = useTTSSpeak()
 
@@ -45,7 +44,39 @@ export function ProgramaMundoPage() {
   const setPerfil = useRioMundoStore(s => s.setPerfil)
   const hasSavedSession = useRioMundoStore(s => !!(s.sessionId && s.programaUuid))
 
-  // ─── A2UI bridge (cuando hay sessionId+alumnoId) ────────────────────────────
+  useEffect(() => {
+    if (audioManagerRef.current) return
+
+    const store = useRioMundoStore.getState()
+    const audioManager = new AudioManager()
+    audioManagerRef.current = audioManager
+    store.setAudioManager(audioManager)
+
+    audioManager.init({
+      musicVolume: store.audioSettings.musicVolume / 100,
+      sfxVolume: store.audioSettings.sfxVolume / 100,
+      musicMuted: store.audioSettings.musicMuted,
+      sfxMuted: store.audioSettings.sfxMuted,
+    }).then(async () => {
+      await audioManager.preloadAssets({
+        hubMusic: '/canvaslearn/art/music/hub_theme.ogg',
+        worldPeaceful: '/canvaslearn/art/music/world_peaceful.ogg',
+        sfx_applause: '/canvaslearn/art/sfx/applause.ogg',
+      })
+    })
+
+    return () => {
+      audioManager.destroy()
+      if (audioManagerRef.current === audioManager) {
+        audioManagerRef.current = null
+      }
+      if (useRioMundoStore.getState().audioManager === audioManager) {
+        useRioMundoStore.getState().setAudioManager(null)
+      }
+    }
+  }, [])
+
+  // ─── A2UI bridge ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!sessionId || !alumnoId) return
@@ -59,7 +90,7 @@ export function ProgramaMundoPage() {
     }
   }, [sessionId, alumnoId])
 
-  // ─── programa listo (sesión restaurada) → /rio ──────────────────────────────
+  // ─── Programa listo (sesión restaurada) → /rio ──────────────────────────────
 
   useEffect(() => {
     if (!programaUuid) return
@@ -67,13 +98,12 @@ export function ProgramaMundoPage() {
     navigate('/rio', { replace: true })
   }, [programaUuid, navigate, setLoginPhase])
 
-  // ─── Crear alumno cuando tenemos nickname+edad+avatar y aún no se creó ──────
+  // ─── Crear alumno cuando tenemos nombre+edad y no existe alumnoId ──────────
 
   const ensureAlumno = useCallback(() => {
     if (alumnoCreatedRef.current) return
     const store = useRioMundoStore.getState()
     if (store.alumnoId) {
-      // Alumno ya existe en BD (vino de buscar_nickname). Solo asegurar sessionId.
       if (!store.sessionId) setSessionId(crypto.randomUUID())
       alumnoCreatedRef.current = true
       return
@@ -101,41 +131,23 @@ export function ProgramaMundoPage() {
 
     const sendWs = store.sendWsMessage
     if (sendWs) {
-      // CRÍTICO: incluir alumnoId para que backend cree el alumno con el mismo ID.
-      // Si no, backend genera otro y el iniciar_programa siguiente falla con FK.
       sendWs({ tipo: 'crear_alumno', alumnoId: newAlumnoId, nombre: o.nombre, nickname: nick, edad: o.edad })
     }
     alumnoCreatedRef.current = true
   }, [setAlumnoId, setNickname, setSessionId, setPerfil])
 
-  // ─── Phase change → spawn cards si aplica + transiciones ────────────────────
+  // ─── Phase change → ensureAlumno cuando aplica ──────────────────────────────
 
   const handlePhaseChange = useCallback((newPhase: Phase) => {
     setPhase(newPhase)
-
-    const refs = worldRefs.current
-    if (!refs) return
-
-    // Avatar es la última fase que requiere haber registrado al alumno; antes de tema lo creamos
     if (newPhase === 'tema' || newPhase === 'avatar' || newPhase === 'objetivo' || newPhase === 'estilo') {
       ensureAlumno()
     }
-
-    // Spawn cards si la phase usa cards
-    const cards = conversationRef.current.getCardsForCurrentPhase()
-    if (cards && cardsSpawnedForPhaseRef.current !== newPhase) {
-      refs.cardSpawner.spawn(cards, refs.beeAnchor.x, refs.beeAnchor.y)
-      cardsSpawnedForPhaseRef.current = newPhase
-    }
-    if (!cards && cardsSpawnedForPhaseRef.current !== null) {
-      refs.cardSpawner.clear()
-      cardsSpawnedForPhaseRef.current = null
-    }
   }, [ensureAlumno])
 
-  // ─── Setup conversation ──────────────────────────────────────────────────────
+  // ─── Onboarding completo → iniciar_programa ─────────────────────────────────
 
-  const handleConversationComplete = useCallback((data: { nombre?: string; edad?: number; tema?: string; objetivo?: string; estilo?: string }) => {
+  const handleConversationComplete = useCallback((data: any) => {
     const store = useRioMundoStore.getState()
     const sendWs = store.sendWsMessage
     if (!sendWs) {
@@ -180,83 +192,19 @@ export function ProgramaMundoPage() {
     })
   }, [setProgramaError])
 
+  // ─── Configurar conversation controller ──────────────────────────────────────
+
   useEffect(() => {
     conversationRef.current.setSpeakFunction(beeSpeak)
     conversationRef.current.setOnPhaseChange(handlePhaseChange)
     conversationRef.current.setOnComplete(handleConversationComplete)
   }, [beeSpeak, handlePhaseChange, handleConversationComplete])
 
-  // ─── World ready ─────────────────────────────────────────────────────────────
-
-  const handleWorldReady = useCallback((refs: ProgramaMundoRefs) => {
-    worldRefs.current = refs
-    rioBridgeObj.current.renderer = refs.renderer
-    rioBridgeObj.current.dialog = refs.dialog
-    conversationRef.current.setRefs(refs.dialog)
-
-    // Wire card select → conversation
-    refs.cardSpawner.setOnSelect((id, value) => {
-      const result = conversationRef.current.submitChoice(id, value)
-      if (!result.ok && result.error) {
-        console.warn('[ProgramaMundoPage] choice error:', result.error)
-      }
-    })
-
-    setWorldReady(true)
-  }, [])
-
-  // ─── Iniciar conversación cuando entramos al stage 'world' ──────────────────
-
-  useEffect(() => {
-    if (stage !== 'world') return
-    if (!worldReady) return
-    // Pequeña pausa cinemática antes del primer prompt
-    const t = setTimeout(() => {
-      conversationRef.current.start()
-    }, 500)
-    return () => clearTimeout(t)
-  }, [stage, worldReady])
-
-  // ─── Reposicionar pergamino cuando cambia phase a captura ───────────────────
-
-  useEffect(() => {
-    if (!worldRefs.current) return
-    if (phase === 'nickname' || phase === 'edad') {
-      const refs = worldRefs.current
-      const screen = refs.worldToScreen(refs.beeAnchor.x, refs.beeAnchor.y)
-      setPergaminoAnchor({ x: screen.x, y: screen.y - 60 })
-    } else {
-      setPergaminoAnchor(null)
-    }
-  }, [phase])
-
-  // ─── Tick para reposicionar pergamino con la cámara ─────────────────────────
-
-  useEffect(() => {
-    if (phase !== 'nickname' && phase !== 'edad') return
-    let raf = 0
-    const update = () => {
-      const refs = worldRefs.current
-      if (refs) {
-        const screen = refs.worldToScreen(refs.beeAnchor.x, refs.beeAnchor.y)
-        setPergaminoAnchor({ x: screen.x, y: screen.y - 60 })
-      }
-      raf = requestAnimationFrame(update)
-    }
-    raf = requestAnimationFrame(update)
-    return () => cancelAnimationFrame(raf)
-  }, [phase])
-
   // ─── Pergamino submit ────────────────────────────────────────────────────────
-  // En 'nickname' hacemos buscar_nickname primero. Si existe, useRioLive setea
-  // perfil/alumnoId/nickname y poblamos onboarding; el conversation salta a tema.
-  // Si no existe, tratamos el nickname como nombre nuevo y avanzamos a edad.
 
   const handlePergaminoSubmit = useCallback((value: string) => {
     const trimmed = (value ?? '').trim()
-    // Leer phase actual del controller (no del state, que puede estar stale en closure)
     const currentPhase = conversationRef.current.getPhase()
-    console.log('[ProgramaMundoPage] pergamino submit', { phase: currentPhase, value: trimmed })
 
     if (currentPhase === 'nickname') {
       if (trimmed.length < 2) {
@@ -265,24 +213,19 @@ export function ProgramaMundoPage() {
       }
       const sendWs = useRioMundoStore.getState().sendWsMessage
       if (!sendWs) {
-        console.warn('[ProgramaMundoPage] sendWs no disponible, tratando como alumno nuevo')
         conversationRef.current.submitText(trimmed)
         return
       }
       pendingNicknameRef.current = trimmed
       setLookupPending(true)
-      console.log('[ProgramaMundoPage] enviando buscar_nickname', { nickname: trimmed })
       sendWs({ tipo: 'buscar_nickname', nickname: trimmed })
       return
     }
 
-    const result = conversationRef.current.submitText(trimmed)
-    if (!result.ok && result.error) {
-      console.warn('[ProgramaMundoPage] pergamino error:', result.error)
-    }
+    conversationRef.current.submitText(trimmed)
   }, [])
 
-  // ─── Reaccionar al resultado del lookup ─────────────────────────────────────
+  // ─── Reaccionar a buscar_nickname response ──────────────────────────────────
 
   useEffect(() => {
     if (!lookupPending) return
@@ -291,43 +234,40 @@ export function ProgramaMundoPage() {
     const found = !!(loginSearchResult.found && loginSearchResult.profile)
     setLookupPending(false)
     useRioMundoStore.getState().setLoginSearchResult(null)
-
     const pending = pendingNicknameRef.current
     pendingNicknameRef.current = null
 
     if (found) {
-      // useRioLive ya seteó perfil + alumnoId + nickname en el store.
-      // Poblar onboarding para que firstPending salte nombre/edad.
       const profile = loginSearchResult.profile!
       useRioMundoStore.getState().updateOnboarding({
         nombre: profile.nombre,
         edad: profile.edad ?? 18,
       })
-      // Re-iniciar conversation; firstPending recalcula y va a avatar/tema/etc.
       conversationRef.current.start()
     } else if (pending) {
-      // Alumno nuevo: persistir el nickname como nombre y avanzar a edad.
       useRioMundoStore.getState().setNickname(pending)
       conversationRef.current.submitText(pending)
     }
   }, [lookupPending, loginSearchResult])
 
-  // ─── Welcome buttons handlers ───────────────────────────────────────────────
+  // ─── Card select ─────────────────────────────────────────────────────────────
 
-  const handleStart = useCallback(async () => {
-    const am = useRioMundoStore.getState().audioManager
-    if (am) {
-      try { await am.ensureCtx() } catch {}
-      try { am.playMusic('worldPeaceful') } catch {}
-    }
-    setStage('world')
+  const handleSelectCard = useCallback((id: string, value: string) => {
+    conversationRef.current.submitChoice(id, value)
   }, [])
 
-  const handleContinue = useCallback(async () => {
-    const am = useRioMundoStore.getState().audioManager
-    if (am) {
-      try { await am.ensureCtx() } catch {}
-    }
+  // ─── Welcome handlers ────────────────────────────────────────────────────────
+
+  const handleStart = useCallback(() => {
+    setShowWelcome(false)
+    setStage('world')
+    audioManagerRef.current?.playMusic('worldPeaceful').catch(() => {})
+    // Pequeña pausa cinemática antes de la primera pregunta
+    setTimeout(() => conversationRef.current.start(), 700)
+  }, [])
+
+  const handleContinue = useCallback(() => {
+    setShowWelcome(false)
     const state = useRioMundoStore.getState()
     if (state.sendWsMessage && state.perfil?.alumnoId) {
       state.sendWsMessage({ tipo: 'reanudar_sesion', alumnoId: state.perfil.alumnoId })
@@ -346,43 +286,54 @@ export function ProgramaMundoPage() {
     })
   }, [handleConversationComplete, setProgramaError])
 
-  // ─── Determinar modo del mundo ──────────────────────────────────────────────
+  // ─── Determinar mode + pergamino config ────────────────────────────────────
 
-  let worldMode: ProgramaMode = 'free'
-  if (stage === 'welcome') worldMode = 'welcome'
-  else if (phase === 'nickname' || phase === 'edad') worldMode = 'capturing'
-  else if (isGenerating || programaError) worldMode = 'capturing'
+  let mode: ProgramaMode = 'free'
+  if (stage === 'welcome') mode = 'welcome'
+  else if (phase === 'nickname' || phase === 'edad') mode = 'capturing'
+  else if (isGenerating || programaError) mode = 'capturing'
+
+  const pergaminoVisible = (phase === 'nickname' || phase === 'edad') && !isGenerating && !programaError && stage === 'world'
+  const pergaminoQuestion = phase === 'nickname'
+    ? '¿Cómo te llamarán por aquí?'
+    : phase === 'edad'
+      ? '¿Cuántos años tienes?'
+      : ''
+  const pergaminoPlaceholder = phase === 'edad' ? 'Tu edad' : 'Tu nombre…'
 
   const wsConnecting = wsStatus !== 'connected'
 
-  // ─── Pergamino props segun fase ─────────────────────────────────────────────
-
-  const pergaminoVisible = (phase === 'nickname' || phase === 'edad') && !isGenerating && !programaError
-  const pergaminoQuestion =
-    phase === 'nickname' ? '¿Cómo te llamarán por aquí?'
-    : phase === 'edad' ? '¿Cuántos años tienes?'
-    : ''
-  const pergaminoPlaceholder = phase === 'edad' ? 'Tu edad' : 'Tu nombre…'
-
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[#0a0e27]">
-      {/* Pixi mundo siempre montado (incluso en welcome para mostrar el fondo) */}
-      <ProgramaMundo
-        mode={worldMode}
-        onReady={handleWorldReady}
-        onMapError={(msg) => console.warn('[ProgramaMundoPage]', msg)}
+      <ProgramaWorld
+        mode={mode}
+        phase={phase}
+        pergamino={{
+          visible: pergaminoVisible,
+          question: pergaminoQuestion,
+          placeholder: pergaminoPlaceholder,
+          type: phase === 'edad' ? 'number' : 'text',
+          loading: lookupPending,
+          onSubmit: handlePergaminoSubmit,
+        }}
+        onSelectCard={handleSelectCard}
       />
 
-      {/* HUD persistente (excepto en welcome) */}
-      {stage === 'world' && <ProgramaHUD />}
+      {/* HUD persistente cuando estamos en mundo */}
+      {stage === 'world' && <HudOverlay />}
 
       {/* Connection indicator */}
       <div className="absolute top-4 right-4 z-50 pointer-events-none">
         <ConnectionIndicator />
       </div>
 
-      {/* Welcome cinema overlay */}
-      {stage === 'welcome' && <WelcomeCinema onStart={handleStart} onContinue={hasSavedSession ? handleContinue : undefined} />}
+      {/* Welcome overlay */}
+      {showWelcome && (
+        <WelcomeOverlay
+          onStart={handleStart}
+          onContinue={hasSavedSession ? handleContinue : undefined}
+        />
+      )}
 
       {/* Connecting overlay */}
       {wsConnecting && stage === 'world' && !programaError && (
@@ -390,26 +341,12 @@ export function ProgramaMundoPage() {
           <div className="bg-[#1a1f3a]/95 border border-[#fbbf24]/30 rounded-2xl px-6 py-5 text-center">
             <div className="text-3xl mb-2 animate-bounce">🐝</div>
             <p className="text-[#fbbf24] font-bold text-sm">Conectando…</p>
-            <p className="text-[#888] text-xs mt-1">Esperando al servidor</p>
           </div>
         </div>
       )}
 
-      {/* Pergamino input para nickname / edad */}
-      {pergaminoVisible && (
-        <PergaminoInput
-          visible={pergaminoVisible}
-          question={pergaminoQuestion}
-          placeholder={pergaminoPlaceholder}
-          type={phase === 'edad' ? 'number' : 'text'}
-          onSubmit={handlePergaminoSubmit}
-          anchorScreenX={pergaminoAnchor?.x ?? null}
-          anchorScreenY={pergaminoAnchor?.y ?? null}
-        />
-      )}
-
-      {/* Progress HUD */}
-      <ProgramaProgressHUD />
+      {/* Progress HUD durante generación */}
+      <ProgressHUD />
 
       {/* Error modal */}
       {programaError && (
@@ -427,7 +364,7 @@ export function ProgramaMundoPage() {
                 onClick={() => { setProgramaError(null); conversationRef.current.start() }}
                 className="px-4 py-2 rounded-xl bg-[#1a1f3a] border border-[#fbbf24]/30 text-[#fbbf24] text-sm font-bold hover:bg-[#252a4a] transition-colors"
               >
-                Volver al chat
+                Volver
               </button>
               <button
                 onClick={handleRetry}
@@ -439,81 +376,6 @@ export function ProgramaMundoPage() {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// ─── Welcome Cinema (botones de portada sobre fondo Pixi) ────────────────────
-
-function WelcomeCinema({ onStart, onContinue }: { onStart: () => void; onContinue?: () => void }) {
-  const [visible, setVisible] = useState(false)
-  useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 80)
-    return () => clearTimeout(t)
-  }, [])
-
-  return (
-    <div className={`absolute inset-0 z-40 flex flex-col items-center justify-center transition-opacity duration-1000 ${visible ? 'opacity-100' : 'opacity-0'}`}>
-      {/* Vignette para realzar el título */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse at center, transparent 30%, rgba(10,14,39,0.65) 70%, rgba(10,14,39,0.92) 100%)',
-        }}
-      />
-
-      <div className="relative z-10 flex flex-col items-center px-4">
-        {/* Eslogan superior */}
-        <p className="text-[#fbbf24]/70 text-xs uppercase tracking-[0.4em] mb-3 font-bold">La Colmena del Saber</p>
-
-        {/* Título */}
-        <h1
-          className="relative text-7xl md:text-9xl font-black text-center tracking-tight mb-4"
-          style={{
-            background: 'linear-gradient(180deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            filter: 'drop-shadow(0 6px 18px rgba(245, 158, 11, 0.5))',
-          }}
-        >
-          HiveLearn
-        </h1>
-
-        <p className="text-[#fbbf24]/80 text-sm md:text-base text-center mb-12 max-w-md">
-          Aprende con tu enjambre de agentes IA en un mundo creado para ti
-        </p>
-
-        {/* Botones */}
-        <div className="flex flex-col items-center gap-3">
-          <button
-            onClick={onStart}
-            className="group relative px-12 py-4 bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] rounded-2xl text-[#0a0e27] font-black text-lg uppercase tracking-widest transition-all hover:scale-105 hover:shadow-[0_0_50px_rgba(245,158,11,0.6)] active:scale-95"
-          >
-            <span className="flex items-center gap-3">
-              <span className="text-2xl">🎮</span>
-              Iniciar Aventura
-            </span>
-            <span className="absolute inset-0 rounded-2xl bg-[#fbbf24] animate-ping opacity-20 pointer-events-none" />
-          </button>
-
-          {onContinue && (
-            <button
-              onClick={onContinue}
-              className="px-8 py-3 bg-green-400/10 border-2 border-green-400/40 rounded-xl text-green-400 font-semibold text-sm transition-all hover:bg-green-400/20 hover:border-green-400 hover:scale-105"
-            >
-              📖 Continuar Aventura
-            </button>
-          )}
-        </div>
-
-        {/* Tech badges */}
-        <div className="mt-12 flex flex-wrap justify-center gap-2 opacity-60">
-          <span className="px-3 py-1 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 text-[10px] uppercase tracking-wider text-white/70">🥟 Bun</span>
-          <span className="px-3 py-1 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 text-[10px] uppercase tracking-wider text-white/70">💎 Gemma</span>
-          <span className="px-3 py-1 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 text-[10px] uppercase tracking-wider text-white/70">✨ PixiJS</span>
-          <span className="px-3 py-1 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 text-[10px] uppercase tracking-wider text-white/70">🌎 Latam</span>
-        </div>
-      </div>
     </div>
   )
 }

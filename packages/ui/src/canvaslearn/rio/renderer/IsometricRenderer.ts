@@ -3,27 +3,27 @@ import { ISO_CONFIG, type IsoMap, type IsoTile, type TileType, type ZoneFlowStat
 
 const TILE_COLORS: Record<TileType, { base: number; variant: number }> = {
   agua_profunda: { base: 0x0D47A1, variant: 0x1565C0 },
-  agua: { base: 0x1976D2, variant: 0x2196F3 },
-  cascada: { base: 0x42A5F5, variant: 0x64B5F6 },
-  tierra: { base: 0x8D6E63, variant: 0xA1887F },
-  pasto: { base: 0x4CAF50, variant: 0x66BB6A },
-  piedra: { base: 0x9E9E9E, variant: 0xBDBDBD },
-  camino: { base: 0xD7CCC8, variant: 0xEFEBE9 },
-  arena: { base: 0xFFE082, variant: 0xFFF8E1 },
-  barro: { base: 0x795548, variant: 0x6D4C41 },
-  flores: { base: 0xE91E63, variant: 0xF48FB1 },
-  arbusto: { base: 0x2E7D32, variant: 0x388E3C },
-  arbol: { base: 0x1B5E20, variant: 0x2E7D32 },
-  tronco: { base: 0x5D4037, variant: 0x6D4C41 },
-  puente: { base: 0xBCAAA4, variant: 0xD7CCC8 },
-  portal_zona: { base: 0xFFD600, variant: 0xFFAB00 },
-  desembo_roca: { base: 0x78909C, variant: 0x90A4AE },
-  montana: { base: 0x546E7A, variant: 0x78909C },
+  agua:          { base: 0x1976D2, variant: 0x2196F3 },
+  cascada:       { base: 0x42A5F5, variant: 0x64B5F6 },
+  tierra:        { base: 0x8D6E63, variant: 0xA1887F },
+  pasto:         { base: 0x4CAF50, variant: 0x66BB6A },
+  piedra:        { base: 0x9E9E9E, variant: 0xBDBDBD },
+  camino:        { base: 0xD7CCC8, variant: 0xEFEBE9 },
+  arena:         { base: 0xFFE082, variant: 0xFFF8E1 },
+  barro:         { base: 0x795548, variant: 0x6D4C41 },
+  flores:        { base: 0xEC407A, variant: 0xF48FB1 },
+  arbusto:       { base: 0x2E7D32, variant: 0x388E3C },
+  arbol:         { base: 0x1B5E20, variant: 0x2E7D32 },
+  tronco:        { base: 0x5D4037, variant: 0x6D4C41 },
+  puente:        { base: 0xBCAAA4, variant: 0xD7CCC8 },
+  portal_zona:   { base: 0xFBBF24, variant: 0xF59E0B },
+  desembo_roca:  { base: 0x78909C, variant: 0x90A4AE },
+  montana:       { base: 0x546E7A, variant: 0x78909C },
 }
 
 const FLOW_STATE_COLORS: Record<ZoneFlowState, number> = {
-  seco: 0x5D4037,
-  fluyendo: 0x1976D2,
+  seco:       0x5D4037,
+  fluyendo:   0x1976D2,
   completado: 0x4CAF50,
 }
 
@@ -46,15 +46,18 @@ function getTileColor(tile: IsoTile, time: number): number {
   return base
 }
 
+/** Animate water by shimmering all 3 RGB channels with different phase offsets */
 function animateWater(base: number, time: number): number {
   const r = (base >> 16) & 0xFF
   const g = (base >> 8) & 0xFF
   const b = base & 0xFF
-  const shimmer = Math.sin(time / 800) * 20
+  const shimmerR = Math.sin(time / 900) * 12
+  const shimmerG = Math.sin(time / 800) * 18
+  const shimmerB = Math.sin(time / 700 + 1.2) * 15
   return (
-    (Math.max(0, Math.min(255, r)) << 16) |
-    ((Math.max(0, Math.min(255, g + shimmer)) & 0xFF) << 8) |
-    (Math.max(0, Math.min(255, b + shimmer * 0.5)) & 0xFF)
+    (Math.max(0, Math.min(255, r + shimmerR)) << 16) |
+    ((Math.max(0, Math.min(255, g + shimmerG)) & 0xFF) << 8) |
+    (Math.max(0, Math.min(255, b + shimmerB)) & 0xFF)
   )
 }
 
@@ -68,16 +71,14 @@ export class IsometricRenderer {
   private mapa: IsoMap | null = null
   private time: number = 0
   private needsRedraw: boolean = false
+  private waterTileKeys: Set<string> = new Set()
 
   constructor(app: Application) {
     this.app = app
-
     this.mapContainer = new Container()
     this.mapContainer.sortableChildren = true
-
     this.entityContainer = new Container()
     this.entityContainer.sortableChildren = true
-
     this.overlayContainer = new Container()
     this.overlayContainer.sortableChildren = true
   }
@@ -103,17 +104,33 @@ export class IsometricRenderer {
     this.clearMap()
     this.drawMap()
     this.needsRedraw = false
+    this.buildWaterCache()
   }
 
   private clearMap() {
     this.mapContainer.removeChildren()
     this.tileGraphics.clear()
     this.labelGraphics.clear()
+    this.waterTileKeys.clear()
+  }
+
+  private buildWaterCache() {
+    this.waterTileKeys.clear()
+    if (!this.mapa) return
+    for (let y = 0; y < this.mapa.height; y++) {
+      for (let x = 0; x < this.mapa.width; x++) {
+        const tile = this.mapa.tiles[y]?.[x]
+        if (!tile) continue
+        if (tile.type === 'agua' || tile.type === 'agua_profunda' || tile.type === 'cascada'
+          || (tile.zoneRef !== undefined && tile.flowState === 'fluyendo')) {
+          this.waterTileKeys.add('' + x + ',' + y)
+        }
+      }
+    }
   }
 
   private drawMap() {
     if (!this.mapa) return
-
     for (let y = 0; y < this.mapa.height; y++) {
       for (let x = 0; x < this.mapa.width; x++) {
         const tile = this.mapa.tiles[y]?.[x]
@@ -124,7 +141,7 @@ export class IsometricRenderer {
   }
 
   private drawTile(tile: IsoTile) {
-    const key = `${tile.x},${tile.y}`
+    const key = tile.x + ',' + tile.y
     const screen = this.isoToScreen(tile.x, tile.y)
     const color = getTileColor(tile, this.time)
     const elevation = tile.elevation || 0
@@ -135,7 +152,6 @@ export class IsometricRenderer {
     const g = new Graphics()
     g.zIndex = tile.y + tile.x
 
-    // Isometric diamond
     g.moveTo(0, -th - elevationOffset)
     g.lineTo(tw, 0 - elevationOffset)
     g.lineTo(0, th - elevationOffset)
@@ -143,7 +159,6 @@ export class IsometricRenderer {
     g.closePath()
     g.fill(color)
 
-    // Right side (if elevated)
     if (elevation > 0) {
       const sideColor = darken(color, 0.2)
       g.moveTo(tw, 0 - elevationOffset)
@@ -162,26 +177,30 @@ export class IsometricRenderer {
       g.fill(leftColor)
     }
 
-    // Water shimmer edge highlight
     if (tile.type === 'agua' || tile.type === 'agua_profunda') {
-      g.moveTo(0, -th - elevationOffset + 1)
-      g.lineTo(tw * 0.6, -th * 0.4 - elevationOffset)
-      g.stroke({ width: 1, color: 0x64B5F6, alpha: 0.3 })
+      g.moveTo(0, -th - elevationOffset + 2)
+      g.lineTo(tw * 0.7, -th * 0.3 - elevationOffset)
+      g.stroke({ width: 1.5, color: 0x90CAF9, alpha: 0.4 })
+      g.moveTo(-tw * 0.3, -th * 0.2 - elevationOffset)
+      g.lineTo(tw * 0.3, -th * 0.6 - elevationOffset)
+      g.stroke({ width: 1, color: 0xBBDEFB, alpha: 0.25 })
     }
 
-    // Portal glow
     if (tile.type === 'portal_zona') {
-      g.circle(0, -elevationOffset, 8)
-      g.fill({ color: 0xFFD600, alpha: 0.6 })
-      g.circle(0, -elevationOffset, 12)
-      g.stroke({ width: 2, color: 0xFFAB00, alpha: 0.8 })
+      const pulse = 0.4 + Math.sin(this.time / 600) * 0.2
+      g.circle(0, -elevationOffset, 14)
+      g.stroke({ width: 1.5, color: 0xFBBF24, alpha: pulse * 0.5 })
+      g.circle(0, -elevationOffset, 9)
+      g.fill({ color: 0xFBBF24, alpha: pulse })
+      g.circle(0, -elevationOffset, 4)
+      g.fill({ color: 0xFFFFFF, alpha: pulse * 0.6 })
     }
 
-    // Zone flow indicator
     if (tile.zoneRef !== undefined && tile.flowState === 'fluyendo') {
+      const flowPulse = 0.3 + Math.sin(this.time / 500) * 0.2
       g.moveTo(-6, -elevationOffset)
       g.lineTo(6, -elevationOffset)
-      g.stroke({ width: 1, color: 0x42A5F5, alpha: 0.5 })
+      g.stroke({ width: 1.5, color: 0x42A5F5, alpha: flowPulse })
     }
 
     g.position.set(screen.x, screen.y)
@@ -191,38 +210,101 @@ export class IsometricRenderer {
 
   updateTile(tile: IsoTile) {
     if (!this.mapa) return
-    const key = `${tile.x},${tile.y}`
+    const key = tile.x + ',' + tile.y
     const existing = this.tileGraphics.get(key)
     if (existing) {
       existing.destroy()
       this.tileGraphics.delete(key)
     }
     this.drawTile(tile)
+    const isWater = tile.type === 'agua' || tile.type === 'agua_profunda' || tile.type === 'cascada'
+      || (tile.zoneRef !== undefined && tile.flowState === 'fluyendo')
+    if (isWater) this.waterTileKeys.add(key)
+    else this.waterTileKeys.delete(key)
   }
 
   update(time: number) {
     this.time = time
     if (!this.mapa) return
 
-    // Only redraw water tiles for animation
-    let hasWater = false
-    for (const [key, g] of this.tileGraphics) {
-      const [xStr, yStr] = key.split(',')
-      const x = parseInt(xStr)
-      const y = parseInt(yStr)
+    for (const key of this.waterTileKeys) {
+      const g = this.tileGraphics.get(key)
+      if (!g) continue
+      const parts = key.split(',')
+      const x = parseInt(parts[0])
+      const y = parseInt(parts[1])
       const tile = this.mapa.tiles[y]?.[x]
-      if (tile && (tile.type === 'agua' || tile.type === 'agua_profunda' || tile.type === 'cascada' ||
-          (tile.zoneRef !== undefined && tile.flowState === 'fluyendo'))) {
-        hasWater = true
-        const color = getTileColor(tile, time)
-        // Update fill color
-        g.clear()
-        this.drawTileAt(tile, g, color)
-      }
+      if (!tile) continue
+      const color = getTileColor(tile, time)
+      g.clear()
+      this.redrawWaterTile(tile, g, color, time)
+    }
+
+    for (const [key, g] of this.tileGraphics) {
+      if (this.waterTileKeys.has(key)) continue
+      const parts = key.split(',')
+      const x = parseInt(parts[0])
+      const y = parseInt(parts[1])
+      const tile = this.mapa.tiles[y]?.[x]
+      if (!tile || tile.type !== 'portal_zona') continue
+      g.clear()
+      this.redrawTile(tile, g, getTileColor(tile, time), time)
     }
   }
 
-  private drawTileAt(tile: IsoTile, g: Graphics, color: number) {
+  private redrawWaterTile(tile: IsoTile, g: Graphics, color: number, time: number) {
+    const elevation = tile.elevation || 0
+    const tw = ISO_CONFIG.TILE_WIDTH / 2
+    const th = ISO_CONFIG.TILE_HEIGHT / 2
+    const elevationOffset = elevation * 4
+
+    g.moveTo(0, -th - elevationOffset)
+    g.lineTo(tw, 0 - elevationOffset)
+    g.lineTo(0, th - elevationOffset)
+    g.lineTo(-tw, 0 - elevationOffset)
+    g.closePath()
+    g.fill(color)
+
+    if (elevation > 0) {
+      const sideColor = darken(color, 0.2)
+      g.moveTo(tw, 0 - elevationOffset)
+      g.lineTo(tw, 0)
+      g.lineTo(0, th)
+      g.lineTo(0, th - elevationOffset)
+      g.closePath()
+      g.fill(sideColor)
+
+      const leftColor = darken(color, 0.4)
+      g.moveTo(-tw, 0 - elevationOffset)
+      g.lineTo(-tw, 0)
+      g.lineTo(0, th)
+      g.lineTo(0, th - elevationOffset)
+      g.closePath()
+      g.fill(leftColor)
+    }
+
+    if (tile.type === 'agua' || tile.type === 'agua_profunda') {
+      const edgeAlpha = 0.3 + Math.sin(time / 400) * 0.15
+      g.moveTo(0, -th - elevationOffset + 2)
+      g.lineTo(tw * 0.7, -th * 0.3 - elevationOffset)
+      g.stroke({ width: 1.5, color: 0x90CAF9, alpha: edgeAlpha })
+      g.moveTo(-tw * 0.3, -th * 0.2 - elevationOffset)
+      g.lineTo(tw * 0.3, -th * 0.6 - elevationOffset)
+      g.stroke({ width: 1, color: 0xBBDEFB, alpha: edgeAlpha * 0.6 })
+    }
+
+    if (tile.zoneRef !== undefined && tile.flowState === 'fluyendo') {
+      const flowPulse = 0.3 + Math.sin(time / 500) * 0.2
+      g.moveTo(-6, -elevationOffset)
+      g.lineTo(6, -elevationOffset)
+      g.stroke({ width: 1.5, color: 0x42A5F5, alpha: flowPulse })
+    }
+
+    const screen = this.isoToScreen(tile.x, tile.y)
+    g.position.set(screen.x, screen.y)
+  }
+
+  private redrawTile(tile: IsoTile, g: Graphics, color: number, time: number) {
     const elevation = tile.elevation || 0
     const tw = ISO_CONFIG.TILE_WIDTH / 2
     const th = ISO_CONFIG.TILE_HEIGHT / 2
@@ -254,10 +336,13 @@ export class IsometricRenderer {
     }
 
     if (tile.type === 'portal_zona') {
-      g.circle(0, -elevationOffset, 8)
-      g.fill({ color: 0xFFD600, alpha: 0.6 })
-      g.circle(0, -elevationOffset, 12)
-      g.stroke({ width: 2, color: 0xFFAB00, alpha: 0.8 })
+      const pulse = 0.4 + Math.sin(time / 600) * 0.2
+      g.circle(0, -elevationOffset, 14)
+      g.stroke({ width: 1.5, color: 0xFBBF24, alpha: pulse * 0.5 })
+      g.circle(0, -elevationOffset, 9)
+      g.fill({ color: 0xFBBF24, alpha: pulse })
+      g.circle(0, -elevationOffset, 4)
+      g.fill({ color: 0xFFFFFF, alpha: pulse * 0.6 })
     }
 
     const screen = this.isoToScreen(tile.x, tile.y)

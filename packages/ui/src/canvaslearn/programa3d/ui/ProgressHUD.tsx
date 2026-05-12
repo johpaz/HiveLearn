@@ -14,21 +14,16 @@ const AGENT_LABELS: Record<string, string> = {
   'hl-coordinator-agent': 'Orquestando agentes…',
 }
 
-function agentToHumanLabel(agentId: string | null, fallback: string): string {
-  if (!agentId) return fallback
-  return AGENT_LABELS[agentId] || fallback
-}
-
-export function ProgramaProgressHUD() {
+export function ProgressHUD() {
   const isGenerating = useRioMundoStore(s => s.isGenerating)
   const swarmProgress = useRioMundoStore(s => s.swarmProgress)
   const programaError = useRioMundoStore(s => s.programaError)
 
-  if (programaError) return null
-  if (!isGenerating) return null
+  if (programaError || !isGenerating) return null
 
   const pct = Math.max(5, Math.min(100, swarmProgress.percentComplete || 0))
-  const label = agentToHumanLabel(swarmProgress.currentAgentId, 'Generando tu programa…')
+  const agentId = swarmProgress.currentAgentId
+  const label = (agentId && AGENT_LABELS[agentId]) || 'Generando tu programa…'
 
   return (
     <div className="absolute inset-x-0 bottom-0 pb-8 pointer-events-none flex justify-center z-40">
@@ -45,7 +40,7 @@ export function ProgramaProgressHUD() {
           />
         </div>
         <p className="mt-2 text-[#888] text-xs text-center">
-          La abeja está coordinando a los agentes para crear tu programa de aprendizaje.
+          La abeja está coordinando a los agentes para crear tu programa.
         </p>
       </div>
     </div>
