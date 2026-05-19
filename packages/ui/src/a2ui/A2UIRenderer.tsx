@@ -55,6 +55,7 @@ export interface A2UIRendererProps {
   messages: A2UIMessage[]
   onAction?: (action: { name: string; context: Record<string, any> }) => Promise<void>
   isLoading?: boolean
+  pendingActionName?: string | null
   feedback?: { correcto: boolean; mensajePrincipal: string; xpGanado: number; razonamiento?: string; pistaSiIncorrecto?: string } | null
 }
 
@@ -82,9 +83,21 @@ function getAtPath(obj: Record<string, any>, path: string): string | undefined {
   return cur != null ? String(cur) : undefined
 }
 
+function setAtPath(obj: Record<string, any>, path: string, value: any): Record<string, any> {
+  const parts = path.replace(/^\//, '').split('/')
+  const result = { ...obj }
+  let cur: any = result
+  for (let i = 0; i < parts.length - 1; i++) {
+    cur[parts[i]] = { ...(cur[parts[i]] ?? {}) }
+    cur = cur[parts[i]]
+  }
+  cur[parts[parts.length - 1]] = value
+  return result
+}
+
 // ─── Renderer principal ───────────────────────────────────────────────────────
 
-export function A2UIRenderer({ messages, onAction, isLoading, feedback }: A2UIRendererProps) {
+export function A2UIRenderer({ messages, onAction, isLoading, pendingActionName, feedback }: A2UIRendererProps) {
   const [selections, setSelections] = useState<Record<string, string[]>>({})
   const [textValues, setTextValues] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -94,15 +107,18 @@ export function A2UIRenderer({ messages, onAction, isLoading, feedback }: A2UIRe
     const compMap: Record<string, ComponentDef> = {}
     let dm: Record<string, any> = {}
     let rootId = ''
+    const safeMessages = Array.isArray(messages) ? messages : []
 
-    for (const msg of messages) {
+    for (const msg of safeMessages) {
       if (msg.surfaceUpdate) {
-        for (const comp of msg.surfaceUpdate.components) {
+        const components = Array.isArray(msg.surfaceUpdate.components) ? msg.surfaceUpdate.components : []
+        for (const comp of components) {
           compMap[comp.id] = comp
         }
       }
       if (msg.dataModelUpdate) {
-        dm = { ...dm, ...parseDataEntries(msg.dataModelUpdate.contents) }
+        const contents = Array.isArray(msg.dataModelUpdate.contents) ? msg.dataModelUpdate.contents : []
+        dm = { ...dm, ...parseDataEntries(contents) }
       }
       if (msg.beginRendering) {
         rootId = msg.beginRendering.root
@@ -161,6 +177,7 @@ export function A2UIRenderer({ messages, onAction, isLoading, feedback }: A2UIRe
         setTextValues={setTextValues}
         onAction={handleAction}
         isSubmitting={isSubmitting}
+        pendingActionName={pendingActionName}
         feedback={feedback}
       />
     </div>
@@ -179,6 +196,7 @@ interface RenderCtx {
   setTextValues: React.Dispatch<React.SetStateAction<Record<string, string>>>
   onAction: (a: A2UIAction) => Promise<void>
   isSubmitting: boolean
+  pendingActionName?: string | null
   feedback?: A2UIRendererProps['feedback']
   weight?: number
 }
@@ -316,6 +334,14 @@ function TextComp({ props, resolveValue, style }: WithProps) {
 function ButtonComp({ props, compMap, resolveValue, onAction, isSubmitting, style, ...ctx }: WithProps) {
   const action: A2UIAction | undefined = props.action
   const variant: string = props.variant ?? 'primary'
+  const isPendingThisAction = isSubmitting && !!action?.name && action.name === ctx.pendingActionName
+  const pendingLabel = action?.name === 'check_answer'
+    ? 'Comprobando...'
+    : action?.name === 'complete_node'
+      ? 'Abriendo siguiente paso...'
+      : action?.name === 'submit_evaluation'
+        ? 'Enviando evaluación...'
+        : 'Procesando...'
 
   const variantClass = variant === 'primary'
     ? 'bg-hive-amber text-primary-foreground font-bold shadow-honey hover:bg-hive-amber/90'
@@ -335,10 +361,10 @@ function ButtonComp({ props, compMap, resolveValue, onAction, isSubmitting, styl
       className={`w-full py-2.5 rounded-xl text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${variantClass}`}
       style={style}
     >
-      {isSubmitting && action?.name !== 'complete_node' ? (
+      {isPendingThisAction ? (
         <>
           <span className="w-3.5 h-3.5 rounded-full border-2 border-foreground/20 border-t-foreground animate-spin" />
-          Evaluando...
+          {pendingLabel}
         </>
 
       ) : (
@@ -353,7 +379,7 @@ function ButtonComp({ props, compMap, resolveValue, onAction, isSubmitting, styl
 function MultipleChoiceComp({ id, props, resolveValue, selections, setSelections, onAction, isSubmitting, feedback, style }: WithProps) {
   const maxSel = props.maxAllowedSelections ?? 1
   const current = selections[id] ?? []
-  const hasFeedback = !!feedback
+  const hasFeedback = !!feedback && feedback.correcto
 
   const options: Array<{ label: BoundValue; value?: BoundValue }> = props.options ?? []
 
@@ -412,7 +438,7 @@ function MultipleChoiceComp({ id, props, resolveValue, selections, setSelections
 
 function TextFieldComp({ id, props, textValues, setTextValues, feedback, style }: WithProps) {
   const value = textValues[id] ?? ''
-  const hasFeedback = !!feedback
+  const hasFeedback = !!feedback && feedback.correcto
   const isCode = props.textFieldType === 'code' || props.textFieldType === 'multiline_code'
 
   return (

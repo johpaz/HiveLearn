@@ -2,7 +2,7 @@ import type { Tool } from '../../types/tool'
 
 export const generarEvaluacionTool: Tool = {
   name: 'generar_evaluacion',
-  description: 'Genera 5 preguntas de evaluación final (3 opción múltiple + 2 respuesta corta)',
+  description: 'Genera evaluación final o quiz de nodo. Para quiz de nodo puede devolver 1 pregunta; para evaluación final devuelve 5.',
   parameters: {
     type: 'object',
     properties: {
@@ -26,9 +26,20 @@ export const generarEvaluacionTool: Tool = {
   },
   execute: async (params) => {
     const preguntas = params.preguntas as any[]
-    if (preguntas.length !== 5) {
-      return { ok: false, error: 'Se requieren exactamente 5 preguntas' }
+    if (!Array.isArray(preguntas) || preguntas.length < 1 || preguntas.length > 5) {
+      return { ok: false, error: 'Se requieren entre 1 y 5 preguntas' }
     }
-    return { ok: true, output: { preguntas } }
+    return {
+      ok: true,
+      output: {
+        preguntas: preguntas.map((pregunta) => ({
+          tipo: pregunta.tipo,
+          pregunta: pregunta.pregunta,
+          opciones: pregunta.opciones,
+          indiceCorrecto: pregunta.indice_correcto,
+          respuestaEsperada: pregunta.respuesta_esperada,
+        })),
+      },
+    }
   },
 }

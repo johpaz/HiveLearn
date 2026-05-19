@@ -6,9 +6,8 @@
 
 import { initializeDatabase, getDb } from '../storage/sqlite'
 import { initHiveLearnStorage } from '../storage/init'
-import { logger, redact } from '../utils/logger'
-import { createServer } from '../gateway/server'
-import { setupGlobalErrorHandlers } from '../middleware/error-handler'
+import { logger } from '../utils/logger'
+import { createServer, setBunServer } from '../gateway/server'
 import type { HiveLearnConfig } from '../config/loader'
 
 const log = logger.child('gateway')
@@ -27,92 +26,47 @@ export async function startGateway(config: HiveLearnConfig): Promise<void> {
 
   const PORT = config.gateway?.port || parseInt(process.env.HIVELEARN_PORT || '8787')
   const HOST = config.gateway?.host || process.env.HIVELEARN_HOST || '0.0.0.0'
+  const nodeEnv = process.env.NODE_ENV
+  const isDev = nodeEnv === 'development'
 
-  // Setup global error handlers
-  setupGlobalErrorHandlers()
-  log.info('✅ Global error handlers registered')
-
-  log.info('🐝 HiveLearn Gateway starting...', {
-    port: PORT,
-    host: HOST,
-  })
-
-  // Log environment configuration (redacted)
-  const envConfig = redact({
-    HIVELEARN_PORT: process.env.HIVELEARN_PORT,
-    HIVELEARN_HOST: process.env.HIVELEARN_HOST,
-    HIVELEARN_HOME: process.env.HIVELEARN_HOME,
-    HIVELEARN_DB_PATH: process.env.HIVELEARN_DB_PATH,
-    NODE_ENV: process.env.NODE_ENV,
-    // Redactar sensitive vars
-    HIVE_MASTER_KEY: process.env.HIVE_MASTER_KEY ? '[SET]' : '[NOT SET]',
-  })
-  log.debug('Environment configuration', envConfig)
+  log.info(`🐝 HiveLearn Gateway starting... (NODE_ENV=${nodeEnv || 'undefined'})`)
+  log.info(`📍 Mode: ${isDev ? 'Development' : 'Production'}`)
 
   try {
     // Initialize database
-    log.info('📦 Initializing database...')
     const db = initializeDatabase()
-    log.info('✅ Database initialized', {
-      path: process.env.HIVELEARN_DB_PATH || '~/.hivelearn/hivelearn.db',
-    })
+    log.info('✅ Database initialized')
 
     // Initialize schemas
-    log.info('📋 Initializing schemas...')
     initHiveLearnStorage(db)
     log.info('✅ Database schemas initialized')
-
-    // Verify database state
-    try {
-      const providersCount = (db.query('SELECT COUNT(*) as count FROM providers').get() as any)?.count || 0
-      const modelsCount = (db.query('SELECT COUNT(*) as count FROM models').get() as any)?.count || 0
-      log.info('📊 Database state', {
-        providers: providersCount,
-        models: modelsCount,
-      })
-    } catch (error) {
-      log.warn('Could not verify database state', { error: (error as Error).message })
-    }
   } catch (error) {
-    log.error('❌ Database initialization failed', {
-      error: (error as Error).message,
-      stack: (error as Error).stack,
-    })
+    log.error('❌ Database initialization failed', { error: (error as Error).message })
     throw error
   }
 
   // Create server
-  log.info('🔧 Creating server instance...')
   const server = createServer()
-  log.debug('Server instance created')
 
-  try {
-    // Start server
-    log.info(`🚀 Starting server on http://${HOST}:${PORT}...`)
-    serverInstance = Bun.serve({
-      port: PORT,
-      hostname: HOST,
-      fetch: server.fetch,
-      websocket: server.websocket,
-    })
+  // Start server
+  serverInstance = Bun.serve({
+    port: PORT,
+    hostname: HOST,
+    fetch: server.fetch,
+    websocket: server.websocket,
+    idleTimeout: 120,
+  })
 
-    isRunning = true
-    log.info(`✅ Gateway listening on http://${HOST}:${PORT}`)
+  // Register Bun server so WebSocket upgrades work inside createServer()
+  setBunServer(serverInstance)
 
-    // Log startup summary
-    log.info('📊 Startup summary', {
-      uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      pid: process.pid,
-    })
-  } catch (error) {
-    log.error('❌ Failed to start server', {
-      error: (error as Error).message,
-      stack: (error as Error).stack,
-      port: PORT,
-      host: HOST,
-    })
-    throw error
+  isRunning = true
+  log.info(`✅ Gateway listening on http://${HOST}:${PORT}`)
+
+  if (isDev) {
+    log.info('🔨 Development mode: UI served from Vite')
+  } else {
+    log.info('📦 Production mode: UI served from static files')
   }
 }
 

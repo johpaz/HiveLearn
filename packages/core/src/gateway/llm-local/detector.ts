@@ -101,29 +101,117 @@ export async function detectGPU(): Promise<GPUInfo> {
   return { backend: "none", platform }
 }
 
-/** Devuelve el nombre del binario según GPU y plataforma */
-export function getHiveCLIBinaryName(gpu: GPUInfo): string {
+export interface LlamaCppAsset {
+  archiveName: string
+  binaryName: string
+  archiveType: "zip" | "tar.gz"
+}
+
+/** Devuelve el asset oficial de llama.cpp según GPU y plataforma */
+export function getLlamaCppAsset(gpu: GPUInfo): LlamaCppAsset {
   const { backend, platform } = gpu
-  const backendPart = backend === "none" ? "cpu" : backend
 
   switch (platform) {
     case "linux-x64":
-      return `hive-cli-${backendPart}-linux-x64`
+      if (backend === "cuda") {
+        throw new Error("No hay binario oficial precompilado CUDA para Linux x64 en releases de llama.cpp")
+      }
+      if (backend === "rocm") {
+        return {
+          archiveName: "llama-${tag}-bin-ubuntu-rocm-7.2-x64.tar.gz",
+          binaryName: "llama-server",
+          archiveType: "tar.gz",
+        }
+      }
+      if (backend === "vulkan") {
+        return {
+          archiveName: "llama-${tag}-bin-ubuntu-vulkan-x64.tar.gz",
+          binaryName: "llama-server",
+          archiveType: "tar.gz",
+        }
+      }
+      return {
+        archiveName: "llama-${tag}-bin-ubuntu-x64.tar.gz",
+        binaryName: "llama-server",
+        archiveType: "tar.gz",
+      }
     case "linux-arm64":
-      return `hive-cli-${backendPart}-linux-arm64`
+      if (backend === "vulkan") {
+        return {
+          archiveName: "llama-${tag}-bin-ubuntu-vulkan-arm64.tar.gz",
+          binaryName: "llama-server",
+          archiveType: "tar.gz",
+        }
+      }
+      return {
+        archiveName: "llama-${tag}-bin-ubuntu-arm64.tar.gz",
+        binaryName: "llama-server",
+        archiveType: "tar.gz",
+      }
     case "windows-x64":
-      return `hive-cli-${backendPart}-windows-x64.exe`
+      if (backend === "cuda") {
+        return {
+          archiveName: "llama-${tag}-bin-win-cuda-13-x64.zip",
+          binaryName: "llama-server.exe",
+          archiveType: "zip",
+        }
+      }
+      if (backend === "vulkan") {
+        return {
+          archiveName: "llama-${tag}-bin-win-vulkan-x64.zip",
+          binaryName: "llama-server.exe",
+          archiveType: "zip",
+        }
+      }
+      if (backend === "rocm") {
+        return {
+          archiveName: "llama-${tag}-bin-win-hip-x64.zip",
+          binaryName: "llama-server.exe",
+          archiveType: "zip",
+        }
+      }
+      return {
+        archiveName: "llama-${tag}-bin-win-cpu-x64.zip",
+        binaryName: "llama-server.exe",
+        archiveType: "zip",
+      }
     case "macos-x64":
-      return `hive-cli-${backendPart}-macos-x64`
+      return {
+        archiveName: "llama-${tag}-bin-macos-x64.tar.gz",
+        binaryName: "llama-server",
+        archiveType: "tar.gz",
+      }
     case "macos-arm64":
-      return `hive-cli-${backendPart}-macos-arm64`
+      return {
+        archiveName: "llama-${tag}-bin-macos-arm64.tar.gz",
+        binaryName: "llama-server",
+        archiveType: "tar.gz",
+      }
   }
 }
 
-/** URL del release en GitHub */
-export const HIVE_CLI_RELEASE_BASE = "https://github.com/johpaz/hive-cli/releases/download"
-export const HIVE_CLI_VERSION = "v1.0.0"
+export const LLAMA_CPP_RELEASES_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
 
-export function getHiveCLIDownloadURL(binaryName: string): string {
-  return `${HIVE_CLI_RELEASE_BASE}/${HIVE_CLI_VERSION}/${binaryName}`
+export async function getLatestLlamaCppReleaseTag(): Promise<string> {
+  const res = await fetch(LLAMA_CPP_RELEASES_API, {
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "User-Agent": "HiveLearn",
+    },
+  })
+  if (!res.ok) {
+    throw new Error(`No se pudo consultar la última release de llama.cpp: HTTP ${res.status}`)
+  }
+
+  const data = await res.json() as { tag_name?: string }
+  if (!data.tag_name) {
+    throw new Error("La API de releases de llama.cpp no devolvió tag_name")
+  }
+
+  return data.tag_name
+}
+
+export function getLlamaCppDownloadURL(tag: string, archiveNameTemplate: string): string {
+  const archiveName = archiveNameTemplate.replace("${tag}", tag)
+  return `https://github.com/ggml-org/llama.cpp/releases/download/${tag}/${archiveName}`
 }

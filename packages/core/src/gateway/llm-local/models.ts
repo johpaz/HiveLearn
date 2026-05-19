@@ -3,9 +3,8 @@
  * Gestión de rutas y configuración de modelos
  */
 
-
 import { existsSync } from "fs"
-import { MODELS_DIR, getModelPath, type ModelId } from "./downloader"
+import { getMMProjPath, getModelPath, type ModelId } from "./downloader"
 
 export interface ModelConfig {
   modelPath: string
@@ -33,10 +32,13 @@ const DEFAULT_CONFIG: Omit<ModelConfig, "modelPath" | "mmprojPath"> = {
 
 export function getModelConfig(modelId: ModelId): ModelConfig {
   const modelPath = getModelPath(modelId)
-  const mmprojPath = getModelPath("mmproj")
+  const mmprojPath = getMMProjPath(modelId)
 
   if (!existsSync(modelPath)) {
     throw new Error(`Modelo no descargado: ${modelId}. Ejecuta downloadModel("${modelId}") primero.`)
+  }
+  if (!existsSync(mmprojPath)) {
+    throw new Error(`MMProj no descargado para ${modelId}. Ejecuta downloadModel("${modelId}") primero.`)
   }
 
   return {
@@ -46,8 +48,8 @@ export function getModelConfig(modelId: ModelId): ModelConfig {
   }
 }
 
-/** Construye los argumentos de línea de comando para hive-cli */
-export function buildHiveCLIArgs(config: ModelConfig, options: {
+/** Construye los argumentos de línea de comando para llama.cpp */
+export function buildLlamaCppArgs(config: ModelConfig, options: {
   prompt?: string
   imagePath?: string
   audioPath?: string

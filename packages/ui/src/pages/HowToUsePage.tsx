@@ -13,11 +13,11 @@ export function HowToUsePage({ onBack, onStart }: HowToUsePageProps) {
   const faqs = [
     {
       question: '¿Qué es HiveLearn?',
-      answer: 'HiveLearn es una plataforma de aprendizaje adaptativo que usa un enjambre de 16 agentes de IA especializados para generar lecciones personalizadas según tu perfil, estilo de aprendizaje y objetivos.',
+      answer: 'HiveLearn es una plataforma de aprendizaje adaptativo que usa un enjambre de 10 agentes de IA especializados para generar lecciones personalizadas según tu perfil, estilo de aprendizaje y objetivos.',
     },
     {
       question: '¿Cómo funciona el enjambre de agentes?',
-      answer: 'Cuando inicias una lección, el agente coordinador delega tareas a 16 workers especializados: perfil, intención, estructura, explicación, ejercicios, quiz, retos, código, SVG, GIF, infografías, imágenes, gamificación, evaluación y feedback. Cada uno trabaja en paralelo para crear tu lección única.',
+      answer: 'Cuando inicias una lección, el coordinador planifica el programa y despacha 7 workers en paralelo (explicación, ejercicios, infografía, imagen, audio, gamificación y evaluación). Además hay un agente de chat para el onboarding y uno de feedback on-demand. En total: 8 agentes construyen el programa + 1 chat + 1 feedback.',
     },
     {
       question: '¿Es gratis?',
@@ -105,7 +105,7 @@ export function HowToUsePage({ onBack, onStart }: HowToUsePageProps) {
               </CardHeader>
               <CardContent className="space-y-6 text-muted-foreground font-medium leading-relaxed">
                 <p>
-                  HiveLearn es una plataforma educativa revolucionaria que utiliza un <strong className="text-hive-amber font-black">enjambre de 16 agentes de IA</strong> especializados para crear lecciones 100% personalizadas en tiempo real.
+                  HiveLearn es una plataforma educativa revolucionaria que utiliza un <strong className="text-hive-amber font-black">enjambre de 10 agentes de IA</strong> especializados para crear lecciones 100% personalizadas en tiempo real.
                 </p>
                 <p>
                   A diferencia de los sistemas tradicionales, HiveLearn analiza tu perfil, estilo de aprendizaje y objetivos para generar una experiencia educativa única que se adapta a tu ritmo y curiosidad.
@@ -114,7 +114,7 @@ export function HowToUsePage({ onBack, onStart }: HowToUsePageProps) {
                   <div className="text-center p-6 bg-hive-amber/5 rounded-2xl border border-hive-amber/10 shadow-sm group hover:scale-105 transition-all">
                     <div className="text-4xl mb-3">🧠</div>
                     <div className="font-black text-foreground uppercase tracking-widest text-[10px] mb-1">Tecnología Swarm</div>
-                    <div className="text-2xl font-black text-hive-amber">16 Agentes</div>
+                    <div className="text-2xl font-black text-hive-amber">10 Agentes</div>
                   </div>
                   <div className="text-center p-6 bg-hive-purple/5 rounded-2xl border border-hive-purple/10 shadow-sm group hover:scale-105 transition-all">
                     <div className="text-4xl mb-3">⚡</div>
@@ -141,24 +141,18 @@ export function HowToUsePage({ onBack, onStart }: HowToUsePageProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                   {[
-                    { icon: '👤', name: 'Profile', desc: 'Analiza tu perfil' },
-                    { icon: '🎯', name: 'Intent', desc: 'Define objetivos' },
-                    { icon: '🗺️', name: 'Structure', desc: 'Mapa de ruta' },
-                    { icon: '📖', name: 'Explainer', desc: 'Crea conceptos' },
+                    { icon: '🐝', name: 'Coordinator', desc: 'Orquesta el enjambre' },
+                    { icon: '💬', name: 'Onboarding', desc: 'Chat inicial' },
+                    { icon: '📖', name: 'Explanation', desc: 'Genera conceptos' },
                     { icon: '✏️', name: 'Exercise', desc: 'Retos prácticos' },
-                    { icon: '❓', name: 'Quiz', desc: 'Validación' },
-                    { icon: '⚡', name: 'Challenge', desc: 'Retos élite' },
-                    { icon: '💻', name: 'Code', desc: 'Lógica pura' },
-                    { icon: '📊', name: 'SVG', desc: 'Visualización' },
-                    { icon: '🎞️', name: 'Gif', desc: 'Animación' },
-                    { icon: '📈', name: 'Info', desc: 'Resúmenes' },
-                    { icon: '🖼️', name: 'Image', desc: 'Inspiración' },
-                    { icon: '🏆', name: 'Game', desc: 'Recompensas' },
-                    { icon: '📝', name: 'Eval', desc: 'Examen final' },
-                    { icon: '🧠', name: 'Feedback', desc: 'Mejora continua' },
-                    { icon: '🐝', name: 'Coord', desc: 'Orquestador' },
+                    { icon: '📈', name: 'Infographic', desc: 'Datos visuales' },
+                    { icon: '🖼️', name: 'Image', desc: 'Apoyo visual' },
+                    { icon: '🔊', name: 'Audio', desc: 'Narración educativa' },
+                    { icon: '🏆', name: 'Gamification', desc: 'XP y logros' },
+                    { icon: '📝', name: 'Assessment', desc: 'Quiz y evaluación' },
+                    { icon: '⭐', name: 'Feedback', desc: 'Feedback on-demand' },
                   ].map((agent) => (
                     <div key={agent.name} className="flex items-center gap-3 p-4 rounded-xl bg-secondary/10 border border-border hover:border-hive-amber/30 transition-all group">
                       <span className="text-2xl grayscale group-hover:grayscale-0 transition-all">{agent.icon}</span>
@@ -219,7 +213,7 @@ export function HowToUsePage({ onBack, onStart }: HowToUsePageProps) {
                 title: 'Visualiza la Orquestación Swarm',
                 content: (
                   <div className="space-y-4 font-medium text-muted-foreground">
-                    <p>Observa cómo los 16 agentes colaboran en el Swarm Canvas:</p>
+                    <p>Observa cómo los 10 agentes colaboran en el Swarm Canvas:</p>
                     <ul className="list-disc list-inside space-y-2">
                       <li>Las partículas representan la transferencia de conocimiento entre agentes.</li>
                       <li>Cada worker se ilumina cuando entrega su contribución.</li>

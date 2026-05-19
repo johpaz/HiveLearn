@@ -10,15 +10,6 @@ export const HIVELEARN_SCHEMA_V1 = `
 -- HiveLearn Schema v1
 -- Prefijo hl_ para coexistir sin conflictos con tablas de Hive OSS
 
--- Tabla de instancias únicas (UUID por instalación)
-CREATE TABLE IF NOT EXISTS hl_instances (
-  instance_id     TEXT PRIMARY KEY,
-  provider_id     TEXT NOT NULL DEFAULT 'ollama',
-  model_id        TEXT NOT NULL DEFAULT 'gemma2:9b',
-  created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Tabla propia de agentes HL (sin FK a providers/users para evitar constraint failures)
 CREATE TABLE IF NOT EXISTS hl_agents (
   id              TEXT PRIMARY KEY,
@@ -27,7 +18,7 @@ CREATE TABLE IF NOT EXISTS hl_agents (
   system_prompt   TEXT,
   role            TEXT NOT NULL DEFAULT 'worker',
   provider_id     TEXT NOT NULL DEFAULT 'ollama',
-  model_id        TEXT NOT NULL DEFAULT 'gemma2:9b',
+  model_id        TEXT NOT NULL DEFAULT 'gemma4-e4b',
   max_iterations  INTEGER NOT NULL DEFAULT 3,
   tools_json      TEXT DEFAULT '[]',
   workspace       TEXT,
@@ -40,27 +31,53 @@ CREATE TABLE IF NOT EXISTS hl_agents (
 
 CREATE TABLE IF NOT EXISTS hl_student_profiles (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  nombre          TEXT NOT NULL DEFAULT '',
-  nickname        TEXT NOT NULL DEFAULT '',
+  alumno_id       TEXT UNIQUE NOT NULL,
+  nickname        TEXT UNIQUE,
+  nombre          TEXT NOT NULL,
   edad            INTEGER NOT NULL,
-  estado          TEXT NOT NULL DEFAULT 'onboarding' CHECK(estado IN ('onboarding','activo','inactivo')),
+  rango_edad      TEXT NOT NULL CHECK(rango_edad IN ('nino','adolescente','adulto')),
+  tiempo_sesion   INTEGER NOT NULL CHECK(tiempo_sesion IN (15,30,45)),
+  nivel_previo    TEXT NOT NULL CHECK(nivel_previo IN ('principiante','principiante_base','intermedio')),
+  estilo          TEXT NOT NULL DEFAULT 'balanceado',
   sesiones_total  INTEGER DEFAULT 0,
   xp_acumulado    INTEGER DEFAULT 0,
+  nivel_actual    TEXT DEFAULT 'Aprendiz',
   created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
-  ultimo_acceso   TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS hl_topics (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug            TEXT UNIQUE NOT NULL,
+  titulo          TEXT NOT NULL,
+  descripcion     TEXT,
+  nivel           TEXT CHECK(nivel IN ('principiante','intermedio','avanzado')),
+  categoria       TEXT CHECK(categoria IN ('programacion','diseno','datos','ia','redes')),
+  keywords        TEXT DEFAULT '[]',
+  activo          INTEGER DEFAULT 1,
+  created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS hl_curricula (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id      TEXT UNIQUE NOT NULL,
+  topic_slug      TEXT REFERENCES hl_topics(slug),
+  meta_alumno     TEXT NOT NULL,
+  nodos_json      TEXT NOT NULL,
+  total_nodos     INTEGER,
+  rango_edad      TEXT NOT NULL,
+  created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS hl_sessions (
   id                  INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id          TEXT UNIQUE NOT NULL,
   alumno_id           TEXT REFERENCES hl_student_profiles(alumno_id),
-  tema                TEXT,
-  objetivo            TEXT NOT NULL,
+  curriculo_id        INTEGER REFERENCES hl_curricula(id),
   xp_total            INTEGER DEFAULT 0,
   nivel_alcanzado     TEXT DEFAULT 'Aprendiz',
   logros_json         TEXT DEFAULT '[]',
+  nodos_completados   INTEGER DEFAULT 0,
   evaluacion_puntaje  REAL,
   completada          INTEGER DEFAULT 0,
   created_at          TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -86,7 +103,21 @@ CREATE TABLE IF NOT EXISTS hl_session_metrics (
   created_at            TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
-
+CREATE TABLE IF NOT EXISTS hl_node_effectiveness (
+  id                TEXT PRIMARY KEY,
+  nodo_content_hash TEXT NOT NULL,
+  agente_tipo       TEXT NOT NULL,
+  tema              TEXT NOT NULL,
+  tipo_pedagogico   TEXT NOT NULL,
+  tipo_visual       TEXT NOT NULL,
+  rango_edad        TEXT NOT NULL,
+  intentos_promedio REAL DEFAULT 0,
+  tasa_abandono     REAL DEFAULT 0,
+  tiempo_promedio   INTEGER DEFAULT 0,
+  veces_visto       INTEGER DEFAULT 0,
+  veces_completado  INTEGER DEFAULT 0,
+  updated_at        TEXT DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS hl_search_index (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,12 +136,29 @@ CREATE TABLE IF NOT EXISTS hl_node_cache (
   agente_tipo     TEXT NOT NULL,
   concepto_slug   TEXT NOT NULL,
   nivel           TEXT NOT NULL,
+  rango_edad      TEXT NOT NULL,
   output_json     TEXT NOT NULL,
   hits            INTEGER DEFAULT 0,
   created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
   expires_at      TEXT NOT NULL
 );
 
+-- Seed inicial de temas (idempotente con INSERT OR IGNORE)
+INSERT OR IGNORE INTO hl_topics (slug,titulo,nivel,categoria,keywords) VALUES
+('javascript-basico','JavaScript básico','principiante','programacion','["javascript","js","variables","funciones","arrays"]'),
+('python-cero','Python desde cero','principiante','programacion','["python","variables","bucles","funciones"]'),
+('html-css','HTML y CSS para principiantes','principiante','programacion','["html","css","web","diseño"]'),
+('typescript-intermedio','TypeScript intermedio','intermedio','programacion','["typescript","tipos","interfaces","generics"]'),
+('nodejs-apis','Node.js y APIs REST','intermedio','programacion','["nodejs","api","rest","express","bun","elysia"]'),
+('algoritmos','Algoritmos y estructuras de datos','avanzado','programacion','["algoritmos","arrays","arboles","grafos"]'),
+('ia-basica','Inteligencia artificial básica','principiante','ia','["ia","machine learning","modelos","datos"]'),
+('prompt-engineering','Prompt engineering práctico','principiante','ia','["prompts","llm","claude","gemma","chatgpt"]'),
+('ml-python','Machine learning con Python','intermedio','ia','["sklearn","regresion","clasificacion","datos"]'),
+('agentes-hive','Agentes de IA con Hive','intermedio','ia','["agentes","hive","enjambre","tools","skills"]'),
+('sql-basico','SQL para principiantes','principiante','datos','["sql","bases de datos","consultas","tablas"]'),
+('analisis-datos','Análisis de datos con Python','intermedio','datos','["pandas","numpy","matplotlib","datos"]'),
+('diseno-ui','Diseño UI básico','principiante','diseno','["ui","ux","colores","tipografia","componentes"]'),
+('figma-cero','Figma desde cero','principiante','diseno','["figma","prototipo","wireframe","diseño"]');
 `;
 
 /** Schema v2 — Trazabilidad de outputs por agente + respuestas del alumno + rating */
@@ -170,23 +218,47 @@ CREATE TABLE IF NOT EXISTS hl_lesson_interactions (
 CREATE INDEX IF NOT EXISTS idx_hli_session ON hl_lesson_interactions(session_id);
 `;
 
+/** Schema v8 — Timeline persistente del swarm */
+export const HIVELEARN_SCHEMA_V8 = `
+CREATE TABLE IF NOT EXISTS hl_swarm_timeline (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id  TEXT    NOT NULL,
+  event_kind  TEXT    NOT NULL,
+  status      TEXT    NOT NULL,
+  label       TEXT    NOT NULL,
+  progress    REAL    DEFAULT NULL,
+  phase       TEXT    DEFAULT NULL,
+  agent_id    TEXT    DEFAULT NULL,
+  agent_name  TEXT    DEFAULT NULL,
+  task_id     TEXT    DEFAULT NULL,
+  node_id     TEXT    DEFAULT NULL,
+  summary     TEXT    DEFAULT NULL,
+  error       TEXT    DEFAULT NULL,
+  metadata_json TEXT  DEFAULT NULL,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hst_session ON hl_swarm_timeline(session_id, id ASC);
+`;
+
+/** Schema v9 — Historial de actualizaciones de prompt por coordinador */
+export const HIVELEARN_SCHEMA_V9 = `
+CREATE TABLE IF NOT EXISTS hl_agent_prompt_updates (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id  TEXT    NOT NULL,
+  agent_id    TEXT    NOT NULL,
+  failure_type TEXT   DEFAULT NULL,
+  reason      TEXT    NOT NULL,
+  patch_text  TEXT    NOT NULL,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hapu_session ON hl_agent_prompt_updates(session_id, id ASC);
+CREATE INDEX IF NOT EXISTS idx_hapu_agent   ON hl_agent_prompt_updates(agent_id, id DESC);
+`;
+
 /** Schema v3 — Persistencia de estado de sesión multi-usuario + historial de chat onboarding */
 export const HIVELEARN_SCHEMA_V3 = `
 -- HiveLearn Schema v3
 -- Permite pausar/retomar sesiones sin depender de localStorage (multi-usuario/multi-dispositivo)
-
--- Tabla de programas de aprendizaje (schema asociado a alumno y sesión)
-CREATE TABLE IF NOT EXISTS hl_programs (
-  id              TEXT PRIMARY KEY,  -- UUID del programa
-  instance_id     TEXT REFERENCES hl_instances(instance_id),
-  student_id      INTEGER REFERENCES hl_student_profiles(id),
-  session_id      TEXT REFERENCES hl_sessions(session_id),
-  topic_slug      TEXT REFERENCES hl_topics(slug),
-  schema_json     TEXT NOT NULL,  -- El schema completo del programa
-  total_nodos     INTEGER,
-  created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at      TEXT DEFAULT CURRENT_TIMESTAMP
-);
 
 -- Historial del chat de onboarding conversacional
 CREATE TABLE IF NOT EXISTS hl_onboarding_messages (
@@ -210,7 +282,7 @@ CREATE TABLE IF NOT EXISTS hl_onboarding_progress (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id      TEXT    NOT NULL,
   alumno_id       TEXT,
-  step            TEXT    NOT NULL CHECK(step IN ('nombre', 'edad', 'tema', 'objetivo', 'estilo', 'completo')),
+  step            TEXT    NOT NULL CHECK(step IN ('nickname', 'nombre', 'edad', 'tema', 'objetivo', 'estilo', 'completo')),
   field_key       TEXT,
   field_value     TEXT,
   perfil_json     TEXT,
@@ -223,64 +295,32 @@ CREATE INDEX IF NOT EXISTS idx_hop_session ON hl_onboarding_progress(session_id)
 CREATE INDEX IF NOT EXISTS idx_hop_alumno ON hl_onboarding_progress(alumno_id);
 `;
 
-/** Schema v6 — Tabla hl_curricula (faltaba en V1) + hl_monitor_frames */
-export const HIVELEARN_SCHEMA_V6 = `
--- HiveLearn Schema v6
--- hl_curricula: currículos generados por sesión (referenciado por hl_sessions y hl_session_metrics)
-CREATE TABLE IF NOT EXISTS hl_curricula (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  topic_slug TEXT DEFAULT NULL,
-  meta_alumno TEXT NOT NULL DEFAULT '',
-  nodos_json TEXT NOT NULL DEFAULT '[]',
-  total_nodos INTEGER DEFAULT 0,
-  rango_edad TEXT DEFAULT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+/** Schema v7 — Migra hl_onboarding_progress para aceptar step='nickname' */
+export const HIVELEARN_SCHEMA_V7_MIGRATE_PROGRESS = `
+CREATE TABLE IF NOT EXISTS hl_onboarding_progress_v7 (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id      TEXT    NOT NULL,
+  alumno_id       TEXT,
+  step            TEXT    NOT NULL CHECK(step IN ('nickname', 'nombre', 'edad', 'tema', 'objetivo', 'estilo', 'completo')),
+  field_key       TEXT,
+  field_value     TEXT,
+  perfil_json     TEXT,
+  meta_json       TEXT,
+  completed       INTEGER DEFAULT 0,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_hcurricula_session ON hl_curricula(session_id);
-
--- hl_monitor_frames: trazabilidad del monitor de atención por sesión
-CREATE TABLE IF NOT EXISTS hl_monitor_frames (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  frame_id TEXT NOT NULL,
-  estado TEXT NOT NULL,
-  nivel TEXT NOT NULL DEFAULT 'info',
-  accion TEXT NOT NULL DEFAULT 'ninguna',
-  segundos_dist INTEGER DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_hmf_session ON hl_monitor_frames(session_id);
+INSERT OR IGNORE INTO hl_onboarding_progress_v7
+  SELECT id, session_id, alumno_id, step, field_key, field_value, perfil_json, meta_json, completed, created_at, updated_at
+  FROM hl_onboarding_progress;
+DROP TABLE hl_onboarding_progress;
+ALTER TABLE hl_onboarding_progress_v7 RENAME TO hl_onboarding_progress;
+CREATE INDEX IF NOT EXISTS idx_hop_session ON hl_onboarding_progress(session_id);
+CREATE INDEX IF NOT EXISTS idx_hop_alumno  ON hl_onboarding_progress(alumno_id);
 `;
 
-/** Schema v7 — hl_node_effectiveness (tabla fantasma referenciada por LessonPersistence) + hl_achievements */
-export const HIVELEARN_SCHEMA_V7 = `
--- HiveLearn Schema v7
--- hl_node_effectiveness: efectividad por tipo de nodo/agente (requerida por LessonPersistence)
-CREATE TABLE IF NOT EXISTS hl_node_effectiveness (
-  id TEXT PRIMARY KEY,
-  nodo_content_hash TEXT NOT NULL DEFAULT '',
-  agente_tipo TEXT NOT NULL DEFAULT '',
-  tema TEXT NOT NULL DEFAULT '',
-  tipo_pedagogico TEXT NOT NULL DEFAULT '',
-  tipo_visual TEXT NOT NULL DEFAULT '',
-  rango_edad TEXT NOT NULL DEFAULT '',
-  intentos_promedio REAL NOT NULL DEFAULT 1,
-  tasa_abandono REAL NOT NULL DEFAULT 0,
-  tiempo_promedio REAL NOT NULL DEFAULT 0,
-  veces_visto INTEGER NOT NULL DEFAULT 0,
-  veces_completado INTEGER NOT NULL DEFAULT 0,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_hne_tema ON hl_node_effectiveness(tema);
-
--- hl_achievements: logros desbloqueados por alumno
-CREATE TABLE IF NOT EXISTS hl_achievements (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  alumno_id TEXT NOT NULL,
-  achievement_key TEXT NOT NULL,
-  unlocked_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(alumno_id, achievement_key)
-);
-CREATE INDEX IF NOT EXISTS idx_ha_alumno ON hl_achievements(alumno_id);
+/** Schema v6 — Nickname único en hl_student_profiles */
+export const HIVELEARN_SCHEMA_V6 = `
+-- Índice único para búsqueda por nickname (la columna se agrega vía ensureColumn en init.ts)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hsp_nickname ON hl_student_profiles(nickname) WHERE nickname IS NOT NULL;
 `;

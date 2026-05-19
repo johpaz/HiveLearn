@@ -20,7 +20,7 @@ export interface ConversationTool {
 
 export interface ConversationResult {
   content: string
-  toolCall?: { name: string; args: Record<string, unknown> }
+  toolCall?: { name: string; args: Record<string, unknown>; id: string }
 }
 
 const log = logger.child('hl-conversation')
@@ -65,7 +65,7 @@ export async function runHiveLearnConversation(opts: {
   if (toolCall) {
     let args: Record<string, unknown> = {}
     try { args = JSON.parse(toolCall.function.arguments) } catch {}
-    return { content: response.content ?? '', toolCall: { name: toolCall.function.name, args } }
+    return { content: response.content ?? '', toolCall: { name: toolCall.function.name, args, id: toolCall.id } }
   }
 
   return { content: response.content ?? '' }

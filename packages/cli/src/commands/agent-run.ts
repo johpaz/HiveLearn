@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { loadConfig } from "@johpaz/hivelearn-core";
+import { loadConfig } from "@hivelearn/core";
 
 function getGatewayUrl(config: any): string {
   const gateway = config?.gateway;

@@ -117,12 +117,20 @@ export function AgentConfigDialog({
   };
 
   // Dropdown options: only active providers with API key
-  const providerOptions = providers.filter(p => (p.enabled || p.active) && hasApiKey(p));
+  const providerOptions = providers.filter(p => {
+    const isEnabled = (val: any) => val === 1 || val === true || val === "1" || val === "true";
+    const isEnabledAndActive = isEnabled(p.enabled) && isEnabled(p.active);
+    const isSpecialLocal = p.id === "ollama" || p.id === "localllm";
+    return (isEnabledAndActive || isSpecialLocal) && hasApiKey(p);
+  });
 
   // Dropdown options: only active models for selected provider
   const modelOptions = models.filter(m => {
     const pid = m.provider_id;
-    return pid === formData.providerId && (m.enabled || m.active);
+    const isEnabled = (val: any) => val === 1 || val === true || val === "1" || val === "true";
+    const isEnabledAndActive = isEnabled(m.enabled) && isEnabled(m.active);
+    const isSpecialLocal = pid === "ollama" || pid === "localllm";
+    return pid === formData.providerId && (isEnabledAndActive || isSpecialLocal);
   });
 
   // Configured provider (even if inactive) for display in trigger

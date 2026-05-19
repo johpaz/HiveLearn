@@ -27,6 +27,7 @@ export const OPENAI_COMPAT_BASE_URLS: Record<string, string> = {
   kimi: "https://api.moonshot.ai/v1",
   "local-llama": "http://localhost:8080/v1",
   nvidia: "https://integrate.api.nvidia.com/v1",
+  qwen: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 }
 
 // ─── Provider profiles ────────────────────────────────────────────────────────
@@ -56,13 +57,14 @@ const DEFAULT_PROFILE: ProviderProfile = {
 }
 
 export const PROVIDER_PROFILES: Record<string, ProviderProfile> = {
-  openai:        { ...DEFAULT_PROFILE, normalizeToolNames: true },
-  kimi:          { ...DEFAULT_PROFILE, normalizeToolNames: true, disableParallelToolCalls: true, retryWithoutToolsOnCodes: [422] },
-  deepseek:      { ...DEFAULT_PROFILE, normalizeToolNames: true },
-  groq:          { ...DEFAULT_PROFILE, normalizeToolNames: true, retryWithoutToolsOnCodes: [400, 422] },
-  mistral:       { ...DEFAULT_PROFILE, normalizeToolNames: true, toolChoiceAuto: "any", stripAdditionalProperties: true },
-  openrouter:    { ...DEFAULT_PROFILE, normalizeToolNames: true, retryWithoutToolsOnCodes: [400, 422] },
-  nvidia:        { ...DEFAULT_PROFILE, normalizeToolNames: true },
+  openai: { ...DEFAULT_PROFILE, normalizeToolNames: true },
+  kimi: { ...DEFAULT_PROFILE, normalizeToolNames: true, disableParallelToolCalls: true, retryWithoutToolsOnCodes: [422] },
+  deepseek: { ...DEFAULT_PROFILE, normalizeToolNames: true },
+  groq: { ...DEFAULT_PROFILE, normalizeToolNames: true, retryWithoutToolsOnCodes: [400, 422] },
+  mistral: { ...DEFAULT_PROFILE, normalizeToolNames: true, toolChoiceAuto: "any", stripAdditionalProperties: true },
+  openrouter: { ...DEFAULT_PROFILE, normalizeToolNames: true, retryWithoutToolsOnCodes: [400, 422] },
+  nvidia: { ...DEFAULT_PROFILE, normalizeToolNames: true },
+  qwen: { ...DEFAULT_PROFILE, normalizeToolNames: true, retryWithoutToolsOnCodes: [400, 422] },
   "local-llama": { ...DEFAULT_PROFILE },
 }
 

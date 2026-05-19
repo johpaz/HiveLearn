@@ -1,10 +1,9 @@
 import { existsSync, readdirSync } from "fs"
-import { join, dirname } from "path"
-import { fileURLToPath } from "url"
+import { homedir } from "os"
+import { join } from "path"
 import { detectPlatform, getPiperBinaryName, DEFAULT_VOICE } from "./detect.js"
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = __dirname
+const ROOT = join(homedir(), ".hivelearn", "tts")
 const BIN_DIR = join(ROOT, "bin")
 const VOICES_DIR = join(ROOT, "voices")
 

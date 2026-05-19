@@ -12,5 +12,9 @@ export const generarCodigoTool: Tool = {
     },
     required: ['lenguaje', 'codigo', 'descripcion_breve'],
   },
-  execute: async (params) => ({ ok: true, output: params }),
+  execute: async (params) => ({ ok: true, output: {
+    lenguaje: params.lenguaje,
+    codigo: params.codigo,
+    descripcionBreve: params.descripcion_breve,
+  } }),
 }

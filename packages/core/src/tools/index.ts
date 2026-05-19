@@ -1,3 +1,7 @@
+export { disenarEstructuraTool } from './canvas/disenar-estructura.tool'
+export { poblarNodoTool } from './canvas/poblar-nodo.tool'
+// avanzar-nodo, conectar-nodos, crear-nodo-canvas, marcar-completado — sin uso en tool-map, omitidos
+
 export { generarExplicacionTool } from './content/generar-explicacion.tool'
 export { generarEjercicioTool } from './content/generar-ejercicio.tool'
 export { generarQuizTool } from './content/generar-quiz.tool'
@@ -12,18 +16,27 @@ export { calificarEvaluacionTool, calificarRespuestaTool } from './evaluation/ca
 export { generarImagenTool } from './content/generar-imagen.tool'
 
 export { clasificarIntencionTool } from './profile/clasificar-intencion.tool'
+export { validarPerfilTool } from './profile/validar-perfil.tool'
 
 export { buscarCurriculoExistenteTool } from './search/buscar-curriculo-existente.tool'
 export { buscarEnHiveLearnTool } from './search/buscar-en-hivelearn.tool'
 
+export { revisarProgramaTool } from './coordinator/revisar-programa.tool'
+export { repararNodoCompletoTool } from './coordinator/reparar-nodo-completo.tool'
+export { actualizarPromptAgenteTool } from './coordinator/actualizar-prompt-agente.tool'
+export { planificarProgramaTool } from './coordinator/planificar-programa.tool'
+export { delegarEnjambreTool } from './coordinator/delegar-enjambre.tool'
 export { createEvaluarRespuestaTool } from './coordinator/evaluar-respuesta.tool'
 
 // ─── LLMToolDef groups por rol de agente ─────────────────────────────────────
 
 import type { LLMToolDef, Tool } from '../types/tool'
 import { clasificarIntencionTool } from './profile/clasificar-intencion.tool'
+import { validarPerfilTool } from './profile/validar-perfil.tool'
 import { buscarCurriculoExistenteTool } from './search/buscar-curriculo-existente.tool'
 import { buscarEnHiveLearnTool } from './search/buscar-en-hivelearn.tool'
+import { disenarEstructuraTool } from './canvas/disenar-estructura.tool'
+import { poblarNodoTool } from './canvas/poblar-nodo.tool'
 import { generarExplicacionTool } from './content/generar-explicacion.tool'
 import { generarEjercicioTool } from './content/generar-ejercicio.tool'
 import { generarQuizTool } from './content/generar-quiz.tool'
@@ -39,9 +52,10 @@ function toToolDef(t: Tool): LLMToolDef {
   return { type: 'function', function: { name: t.name, description: t.description || '', parameters: t.parameters } }
 }
 
-export const PROFILE_TOOLS: LLMToolDef[] = [clasificarIntencionTool, buscarCurriculoExistenteTool].map(toToolDef)
-export const INTENT_TOOLS: LLMToolDef[] = [clasificarIntencionTool, buscarEnHiveLearnTool].map(toToolDef)
-export const CONTENT_TOOLS: LLMToolDef[] = [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool].map(toToolDef)
-export const VISUAL_TOOLS: LLMToolDef[] = [generarCodigoTool, generarSvgTool, generarFramesGifTool, generarInfografiaTool].map(toToolDef)
-export const EVALUATION_TOOLS: LLMToolDef[] = [generarEvaluacionTool, calificarEvaluacionTool].map(toToolDef)
+export const PROFILE_TOOLS: LLMToolDef[] = [validarPerfilTool].map(toToolDef)
+export const INTENT_TOOLS: LLMToolDef[] = [clasificarIntencionTool].map(toToolDef)
+export const STRUCTURE_TOOLS: LLMToolDef[] = [disenarEstructuraTool].map(toToolDef)
+export const CONTENT_TOOLS: LLMToolDef[] = []
+export const VISUAL_TOOLS: LLMToolDef[] = []
+export const EVALUATION_TOOLS: LLMToolDef[] = [generarEvaluacionTool].map(toToolDef)
 export const GAMIFICATION_TOOLS: LLMToolDef[] = [] // genera JSON libre, sin tool calls

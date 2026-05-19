@@ -25,30 +25,33 @@ export default defineConfig(({ mode }) => {
       cors: true,
       proxy: {
         "/api": {
-          target: "http://localhost:8787",
+          target: "http://127.0.0.1:8787",
+          changeOrigin: true,
+        },
+        "/health": {
+          target: "http://127.0.0.1:8787",
+          changeOrigin: true,
+        },
+        "/status": {
+          target: "http://127.0.0.1:8787",
           changeOrigin: true,
         },
         "/ws": {
-          target: "ws://localhost:8787",
+          target: "ws://127.0.0.1:8787",
           ws: true,
         },
         "/hivelearn-onboarding": {
-          target: "ws://localhost:8787",
+          target: "ws://127.0.0.1:8787",
           ws: true,
         },
         "/hivelearn-lesson": {
-          target: "ws://localhost:8787",
+          target: "ws://127.0.0.1:8787",
           ws: true,
         },
         "/hivelearn-events": {
-          target: "ws://localhost:8787",
+          target: "ws://127.0.0.1:8787",
           ws: true,
         },
-        "/hivelearn-program": {
-          target: "ws://localhost:8787",
-          ws: true,
-        },
-
       },
     },
     build: {

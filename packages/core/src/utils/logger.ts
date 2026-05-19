@@ -3,7 +3,7 @@
  * Copia fiel del logger del repositorio principal de Hive
  * Adaptado para funcionar independientemente
  */
-import { mkdirSync, unlinkSync, renameSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, unlinkSync, renameSync, existsSync, readFileSync, appendFileSync } from "node:fs";
 import * as path from "node:path";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -46,6 +46,7 @@ export interface LoggerConfig {
 }
 
 export interface LogMeta extends Record<string, unknown> {
+  correlationId?: string;
   sessionId?: string;
   userId?: string;
   agentId?: string;
@@ -122,16 +123,18 @@ function formatTimestamp(): string {
   return new Date().toISOString();
 }
 
-function formatMessage(level: LogLevel, message: string, meta?: unknown): string {
+function formatMessage(level: LogLevel, message: string, meta?: unknown, correlationId?: string): string {
   const timestamp = formatTimestamp();
+  const corrStr = correlationId ? ` [${correlationId.slice(0, 8)}]` : "";
   const metaStr = meta ? ` ${JSON.stringify(meta)}` : "";
-  return `[${timestamp}] [${level.toUpperCase()}] ${message}${metaStr}`;
+  return `[${timestamp}]${corrStr} [${level.toUpperCase()}] ${message}${metaStr}`;
 }
 
 export class Logger {
   private config: LoggerConfig;
   private logFile: string | null = null;
   private currentSize = 0;
+  private correlationContext: LogMeta = {};
 
   constructor(config: Partial<LoggerConfig> = {}) {
     this.config = {
@@ -142,6 +145,23 @@ export class Logger {
       redactSensitive: config.redactSensitive ?? true,
       console: config.console ?? true,
     };
+  }
+
+  setCorrelationContext(context: Partial<LogMeta>): void {
+    this.correlationContext = { ...this.correlationContext, ...context };
+  }
+
+  clearCorrelationContext(): void {
+    this.correlationContext = {};
+  }
+
+  getCorrelationId(): string | undefined {
+    return this.correlationContext.correlationId;
+  }
+
+  withCorrelationId(id: string): this {
+    this.correlationContext.correlationId = id;
+    return this;
   }
 
   private initLogFile(): void {
@@ -169,21 +189,31 @@ export class Logger {
     if (!this.config.console) return;
 
     const color = COLORS[level];
-    const displayMeta = this.config.redactSensitive && meta ? redact(meta) : meta;
+    const mergedMeta = this.mergeMeta(meta);
+    const displayMeta = this.config.redactSensitive && mergedMeta ? redact(mergedMeta) : mergedMeta;
     const metaStr = displayMeta && Object.keys(displayMeta as object).length > 0
       ? ` ${JSON.stringify(displayMeta)}`
       : "";
 
     const prefix = `${COLORS.dim}${formatTimestamp()}${COLORS.reset}`;
+    const corrStr = this.correlationContext.correlationId
+      ? ` ${COLORS.dim}[${this.correlationContext.correlationId.slice(0, 8)}]${COLORS.reset}`
+      : "";
     const levelStr = `${color}${COLORS.bright}[${level.toUpperCase().padEnd(5)}]${COLORS.reset}`;
 
-    console.log(`${prefix} ${levelStr} ${message}${metaStr}`);
+    console.log(`${prefix}${corrStr} ${levelStr} ${message}${metaStr}`);
   }
 
   private mergeMeta(meta?: unknown): LogMeta | undefined {
-    if (!meta) return undefined;
+    if (!meta && Object.keys(this.correlationContext).length === 0) return undefined;
+
+    const contextWithoutCorrId = { ...this.correlationContext };
+    delete contextWithoutCorrId.correlationId;
+
+    if (!meta) return contextWithoutCorrId;
     if (typeof meta !== "object") return meta as LogMeta;
-    return meta as LogMeta;
+
+    return { ...contextWithoutCorrId, ...(meta as LogMeta) };
   }
 
   private writeToFile(message: string): void {
@@ -200,10 +230,8 @@ export class Logger {
         this.rotateLogs();
       }
 
-      // Use sync append for logging reliability
-      const encoder = new TextEncoder();
-      const data = encoder.encode(line);
-      Bun.write(this.logFile, data).catch(() => { });
+      // Append synchronously so each entry is preserved in order.
+      appendFileSync(this.logFile, line, "utf8");
       this.currentSize += bytes;
     } catch {
       // Silently fail if we can't write to log file
@@ -243,38 +271,42 @@ export class Logger {
 
   debug(message: string, meta?: unknown): void {
     if (!this.shouldLog("debug")) return;
-    const formatted = formatMessage("debug", message, meta);
+    const mergedMeta = this.mergeMeta(meta);
+    const formatted = formatMessage("debug", message, mergedMeta, this.correlationContext.correlationId);
     this.writeToConsole("debug", message, meta);
     this.writeToFile(formatted);
-    emitLogEntry({ timestamp: formatTimestamp(), level: "debug", source: "hivelearn", message, meta: meta as Record<string, unknown> | undefined });
+    emitLogEntry({ timestamp: formatTimestamp(), level: "debug", source: "hivelearn", message, meta: mergedMeta as Record<string, unknown> | undefined });
   }
 
   info(message: string, meta?: unknown): void {
     if (!this.shouldLog("info")) return;
-    const formatted = formatMessage("info", message, meta);
+    const mergedMeta = this.mergeMeta(meta);
+    const formatted = formatMessage("info", message, mergedMeta, this.correlationContext.correlationId);
     this.writeToConsole("info", message, meta);
     this.writeToFile(formatted);
-    emitLogEntry({ timestamp: formatTimestamp(), level: "info", source: "hivelearn", message, meta: meta as Record<string, unknown> | undefined });
+    emitLogEntry({ timestamp: formatTimestamp(), level: "info", source: "hivelearn", message, meta: mergedMeta as Record<string, unknown> | undefined });
   }
 
   warn(message: string, meta?: unknown): void {
     if (!this.shouldLog("warn")) return;
-    const formatted = formatMessage("warn", message, meta);
+    const mergedMeta = this.mergeMeta(meta);
+    const formatted = formatMessage("warn", message, mergedMeta, this.correlationContext.correlationId);
     this.writeToConsole("warn", message, meta);
     this.writeToFile(formatted);
-    emitLogEntry({ timestamp: formatTimestamp(), level: "warn", source: "hivelearn", message, meta: meta as Record<string, unknown> | undefined });
+    emitLogEntry({ timestamp: formatTimestamp(), level: "warn", source: "hivelearn", message, meta: mergedMeta as Record<string, unknown> | undefined });
   }
 
   error(message: string, meta?: unknown): void {
     if (!this.shouldLog("error")) return;
-    const formatted = formatMessage("error", message, meta);
+    const mergedMeta = this.mergeMeta(meta);
+    const formatted = formatMessage("error", message, mergedMeta, this.correlationContext.correlationId);
     this.writeToConsole("error", message, meta);
     this.writeToFile(formatted);
-    emitLogEntry({ timestamp: formatTimestamp(), level: "error", source: "hivelearn", message, meta: meta as Record<string, unknown> | undefined });
+    emitLogEntry({ timestamp: formatTimestamp(), level: "error", source: "hivelearn", message, meta: mergedMeta as Record<string, unknown> | undefined });
   }
 
   child(context: string): ChildLogger {
-    return new ChildLogger(this, context);
+    return new ChildLogger(this, context, this.correlationContext);
   }
 
   setLevel(level: LogLevel): void {
@@ -285,34 +317,52 @@ export class Logger {
 export class ChildLogger {
   constructor(
     private parent: Logger,
-    private context: string
+    private context: string,
+    private correlationContext: LogMeta = {}
   ) { }
 
   private prefix(message: string): string {
     return `[${this.context}] ${message}`;
   }
 
+  withCorrelationId(id: string): this {
+    this.correlationContext.correlationId = id;
+    return this;
+  }
+
+  setContext(context: Partial<LogMeta>): void {
+    this.correlationContext = { ...this.correlationContext, ...context };
+  }
+
   debug(message: string, meta?: unknown): void {
-    this.parent.debug(this.prefix(message), meta);
+    this.parent.debug(this.prefix(message), this.mergeMeta(meta));
   }
 
   info(message: string, meta?: unknown): void {
-    this.parent.info(this.prefix(message), meta);
+    this.parent.info(this.prefix(message), this.mergeMeta(meta));
   }
 
   warn(message: string, meta?: unknown): void {
-    this.parent.warn(this.prefix(message), meta);
+    this.parent.warn(this.prefix(message), this.mergeMeta(meta));
   }
 
   error(message: string, meta?: unknown): void {
-    this.parent.error(this.prefix(message), meta);
+    this.parent.error(this.prefix(message), this.mergeMeta(meta));
   }
 
   child(subContext: string): ChildLogger {
     return new ChildLogger(
       this.parent,
-      `${this.context}:${subContext}`
+      `${this.context}:${subContext}`,
+      this.correlationContext
     );
+  }
+
+  private mergeMeta(meta?: unknown): LogMeta | undefined {
+    if (!meta && Object.keys(this.correlationContext).length === 0) return undefined;
+    if (!meta) return { ...this.correlationContext };
+    if (typeof meta !== "object") return meta as LogMeta;
+    return { ...this.correlationContext, ...(meta as LogMeta) };
   }
 }
 
@@ -382,13 +432,12 @@ export const logger = {
   info: (msg: string, meta?: unknown) => getLogger().info(msg, meta),
   warn: (msg: string, meta?: unknown) => getLogger().warn(msg, meta),
   error: (msg: string, meta?: unknown) => getLogger().error(msg, meta),
+  setCorrelationContext: (ctx: any) => getLogger().setCorrelationContext(ctx),
+  clearCorrelationContext: () => getLogger().clearCorrelationContext(),
+  getCorrelationId: () => getLogger().getCorrelationId(),
+  withCorrelationId: (id: string) => getLogger().withCorrelationId(id),
   setLevel: (level: any) => getLogger().setLevel(level),
   setHandler: (handler: any) => { /* no-op for compatibility */ },
 };
-
-/**
- * Export redact function for use in middleware
- */
-export { redact };
 
 export default logger;

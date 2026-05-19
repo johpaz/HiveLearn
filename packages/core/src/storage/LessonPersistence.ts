@@ -10,7 +10,8 @@
  */
 import type { Database } from 'bun:sqlite'
 import { getDb } from './sqlite'
-import type { StudentProfile, LessonProgram, NodoLesson, GamificacionOutput, EvaluacionOutput } from '../types'
+import type { StudentProfile, LessonProgram, NodoLesson, GamificacionOutput, EvaluacionOutput, SwarmTimelineEvent } from '../types'
+import { logger } from '../utils/logger'
 
 export interface SessionData {
   sessionId: string
@@ -22,26 +23,6 @@ export interface SessionData {
   nodosCompletados: number
   evaluacionPuntaje: number | null
   completada: boolean
-  tema: string
-  objetivo: string
-}
-
-export interface SessionRow {
-  session_id: string
-  alumno_id: string
-  curriculo_id: number
-  xp_total: number
-  nivel_alcanzado: string
-  logros_json: string
-  nodos_completados: number
-  evaluacion_puntaje: number | null
-  completada: number
-  meta: string
-  nombre: string
-  nickname: string
-  total_nodos: number
-  rango_edad: string
-  created_at: string
 }
 
 export interface SessionMetrics {
@@ -78,6 +59,7 @@ export interface NodeEffectiveness {
 
 export class LessonPersistence {
   private db: Database
+  private log = logger.child('lesson-persistence')
 
   constructor() {
     this.db = getDb()
@@ -100,22 +82,74 @@ export class LessonPersistence {
   // ─── Student Profiles ───────────────────────────────────────────────
 
   saveStudentProfile(profile: StudentProfile): void {
+    this.ensureStudentProfile(profile)
+  }
+
+  ensureStudentProfile(profile: StudentProfile): StudentProfile {
+    const nickname = profile.nickname?.trim()
+    const existingByNickname = nickname ? this.findStudentByNickname(nickname) : null
+
+    if (existingByNickname && existingByNickname.alumnoId !== profile.alumnoId) {
+      this.db.query(`
+        UPDATE hl_student_profiles
+        SET
+          nickname = ?,
+          nombre = ?,
+          edad = ?,
+          rango_edad = ?,
+          tiempo_sesion = ?,
+          nivel_previo = ?,
+          estilo = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE alumno_id = ?
+      `).run(
+        nickname ?? null,
+        profile.nombre,
+        profile.edad,
+        profile.rangoEdad,
+        profile.tiempoSesion,
+        profile.nivelPrevio,
+        profile.estilo,
+        existingByNickname.alumnoId,
+      )
+
+      return {
+        ...existingByNickname,
+        nickname: nickname ?? existingByNickname.nickname,
+        nombre: profile.nombre,
+        edad: profile.edad,
+        rangoEdad: profile.rangoEdad,
+        tiempoSesion: profile.tiempoSesion,
+        nivelPrevio: profile.nivelPrevio,
+        estilo: profile.estilo,
+      }
+    }
+
     this.db.query(`
-      INSERT OR REPLACE INTO hl_student_profiles
-        (alumno_id, nombre, nickname, apodo, avatar, edad, estado, sesiones_total, xp_acumulado, created_at, ultimo_acceso, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT sesiones_total FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT xp_acumulado FROM hl_student_profiles WHERE alumno_id = ?), 0), COALESCE((SELECT created_at FROM hl_student_profiles WHERE alumno_id = ?), CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO hl_student_profiles
+        (alumno_id, nickname, nombre, edad, rango_edad, tiempo_sesion, nivel_previo, estilo, sesiones_total, xp_acumulado, nivel_actual, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'Aprendiz', CURRENT_TIMESTAMP)
+      ON CONFLICT(alumno_id) DO UPDATE SET
+        nickname = excluded.nickname,
+        nombre = excluded.nombre,
+        edad = excluded.edad,
+        rango_edad = excluded.rango_edad,
+        tiempo_sesion = excluded.tiempo_sesion,
+        nivel_previo = excluded.nivel_previo,
+        estilo = excluded.estilo,
+        updated_at = CURRENT_TIMESTAMP
     `).run(
       profile.alumnoId,
+      nickname ?? null,
       profile.nombre,
-      profile.nickname,
-      profile.nickname,
-      profile.avatar,
       profile.edad,
-      profile.estado ?? 'onboarding',
-      profile.alumnoId,
-      profile.alumnoId,
-      profile.alumnoId,
+      profile.rangoEdad,
+      profile.tiempoSesion,
+      profile.nivelPrevio,
+      profile.estilo,
     )
+
+    return this.getStudentProfile(profile.alumnoId) ?? profile
   }
 
   getStudentProfile(alumnoId: string): StudentProfile | null {
@@ -123,35 +157,77 @@ export class LessonPersistence {
     if (!row) return null
     return {
       alumnoId: row.alumno_id,
+      nickname: row.nickname ?? undefined,
       nombre: row.nombre,
-      nickname: row.nickname || row.apodo || '',
-      avatar: row.avatar,
       edad: row.edad,
-      estado: row.estado,
+      rangoEdad: row.rango_edad,
+      tiempoSesion: row.tiempo_sesion,
+      nivelPrevio: row.nivel_previo,
+      estilo: row.estilo,
       sesionesTotal: row.sesiones_total,
       xpAcumulado: row.xp_acumulado,
-      idioma: row.idioma || 'es',
-      intereses: JSON.parse(row.intereses || '[]'),
-      avatarConfigJson: row.avatar_config_json ?? null,
-      ritmoAtencion: row.ritmo_atencion || 'normal',
-      estiloAprendizaje: row.estilo_aprendizaje || 'mixto',
-      necesidadesEsp: row.necesidades_esp ?? 0,
-      accesibilidadJson: row.accessibility_needs || '{}',
-      creadoEn: row.created_at,
-      ultimoAcceso: row.ultimo_acceso,
+      nivelActual: row.nivel_actual,
+    }
+  }
+
+  findStudentByNickname(nickname: string): StudentProfile | null {
+    const row = this.db.query(
+      'SELECT * FROM hl_student_profiles WHERE lower(nickname) = lower(?)'
+    ).get(nickname) as Record<string, any> | undefined
+    if (!row) return null
+    return {
+      alumnoId: row.alumno_id,
+      nickname: row.nickname ?? undefined,
+      nombre: row.nombre,
+      edad: row.edad,
+      rangoEdad: row.rango_edad,
+      tiempoSesion: row.tiempo_sesion,
+      nivelPrevio: row.nivel_previo,
+      estilo: row.estilo,
+      sesionesTotal: row.sesiones_total,
+      xpAcumulado: row.xp_acumulado,
+      nivelActual: row.nivel_actual,
     }
   }
 
   // ─── Curriculum ─────────────────────────────────────────────────────
 
   saveCurriculum(sessionId: string, meta: string, nodosJson: string, totalNodos: number, rangoEdad: string, topicSlug: string | null): number {
-    const result = this.db.query(`
-      INSERT OR REPLACE INTO hl_curricula
+    const resolvedTopicSlug = this.resolveKnownTopicSlug(topicSlug)
+
+    this.db.query(`
+      INSERT INTO hl_curricula
         (session_id, topic_slug, meta_alumno, nodos_json, total_nodos, rango_edad)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(sessionId, topicSlug, meta, nodosJson, totalNodos, rangoEdad)
+      ON CONFLICT(session_id) DO UPDATE SET
+        topic_slug = excluded.topic_slug,
+        meta_alumno = excluded.meta_alumno,
+        nodos_json = excluded.nodos_json,
+        total_nodos = excluded.total_nodos,
+        rango_edad = excluded.rango_edad
+    `).run(sessionId, resolvedTopicSlug, meta, nodosJson, totalNodos, rangoEdad)
 
-    return Number(result.lastInsertRowid)
+    const row = this.db.query(
+      'SELECT id FROM hl_curricula WHERE session_id = ?'
+    ).get(sessionId) as { id: number } | undefined
+    if (!row) {
+      throw new Error(`No se pudo persistir currículo para sessionId=${sessionId}`)
+    }
+    return Number(row.id)
+  }
+
+  private resolveKnownTopicSlug(topicSlug: string | null): string | null {
+    const normalized = topicSlug?.trim().toLowerCase() ?? null
+    if (!normalized) return null
+
+    const row = this.db.query(
+      'SELECT slug FROM hl_topics WHERE slug = ? LIMIT 1'
+    ).get(normalized) as { slug: string } | undefined
+
+    if (row?.slug) return row.slug
+
+    this.log.warn(`[saveCurriculum] unknown topic_slug="${topicSlug}" — persisting as NULL to avoid FK failure`)
+    return null
   }
 
   getCurriculumBySessionId(sessionId: string): { id: number; nodos_json: string; topic_slug: string | null } | null {
@@ -168,106 +244,6 @@ export class LessonPersistence {
         (session_id, alumno_id, curriculo_id, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
       VALUES (?, ?, ?, 0, 'Aprendiz', '[]', 0, NULL, 0)
     `).run(sessionId, alumnoId, curriculoId)
-  }
-
-  saveProgram(programaId: string, alumnoId: string, sessionId: string, schemaJson: string, totalNodos: number): void {
-    const studentRow = this.db.query(
-      'SELECT id FROM hl_student_profiles WHERE alumno_id = ? LIMIT 1'
-    ).get(alumnoId) as { id: number } | undefined
-
-    const instanceRow = this.db.query(
-      'SELECT instance_id FROM hl_instances LIMIT 1'
-    ).get() as { instance_id: string } | undefined
-
-    this.db.query(`
-      INSERT OR IGNORE INTO hl_programs
-        (id, instance_id, student_id, session_id, topic_slug, schema_json, total_nodos)
-      VALUES (?, ?, ?, ?, NULL, ?, ?)
-    `).run(
-      programaId,
-      instanceRow?.instance_id ?? null,
-      studentRow?.id ?? null,
-      sessionId,
-      schemaJson,
-      totalNodos,
-    )
-  }
-
-  // ─── Internal helper: ensure student profile exists (prevents FK constraint failures)
-
-  private ensureStudentProfile(alumnoId: string): void {
-    if (!alumnoId || alumnoId.trim() === '') return
-    const exists = this.db.query('SELECT 1 FROM hl_student_profiles WHERE alumno_id = ? LIMIT 1').get(alumnoId)
-    if (exists) return
-    // Insert minimal profile to satisfy FK constraint
-    this.db.query(`
-      INSERT OR IGNORE INTO hl_student_profiles
-        (alumno_id, nombre, nickname, apodo, avatar, edad, estado, sesiones_total, xp_acumulado, created_at, ultimo_acceso, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `).run(alumnoId, alumnoId, alumnoId, alumnoId, '👤', 18, 'activo')
-  }
-
-  /** Crea sesión temprana sin tema/objetivo (fallback interno del swarm) */
-  createEarlySession(sessionId: string, alumnoId: string): void {
-    this.ensureStudentProfile(alumnoId)
-    this.db.query(`
-      INSERT OR IGNORE INTO hl_sessions
-        (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
-      VALUES (?, ?, NULL, NULL, '', 0, 'Aprendiz', '[]', 0, NULL, 0)
-    `).run(sessionId, alumnoId)
-  }
-
-  /** Crea sesión desde el onboarding con tema y objetivo reales */
-  createSessionWithMeta(sessionId: string | undefined, alumnoId: string, tema: string, objetivo: string): string {
-    this.ensureStudentProfile(alumnoId)
-    const sid = sessionId ?? crypto.randomUUID()
-
-    // Si la sesión ya existe (ej. createEarlySession del swarm), actualizar tema/objetivo.
-    // Si no existe, insertar nueva fila.
-    const existing = this.db.query('SELECT 1 FROM hl_sessions WHERE session_id = ?').get(sid)
-    if (existing) {
-      this.db.query(`
-        UPDATE hl_sessions
-        SET tema = ?, objetivo = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE session_id = ?
-      `).run(tema, objetivo, sid)
-    } else {
-      this.db.query(`
-        INSERT INTO hl_sessions
-          (session_id, alumno_id, curriculo_id, tema, objetivo, xp_total, nivel_alcanzado, logros_json, nodos_completados, evaluacion_puntaje, completada)
-        VALUES (?, ?, NULL, ?, ?, 0, 'Aprendiz', '[]', 0, NULL, 0)
-      `).run(sid, alumnoId, tema, objetivo)
-    }
-    return sid
-  }
-
-  /** Actualiza la columna individual del agente en hl_sessions (progreso incremental del swarm) */
-  updateSessionAgentSlot(sessionId: string, agentKey: string, output: string): void {
-    try {
-      const col = `agente_${agentKey.replace(/-/g, '_').replace(/[^a-z0-9_]/gi, '')}`
-      this.db.query(
-        `UPDATE hl_sessions SET ${col} = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?`
-      ).run(output, sessionId)
-    } catch {
-      // Non-critical — nunca bloquear el pipeline
-    }
-  }
-
-  /** Actualiza schema_json y total_nodos del programa al terminar el swarm */
-  updateProgramSchema(programaId: string, schemaJson: string, totalNodos: number): void {
-    try {
-      this.db.query(
-        'UPDATE hl_programs SET schema_json = ?, total_nodos = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-      ).run(schemaJson, totalNodos, programaId)
-    } catch {
-      // Non-critical
-    }
-  }
-
-  updateSessionCurriculum(sessionId: string, curriculoId: number): void {
-    this.db.query(
-      'UPDATE hl_sessions SET curriculo_id = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?'
-    ).run(curriculoId, sessionId)
   }
 
   updateSessionProgress(sessionId: string, nodosCompletados: number, xpTotal: number): void {
@@ -308,8 +284,6 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
-      tema: row.tema || '',
-      objetivo: row.objetivo || '',
     }
   }
 
@@ -328,8 +302,6 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
-      tema: row.tema || '',
-      objetivo: row.objetivo || '',
     }
   }
 
@@ -404,6 +376,75 @@ export class LessonPersistence {
     ).all(sessionId) as any[]
   }
 
+  saveSwarmTimelineEvent(event: SwarmTimelineEvent): void {
+    try {
+      this.db.query(`
+        INSERT INTO hl_swarm_timeline
+          (session_id, event_kind, status, label, progress, phase, agent_id, agent_name, task_id, node_id, summary, error, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        event.sessionId,
+        event.kind,
+        event.status,
+        event.label,
+        event.progress ?? null,
+        event.phase ?? null,
+        event.agentId ?? null,
+        event.agentName ?? null,
+        event.taskId ?? null,
+        event.nodeId ?? null,
+        event.summary ?? null,
+        event.error ?? null,
+        event.metadata ? JSON.stringify(event.metadata) : null,
+      )
+    } catch {
+      // Non-critical — never block the pipeline
+    }
+  }
+
+  getSwarmTimeline(sessionId: string): SwarmTimelineEvent[] {
+    const rows = this.db.query(`
+      SELECT session_id, event_kind, status, label, progress, phase, agent_id, agent_name, task_id, node_id, summary, error, metadata_json, created_at
+      FROM hl_swarm_timeline
+      WHERE session_id = ?
+      ORDER BY id ASC
+    `).all(sessionId) as Array<Record<string, any>>
+
+    return rows.map((row) => ({
+      sessionId: row.session_id,
+      kind: row.event_kind,
+      status: row.status,
+      label: row.label,
+      progress: row.progress ?? undefined,
+      phase: row.phase ?? undefined,
+      agentId: row.agent_id ?? undefined,
+      agentName: row.agent_name ?? undefined,
+      taskId: row.task_id ?? undefined,
+      nodeId: row.node_id ?? undefined,
+      summary: row.summary ?? undefined,
+      error: row.error ?? undefined,
+      metadata: row.metadata_json ? JSON.parse(row.metadata_json) : undefined,
+      timestamp: Date.parse(row.created_at) || Date.now(),
+    })) as SwarmTimelineEvent[]
+  }
+
+  updateAgentPromptPatch(sessionId: string, agentId: string, patchText: string, reason: string, failureType?: string | null): void {
+    try {
+      this.db.query(`
+        UPDATE hl_agents
+        SET prompt_patch = ?, last_prompt_update_reason = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND role = 'worker'
+      `).run(patchText, reason, agentId)
+
+      this.db.query(`
+        INSERT INTO hl_agent_prompt_updates (session_id, agent_id, failure_type, reason, patch_text)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(sessionId, agentId, failureType ?? null, reason, patchText)
+    } catch {
+      // Non-critical
+    }
+  }
+
   // ─── Student Responses ──────────────────────────────────────────────
 
   saveStudentResponse(sessionId: string, nodeId: string, tipoPedagogico: string, respuesta: string, feedbackJson: string, xpAwarded: number, esCorrecto: boolean): void {
@@ -461,12 +502,20 @@ export class LessonPersistence {
 
   // ─── Pause / Restore ────────────────────────────────────────────────
 
-  pauseSession(sessionId: string, lastNodeId: string, stateJson: string): void {
+  pauseSession(sessionId: string, lastNodeId: string | null, stateJson: string): void {
     this.db.query(`
       UPDATE hl_sessions
       SET paused_at = datetime('now'), last_node_id = ?, session_state_json = ?, updated_at = CURRENT_TIMESTAMP
       WHERE session_id = ?
-    `).run(lastNodeId, stateJson, sessionId)
+    `).run(lastNodeId && lastNodeId.trim().length > 0 ? lastNodeId : null, stateJson, sessionId)
+  }
+
+  updateSessionLogros(sessionId: string, logrosJson: string): void {
+    this.db.query(`
+      UPDATE hl_sessions
+      SET logros_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE session_id = ?
+    `).run(logrosJson, sessionId)
   }
 
   restoreSessionState(sessionId: string): { lastNodeId: string | null; stateJson: string | null; pausedAt: string | null } | null {
@@ -475,7 +524,7 @@ export class LessonPersistence {
     ).get(sessionId) as { last_node_id: string | null; session_state_json: string | null; paused_at: string | null } | undefined
     if (!row) return null
     return {
-      lastNodeId: row.last_node_id ?? null,
+      lastNodeId: row.last_node_id && row.last_node_id.trim().length > 0 ? row.last_node_id : null,
       stateJson:  row.session_state_json ?? null,
       pausedAt:   row.paused_at ?? null,
     }
@@ -513,45 +562,41 @@ export class LessonPersistence {
    */
   saveOnboardingProgress(
     sessionId: string,
-    step: 'nombre' | 'edad' | 'tema' | 'objetivo' | 'estilo' | 'completo',
+    step: 'nickname' | 'nombre' | 'edad' | 'tema' | 'objetivo' | 'estilo' | 'completo',
     fieldKey: string,
     fieldValue: string,
     perfilParcial?: Record<string, string>,
     metaParcial?: string,
+    alumnoIdOverride?: string,
   ): void {
     const now = new Date().toISOString()
     const perfilJson = perfilParcial ? JSON.stringify(perfilParcial) : null
     const metaJson = metaParcial ? JSON.stringify({ meta: metaParcial }) : null
 
-    // Primero creamos el alumno_id si es el paso 'nombre'
-    let alumnoId: string | null = null
-    if (step === 'nombre') {
-      alumnoId = `alumno_${fieldValue.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}_${Date.now()}`
+    const existing = this.db.query(
+      'SELECT alumno_id FROM hl_onboarding_progress WHERE session_id = ? ORDER BY id DESC LIMIT 1'
+    ).get(sessionId) as { alumno_id: string | null } | undefined
+
+    let alumnoId = alumnoIdOverride ?? existing?.alumno_id ?? null
+
+    // Crear perfil provisional solo si aún no existe uno asociado a la sesión.
+    if (!alumnoId && (step === 'nickname' || step === 'nombre')) {
+      const seed = perfilParcial?.nickname ?? fieldValue
+      const slug = seed.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+      alumnoId = `alumno_${slug}_${Date.now()}`
       this.saveStudentProfile({
         alumnoId,
-        nombre: fieldValue,
-        nickname: fieldValue,
-        avatar: 'tigre_azul',
+        nickname: step === 'nickname' ? fieldValue : perfilParcial?.nickname,
+        nombre: step === 'nombre' ? fieldValue : (perfilParcial?.nombre ?? fieldValue),
         edad: 0,
-        estado: 'onboarding',
+        rangoEdad: 'adulto',
+        tiempoSesion: 30,
+        nivelPrevio: 'principiante',
+        estilo: 'balanceado',
         sesionesTotal: 0,
         xpAcumulado: 0,
-        idioma: 'es',
-        intereses: [],
-        avatarConfigJson: null,
-        ritmoAtencion: 'normal',
-        estiloAprendizaje: 'mixto',
-        necesidadesEsp: 0,
-        accesibilidadJson: '{}',
-        creadoEn: new Date().toISOString(),
-        ultimoAcceso: new Date().toISOString(),
+        nivelActual: 'Aprendiz',
       })
-    } else {
-      // Obtener alumno_id de la sesión más reciente
-      const existing = this.db.query(
-        'SELECT alumno_id FROM hl_onboarding_progress WHERE session_id = ? ORDER BY id DESC LIMIT 1'
-      ).get(sessionId) as { alumno_id: string } | undefined
-      alumnoId = existing?.alumno_id ?? null
     }
 
     this.db.query(`
@@ -585,6 +630,14 @@ export class LessonPersistence {
           SET edad = ?, rango_edad = ?, updated_at = ?
           WHERE alumno_id = ?
         `).run(edad, rangoEdad, now, alumnoId)
+      }
+
+      if (step === 'nombre') {
+        this.db.query(`
+          UPDATE hl_student_profiles
+          SET nombre = ?, updated_at = ?
+          WHERE alumno_id = ?
+        `).run(fieldValue, now, alumnoId)
       }
     }
   }
@@ -678,13 +731,13 @@ export class LessonPersistence {
     const perfil = perfilFinal as any
     this.db.query(`
       UPDATE hl_student_profiles
-      SET nombre = ?, nickname = ?, apodo = ?, edad = ?, updated_at = ?
+      SET edad = ?, rango_edad = ?, nivel_previo = ?, estilo = ?, updated_at = ?
       WHERE alumno_id = ?
     `).run(
-      perfil.nombre || '',
-      perfil.nickname || perfil.nombre || '',
-      perfil.nickname || perfil.nombre || '',
       perfil.edad || 18,
+      perfil.rangoEdad || 'adulto',
+      perfil.nivelPrevio || 'principiante',
+      perfil.estilo || 'balanceado',
       now,
       alumnoId,
     )
@@ -738,8 +791,6 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
-      tema: row.tema || '',
-      objetivo: row.objetivo || '',
       nodosJson: row.nodos_json ?? '[]',
       topicSlug: row.topic_slug ?? null,
       metaAlumno: row.meta_alumno ?? '',
@@ -861,109 +912,6 @@ export class LessonPersistence {
       nodosCompletados: row.nodos_completados,
       evaluacionPuntaje: row.evaluacion_puntaje,
       completada: !!row.completada,
-      tema: row.tema || '',
-      objetivo: row.objetivo || '',
-    }))
-  }
-
-  /** Retorna la sesión más reciente de un alumno sin importar si está activa o completada */
-  getLastSessionForAlumno(alumnoId: string): SessionData | null {
-    const row = this.db.query(
-      `SELECT * FROM hl_sessions WHERE alumno_id = ? ORDER BY created_at DESC LIMIT 1`
-    ).get(alumnoId) as Record<string, any> | undefined
-    if (!row) return null
-    return {
-      sessionId: row.session_id,
-      alumnoId: row.alumno_id,
-      curriculoId: row.curriculo_id,
-      xpTotal: row.xp_total,
-      nivelAlcanzado: row.nivel_alcanzado,
-      logrosJson: row.logros_json,
-      nodosCompletados: row.nodos_completados,
-      evaluacionPuntaje: row.evaluacion_puntaje,
-      completada: !!row.completada,
-      tema: row.tema || '',
-      objetivo: row.objetivo || '',
-    }
-  }
-
-  /** Elimina una sesión y todos sus datos relacionados */
-  deleteSession(sessionId: string): boolean {
-    try {
-      this.db.query('DELETE FROM hl_programs WHERE session_id = ?').run(sessionId)
-      this.db.query('DELETE FROM hl_lesson_interactions WHERE session_id = ?').run(sessionId)
-      this.db.query('DELETE FROM hl_session_metrics WHERE session_id = ?').run(sessionId)
-      this.db.query('DELETE FROM hl_student_responses WHERE session_id = ?').run(sessionId)
-      this.db.query('DELETE FROM hl_session_agent_outputs WHERE session_id = ?').run(sessionId)
-      this.db.query('DELETE FROM hl_onboarding_messages WHERE session_id = ?').run(sessionId)
-      this.db.query('DELETE FROM hl_onboarding_progress WHERE session_id = ?').run(sessionId)
-      const result = this.db.query('DELETE FROM hl_sessions WHERE session_id = ?').run(sessionId)
-      return result.changes > 0
-    } catch {
-      return false
-    }
-  }
-
-  /**
-   * Devuelve todas las sesiones con metadatos del currículo y perfil del alumno.
-   * Soporta búsqueda por nombre/nickname (q) y filtro por nickname exacto.
-   */
-  getAllSessions(opts?: { q?: string; nickname?: string }): SessionRow[] {
-    let sql = `
-      SELECT
-        s.session_id,
-        s.alumno_id,
-        s.curriculo_id,
-        s.xp_total,
-        s.nivel_alcanzado,
-        s.logros_json,
-        s.nodos_completados,
-        s.evaluacion_puntaje,
-        s.completada,
-        s.created_at,
-        c.meta_alumno AS meta,
-        c.total_nodos,
-        c.rango_edad,
-        p.nombre,
-        p.nickname
-      FROM hl_sessions s
-      LEFT JOIN hl_curricula c ON c.id = s.curriculo_id
-      LEFT JOIN hl_student_profiles p ON p.alumno_id = s.alumno_id
-      WHERE 1=1
-    `
-    const params: any[] = []
-
-    if (opts?.q) {
-      sql += ` AND (p.nombre LIKE ? OR p.nickname LIKE ?)`
-      const like = `%${opts.q}%`
-      params.push(like, like)
-    }
-
-    if (opts?.nickname) {
-      sql += ` AND (p.nickname = ? OR p.nombre = ?)`
-      params.push(opts.nickname, opts.nickname)
-    }
-
-    sql += ` ORDER BY s.created_at DESC`
-
-    const rows = this.db.query(sql).all(...params) as Record<string, any>[]
-
-    return rows.map(row => ({
-      session_id: row.session_id,
-      alumno_id: row.alumno_id,
-      curriculo_id: row.curriculo_id,
-      xp_total: row.xp_total,
-      nivel_alcanzado: row.nivel_alcanzado,
-      logros_json: row.logros_json,
-      nodos_completados: row.nodos_completados,
-      evaluacion_puntaje: row.evaluacion_puntaje,
-      completada: row.completada,
-      meta: row.meta ?? '',
-      nombre: row.nombre ?? '',
-      nickname: row.nickname ?? row.apodo ?? '',
-      total_nodos: row.total_nodos ?? 0,
-      rango_edad: row.rango_edad ?? '',
-      created_at: row.created_at ?? '',
     }))
   }
 }

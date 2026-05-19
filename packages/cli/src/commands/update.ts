@@ -138,7 +138,7 @@ async function updateFromGlobalPackage(): Promise<void> {
  */
 async function applyDatabaseUpdates(): Promise<void> {
   const { existsSync } = await import("node:fs");
-  const { getHiveDir, initializeDatabase, getDb } = await import("@johpaz/hivelearn-core");
+  const { getHiveDir, initializeDatabase, getDb } = await import("@hivelearn/core");
   const path = await import("node:path");
 
   const dbPath = path.join(getHiveDir(), "data", "hive.db");

@@ -7,6 +7,12 @@
 import { EventEmitter } from 'events'
 
 class HLSwarmEmitter extends EventEmitter {
+  override emit(event: string | symbol, ...args: any[]): boolean {
+    const emitted = super.emit(event, ...args)
+    if (event !== '*') super.emit('*', event, ...args)
+    return emitted
+  }
+
   subscribe(event: string, cb: (...args: any[]) => void): void {
     this.on(event, cb)
   }

@@ -6,8 +6,8 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, renameSync } from "fs"
-import { join, dirname } from "path"
-import { fileURLToPath } from "url"
+import { homedir } from "os"
+import { join } from "path"
 import {
   detectPlatform,
   PIPER_URLS,
@@ -16,8 +16,7 @@ import {
   AVAILABLE_VOICES,
 } from "./detect.js"
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = __dirname
+const ROOT = join(homedir(), ".hivelearn", "tts")
 const BIN_DIR = join(ROOT, "bin")
 const VOICES_DIR = join(ROOT, "voices")
 
@@ -162,4 +161,7 @@ async function main(): Promise<void> {
   }
 }
 
-main()
+// Solo ejecutar si se corre directamente: bun run tts/install.ts
+if (import.meta.main) {
+  main()
+}

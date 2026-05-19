@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { loadConfig, getHiveDir } from "@johpaz/hivelearn-core";
+import { loadConfig, getHiveDir } from "@hivelearn/core";
 
 const getHiveDirConst = () => getHiveDir();
 const getWorkspace = () => path.join(getHiveDirConst(), "workspace");

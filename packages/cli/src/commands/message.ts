@@ -1,4 +1,4 @@
-import { loadConfig } from "@johpaz/hivelearn-core";
+import { loadConfig } from "@hivelearn/core";
 
 interface MessageResult {
   success: boolean;

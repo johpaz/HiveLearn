@@ -11,6 +11,7 @@ import { runAgentLoop } from './agent-loop'
 import type { Tool } from '../types/tool'
 import { getDb } from '../storage/sqlite'
 import { logger } from '../utils/logger'
+import { AGENT_PROMPTS } from './prompts'
 
 const log = logger.child('hl-runner')
 
@@ -40,8 +41,15 @@ export async function runHiveLearnAgent(opts: {
   const cleanModel = providerConfig.model.replace(new RegExp(`^${providerConfig.provider}\\/`), '')
   log.info(`[hl-runner] ${opts.agentId} → ${providerConfig.provider}/${cleanModel} tools=${opts.tools.length}`)
 
+  const promptPatch = typeof agent.prompt_patch === 'string' && agent.prompt_patch.trim()
+    ? `\n\nPATCH ACTIVO DEL COORDINADOR:\n${agent.prompt_patch.trim()}`
+    : ''
+
+  const canonicalPrompt = AGENT_PROMPTS[opts.agentId]
+  const basePrompt = canonicalPrompt ?? agent.system_prompt ?? opts.systemPrompt ?? ''
+
   return runAgentLoop({
-    systemPrompt: opts.systemPrompt,
+    systemPrompt: basePrompt + promptPatch,
     taskDescription: opts.taskDescription,
     tools: opts.tools,
     providerConfig,

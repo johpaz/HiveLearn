@@ -1,9 +1,13 @@
 /**
- * LLM Client — Cliente simple para llamar a modelos de lenguaje
- * Sin dependencias externas del repositorio principal de Hive
+ * LLM Client — Entry point for all LLM calls.
+ *
+ * Routes calls through the rich provider adapters in llm-providers/.
+ * Each adapter handles its own protocol, tool support, retry logic,
+ * streaming, and provider-specific quirks.
  */
 import { getDb } from '../storage/sqlite'
-import { getProviderApiKey } from '../secrets/provider-secrets'
+import { decryptApiKey } from '../crypto/decrypt'
+import { getProvider } from './llm-providers/factory'
 
 export interface LLMMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -42,43 +46,6 @@ export interface ContentPart {
   fileName?: string
 }
 
-export interface LLMCallOptions {
-  temperature?: number
-  maxTokens?: number
-  tools?: LLMToolDef[]
-  toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } }
-  provider?: string
-  model?: string
-  apiKey?: string
-  baseUrl?: string
-  numCtx?: number
-  numGpu?: number
-  messages?: LLMMessage[]
-  onToken?: (token: string) => void
-  signal?: AbortSignal
-  thinking?: { enabled: boolean; budget_tokens?: number }
-}
-
-export interface LLMResponse {
-  content: string
-  toolCalls?: Array<{
-    name: string
-    args: Record<string, unknown>
-  }>
-  tool_calls?: LLMToolCall[]
-  stop_reason?: string
-  reasoning_content?: string
-  thinking_content?: string
-  usage?: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens?: number
-    input_tokens?: number
-    output_tokens?: number
-    thinking_tokens?: number
-  }
-}
-
 export interface ProviderConfig {
   provider: string
   model: string
@@ -89,134 +56,129 @@ export interface ProviderConfig {
 }
 
 /**
- * Resolver configuración del provider desde la BD
+ * Resolver configuración del provider desde la BD.
+ * Lee base_url, desencripta API key, y lee num_ctx/num_gpu.
+ *
+ * Soporta dos modos:
+ *   resolveProviderConfig(agentId)              → busca agent en DB, resuelve provider
+ *   resolveProviderConfig(providerId, modelId)  → usa provider/model directamente
  */
-export async function resolveProviderConfig(providerId: string, modelId?: string): Promise<ProviderConfig> {
+export async function resolveProviderConfig(
+  agentOrProviderId: string,
+  modelId?: string
+): Promise<ProviderConfig> {
   const db = getDb()
 
+  // Intentar buscar como agentId primero
   const agent = db.query(
-    'SELECT * FROM hl_agents WHERE id = ? LIMIT 1'
-  ).get(providerId) as Record<string, unknown> | undefined
+    'SELECT provider_id, model_id FROM hl_agents WHERE id = ? LIMIT 1'
+  ).get(agentOrProviderId) as Record<string, unknown> | undefined
 
-  const rawModelId = modelId || (agent?.model_id as string) || 'gemma4-e4b'
-  const provider = (agent?.provider_id as string) || 'ollama'
+  let provider: string
+  let model: string
 
-  // Para Ollama, el ID almacenado es 'ollama-gemma4-e4b' pero la API necesita
-  // el nombre real 'gemma4:e4b'. Lo resolvemos desde la tabla models.
-  let model = rawModelId
-  if (provider === 'ollama') {
-    const row = db.query('SELECT name FROM models WHERE id = ? LIMIT 1').get(rawModelId) as { name: string } | undefined
-    if (row?.name) model = row.name
+  if (agent) {
+    // Es un agentId
+    provider = (agent.provider_id as string) || 'ollama'
+    model = modelId || (agent.model_id as string) || 'gemma4-e4b'
+  } else {
+    // Es un providerId directo
+    provider = agentOrProviderId
+    model = modelId || 'gemma4-e4b'
   }
 
-  // Obtener API key desde Bun.secrets
-  const apiKey = await getProviderApiKey(providerId)
+  // Leer configuración del provider desde la DB
+  const row = db.query(
+    'SELECT base_url, api_key_encrypted, api_key_iv, num_ctx, num_gpu FROM providers WHERE id = ?'
+  ).get(provider) as Record<string, unknown> | undefined
+
+  let apiKey: string | undefined
+  if (row?.api_key_encrypted && row?.api_key_iv) {
+    try {
+      apiKey = decryptApiKey(row.api_key_encrypted as string, row.api_key_iv as string)
+    } catch {
+      // Key decryption failed — provider may not need a key (ollama, local-llama)
+    }
+  }
+
+  // For Ollama, the model ID stored in hl_agents may be a sanitized form like
+  // "ollama-gemma4-e4b" or the legacy default "gemma4-e4b", while the actual
+  // Ollama model name (with colon tag, e.g. "gemma4:e4b") lives in models.name.
+  // Look it up so we pass the correct name to the Ollama API.
+  if (provider === 'ollama') {
+    const modelRow = db.query(
+      "SELECT name FROM models WHERE provider_id = 'ollama' AND (id = ? OR id = ?) LIMIT 1"
+    ).get(model, `ollama-${model}`) as Record<string, unknown> | undefined
+
+    if (modelRow?.name) {
+      model = modelRow.name as string
+    }
+  }
 
   return {
     provider,
     model,
-    apiKey: apiKey || undefined,
-    baseUrl: process.env.HIVELEARN_BASE_URL,
+    apiKey,
+    baseUrl: row?.base_url as string | undefined,
+    numCtx: row?.num_ctx as number | undefined,
+    numGpu: row?.num_gpu as number | undefined,
+  }
+}
+
+export interface LLMCallOptions {
+  model: string
+  messages: LLMMessage[]
+  tools?: LLMToolDef[]
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } }
+  apiKey?: string
+  baseUrl?: string
+  temperature?: number
+  maxTokens?: number
+  numCtx?: number
+  numGpu?: number
+  onToken?: (token: string) => void
+  provider?: string
+}
+
+export interface LLMResponse {
+  content: string
+  tool_calls?: LLMToolCall[]
+  stop_reason?: 'stop' | 'tool_calls' | 'length' | 'error'
+  usage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
   }
 }
 
 /**
- * Llamar a un modelo LLM
- * Implementación básica que usa fetch estándar
+ * Llamar a un modelo LLM usando el adapter correcto para el provider.
  */
 export async function callLLM(
-  options: LLMCallOptions & {
+  options: {
     providerId: string
     modelId: string
+    messages: LLMMessage[]
+    temperature?: number
+    maxTokens?: number
+    tools?: LLMToolDef[]
+    toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } }
+    onToken?: (token: string) => void
   }
 ): Promise<LLMResponse> {
-  const { providerId, modelId, messages } = options
-  const config = await resolveProviderConfig(providerId, modelId)
+  const config = await resolveProviderConfig(options.providerId, options.modelId)
+  const provider = getProvider(config.provider)
 
-  // Determinar endpoint según el provider
-  let url = options.baseUrl || config.baseUrl || 'http://localhost:11434/api/chat'
-
-  // Local LLM (hive-cli)
-  if (providerId === 'local-llama' || config.provider === 'local-llama') {
-    const { LocalLlamaProvider } = await import('./llm-providers/local-llama')
-    const provider = new LocalLlamaProvider()
-    return provider.call(options)
-  }
-
-  // Ollama
-  if (providerId === 'ollama' || config.provider === 'ollama') {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: modelId,
-        messages: messages?.map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
-        stream: false,
-        options: {
-          temperature: options.temperature || 0.7,
-          num_predict: options.maxTokens || 2000,
-        },
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`LLM call failed: ${response.status} ${response.statusText}`)
-    }
-
-    const data = await response.json() as any
-    return {
-      content: data.message?.content || '',
-      stop_reason: data.done ? 'stop' : 'length',
-      usage: {
-        promptTokens: data.prompt_eval_count || 0,
-        completionTokens: data.eval_count || 0,
-        totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
-      },
-    }
-  }
-
-  // OpenAI-compatible (Groq, OpenAI, etc.)
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
-    },
-    body: JSON.stringify({
-      model: modelId,
-      messages,
-      temperature: options.temperature || 0.7,
-      max_tokens: options.maxTokens || 2000,
-      ...(options.tools ? { tools: options.tools } : {}),
-      ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}),
-    }),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`LLM call failed: ${response.status} ${response.statusText} - ${errorText}`)
-  }
-
-  const data = await response.json() as any
-
-  const toolCalls = data.choices?.[0]?.message?.tool_calls
-  const parsedToolCalls = toolCalls?.map((tc: LLMToolCall) => ({
-    name: tc.function.name,
-    args: JSON.parse(tc.function.arguments),
-  }))
-
-  return {
-    content: data.choices?.[0]?.message?.content || '',
-    toolCalls: parsedToolCalls,
-    tool_calls: toolCalls,
-    stop_reason: data.choices?.[0]?.finish_reason,
-    usage: data.usage ? {
-      promptTokens: data.usage.prompt_tokens || 0,
-      completionTokens: data.usage.completion_tokens || 0,
-      totalTokens: (data.usage.prompt_tokens || 0) + (data.usage.completion_tokens || 0),
-    } : undefined,
-  }
+  return provider.call({
+    model: config.model,
+    messages: options.messages,
+    tools: options.tools,
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    temperature: options.temperature,
+    maxTokens: options.maxTokens,
+    numCtx: config.numCtx,
+    numGpu: config.numGpu,
+    onToken: options.onToken,
+  } as LLMCallOptions)
 }

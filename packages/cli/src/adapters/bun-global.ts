@@ -114,7 +114,6 @@ export class BunGlobalAdapter implements InstallationAdapter {
 
     paths.uiDir = uiDir;
 
-    // Use port from env var if set, otherwise default to 8787
     const port = env.HIVE_PORT ? parseInt(env.HIVE_PORT, 10) : PORTS.GATEWAY;
     const publicUrl = env.HIVE_PUBLIC_URL || undefined;
 
@@ -124,6 +123,7 @@ export class BunGlobalAdapter implements InstallationAdapter {
         host: env.HIVE_HOST || "127.0.0.1",
         port,
         wsPort: port,
+        codeBridgePort: PORTS.CODE_BRIDGE,
         publicUrl,
         openBrowser: !env.NO_BROWSER,
         daemon: !!env.HIVE_DAEMON,
@@ -268,16 +268,19 @@ export class BunGlobalAdapter implements InstallationAdapter {
    * Get Bun Global environment variables
    */
   async getEnvironment(): Promise<Record<string, string>> {
-    // Hardcoded defaults - no .env files
-    return {
+    const fileEnv = loadEnvFile();
+    const homeEnv = loadEnvFile(path.join(this.hiveDir, ".env"));
+
+    const defaults = {
       HIVE_HOST: "127.0.0.1",
-      HIVE_PORT: String(PORTS.GATEWAY),  // "8787"
+      HIVE_PORT: String(PORTS.GATEWAY),
       HIVE_HOME: this.hiveDir,
       NO_BROWSER: "0",
       HIVE_PUBLIC_URL: "",
       HIVE_DAEMON: "0",
-      NODE_ENV: "production",
     };
+
+    return mergeEnv(defaults, fileEnv, homeEnv, process.env);
   }
 
   /**

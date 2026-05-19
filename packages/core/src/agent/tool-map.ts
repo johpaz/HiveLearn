@@ -11,44 +11,39 @@
 import type { Tool } from '../types/tool'
 import { AGENT_IDS } from '../agent/registry'
 import {
+  // Coordinator
+  revisarProgramaTool,
+  repararNodoCompletoTool,
+  actualizarPromptAgenteTool,
+  planificarProgramaTool,
+  delegarEnjambreTool,
   // Content — structured output
   generarExplicacionTool,
   generarEjercicioTool,
   generarQuizTool,
-  generarRetoTool,
-  generarCodigoTool,
   generarSvgTool,
   generarFramesGifTool,
   generarInfografiaTool,
   generarImagenTool,
   // Evaluation — structured output
   generarEvaluacionTool,
-  calificarEvaluacionTool,
   calificarRespuestaTool,
-  // Profile — structured output
-  clasificarIntencionTool,
   // Search — real execute()
-  buscarCurriculoExistenteTool,
   buscarEnHiveLearnTool,
 } from '../tools/index'
 import { generarAudioTool } from '../tools/content/generar-audio.tool'
 
 export const AGENT_EXECUTABLE_TOOLS: Record<string, Tool[]> = {
-  [AGENT_IDS.coordinator]: [],
-  [AGENT_IDS.profile]:      [clasificarIntencionTool, buscarCurriculoExistenteTool],
-  [AGENT_IDS.intent]:       [clasificarIntencionTool, buscarEnHiveLearnTool],
-  [AGENT_IDS.structure]:    [buscarCurriculoExistenteTool, buscarEnHiveLearnTool],
-  [AGENT_IDS.explanation]:  [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool],
-  [AGENT_IDS.exercise]:     [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool],
-  [AGENT_IDS.quiz]:         [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool],
-  [AGENT_IDS.challenge]:    [generarExplicacionTool, generarEjercicioTool, generarQuizTool, generarRetoTool],
-  [AGENT_IDS.code]:         [generarCodigoTool, generarSvgTool, generarFramesGifTool, generarInfografiaTool],
-  [AGENT_IDS.svg]:          [generarCodigoTool, generarSvgTool, generarFramesGifTool, generarInfografiaTool],
-  [AGENT_IDS.gif]:          [generarCodigoTool, generarSvgTool, generarFramesGifTool, generarInfografiaTool],
-  [AGENT_IDS.infographic]:  [generarCodigoTool, generarSvgTool, generarFramesGifTool, generarInfografiaTool],
+  [AGENT_IDS.coordinator]:  [planificarProgramaTool, delegarEnjambreTool, revisarProgramaTool, buscarEnHiveLearnTool, repararNodoCompletoTool, actualizarPromptAgenteTool],
+  [AGENT_IDS.explanation]:  [generarExplicacionTool],
+  [AGENT_IDS.exercise]:     [generarEjercicioTool],
+  [AGENT_IDS.quiz]:         [generarQuizTool],
+  [AGENT_IDS.svg]:          [generarSvgTool],
+  [AGENT_IDS.gif]:          [generarFramesGifTool],
+  [AGENT_IDS.infographic]:  [generarInfografiaTool],
   [AGENT_IDS.image]:        [generarImagenTool],
-  [AGENT_IDS.evaluation]:   [generarEvaluacionTool, calificarEvaluacionTool],
+  [AGENT_IDS.evaluation]:   [generarEvaluacionTool],
   [AGENT_IDS.gamification]: [],  // genera JSON libre, sin tool calls
   [AGENT_IDS.feedback]:     [calificarRespuestaTool],
-  [AGENT_IDS.audio]: [generarAudioTool],
+  [AGENT_IDS.audio]:        [generarAudioTool],
 }

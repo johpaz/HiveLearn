@@ -39,8 +39,25 @@ export interface ValidationResult {
 
 export interface ValidationConfig {
   agenteId: string
+  rangoEdad: string
   tema: string
   tipoContenido: string
+}
+
+function pickString(contenido: any, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = contenido?.[key]
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return ''
+}
+
+function pickStringArray(contenido: any, ...keys: string[]): string[] {
+  for (const key of keys) {
+    const value = contenido?.[key]
+    if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string')
+  }
+  return []
 }
 
 /**
@@ -50,9 +67,8 @@ export function validatePedagogicalContent(
   contenido: any,
   config: ValidationConfig
 ): ValidationResult {
-  const { agenteId, tema, tipoContenido } = config
-  const rangoEdad = 'adulto' // valor por defecto simplificado
-
+  const { agenteId, rangoEdad, tema, tipoContenido } = config
+  
   log.info(`[pedagogical-validation] Validating ${agenteId} for ${tipoContenido}`)
   
   // Inicializar resultados
@@ -124,9 +140,13 @@ function validateExplanationAgent(
   rangoEdad: string,
   tema: string
 ): void {
+  const titulo = pickString(contenido, 'titulo')
+  const explicacion = pickString(contenido, 'explicacion')
+  const ejemploConcreto = pickString(contenido, 'ejemploConcreto', 'ejemplo_concreto')
+
   // Claridad: verificar que tenga título y explicación
-  if (contenido.titulo && contenido.explicacion) {
-    const longitudExplicacion = contenido.explicacion.length
+  if (titulo && explicacion) {
+    const longitudExplicacion = explicacion.length
     if (longitudExplicacion > 20 && longitudExplicacion < 500) {
       resultado.criterios.claridad = true
       resultado.puntuaciones.claridad = 85
@@ -138,7 +158,7 @@ function validateExplanationAgent(
   }
   
   // Ejemplos concretos: verificar que tenga ejemplo concreto
-  if (contenido.ejemploConcreto && contenido.ejemploConcreto.length > 10) {
+  if (ejemploConcreto && ejemploConcreto.length > 10) {
     resultado.criterios.ejemplosConcretos = true
     resultado.puntuaciones.ejemplosConcretos = 90
   } else {
@@ -146,7 +166,7 @@ function validateExplanationAgent(
   }
   
   // Adecuación a edad: verificar longitud y complejidad
-  const complejidad = calcularComplejidad(contenido.explicacion || '')
+  const complejidad = calcularComplejidad(explicacion || '')
   if (adecuadoParaEdad(complejidad, rangoEdad)) {
     resultado.criterios.adecuacionEdad = true
     resultado.puntuaciones.adecuacionEdad = 80
@@ -155,7 +175,7 @@ function validateExplanationAgent(
   }
   
   // Progresión lógica: verificar estructura (flexible)
-  if (contenido.explicacion && contenido.explicacion.length > 50) {
+  if (explicacion && explicacion.length > 50) {
     resultado.criterios.progresionLogica = true
     resultado.puntuaciones.progresionLogica = 75
   } else {
@@ -165,7 +185,7 @@ function validateExplanationAgent(
   
   // Engagement: verificar lenguaje motivador (flexible)
   const palabrasEngagement = ['importante', 'interesante', 'fascinante', 'útil', 'práctico', 'interactiva', 'dinámico']
-  if (palabrasEngagement.some(palabra => contenido.explicacion?.toLowerCase().includes(palabra))) {
+  if (palabrasEngagement.some(palabra => explicacion?.toLowerCase().includes(palabra))) {
     resultado.criterios.engagement = true
     resultado.puntuaciones.engagement = 70
   } else {
@@ -174,8 +194,8 @@ function validateExplanationAgent(
   }
   
   // Cobertura temática: verificar que mencione el tema
-  if (contenido.explicacion?.toLowerCase().includes(tema.toLowerCase()) || 
-      contenido.titulo?.toLowerCase().includes(tema.toLowerCase())) {
+  if (explicacion?.toLowerCase().includes(tema.toLowerCase()) || 
+      titulo?.toLowerCase().includes(tema.toLowerCase())) {
     resultado.criterios.coberturaTemática = true
     resultado.puntuaciones.coberturaTemática = 85
   } else {
@@ -192,8 +212,14 @@ function validateExerciseAgent(
   rangoEdad: string,
   tema: string
 ): void {
+  const enunciado = pickString(contenido, 'enunciado')
+  const ejemploRespuesta = pickString(contenido, 'ejemploRespuesta', 'ejemplo_respuesta')
+  const respuestaCorrecta = pickString(contenido, 'respuestaCorrecta', 'respuesta_correcta')
+  const pistaOpcional = pickString(contenido, 'pistaOpcional', 'pista_opcional')
+  const pasos = pickStringArray(contenido, 'pasos')
+
   // Claridad: verificar enunciado
-  if (contenido.enunciado && contenido.enunciado.length > 20) {
+  if (enunciado && enunciado.length > 20) {
     resultado.criterios.claridad = true
     resultado.puntuaciones.claridad = 80
   } else {
@@ -201,7 +227,7 @@ function validateExerciseAgent(
   }
   
   // Ejemplos concretos: verificar ejemplo de respuesta
-  if (contenido.ejemploRespuesta && contenido.ejemploRespuesta.length > 10) {
+  if (ejemploRespuesta && ejemploRespuesta.length > 10) {
     resultado.criterios.ejemplosConcretos = true
     resultado.puntuaciones.ejemplosConcretos = 85
   } else {
@@ -209,7 +235,7 @@ function validateExerciseAgent(
   }
   
   // Adecuación a edad: verificar complejidad del enunciado
-  const complejidad = calcularComplejidad(contenido.enunciado || '')
+  const complejidad = calcularComplejidad(enunciado || '')
   if (adecuadoParaEdad(complejidad, rangoEdad)) {
     resultado.criterios.adecuacionEdad = true
     resultado.puntuaciones.adecuacionEdad = 75
@@ -218,7 +244,7 @@ function validateExerciseAgent(
   }
   
   // Progresión lógica: verificar pasos guiados
-  if (contenido.pasos && Array.isArray(contenido.pasos) && contenido.pasos.length > 0) {
+  if (pasos.length > 0) {
     resultado.criterios.progresionLogica = true
     resultado.puntuaciones.progresionLogica = 90
   } else {
@@ -226,7 +252,7 @@ function validateExerciseAgent(
   }
   
   // Engagement: verificar que sea desafiante pero alcanzable
-  if (contenido.pistaOpcional || contenido.respuestaCorrecta) {
+  if (pistaOpcional || respuestaCorrecta) {
     resultado.criterios.engagement = true
     resultado.puntuaciones.engagement = 70
   } else {
@@ -234,7 +260,7 @@ function validateExerciseAgent(
   }
   
   // Cobertura temática: verificar que el ejercicio sea sobre el tema
-  if (contenido.enunciado?.toLowerCase().includes(tema.toLowerCase())) {
+  if (enunciado?.toLowerCase().includes(tema.toLowerCase())) {
     resultado.criterios.coberturaTemática = true
     resultado.puntuaciones.coberturaTemática = 80
   } else {
@@ -376,8 +402,11 @@ function validateCodeAgent(
   rangoEdad: string,
   tema: string
 ): void {
+  const codigo = pickString(contenido, 'codigo')
+  const descripcionBreve = pickString(contenido, 'descripcionBreve', 'descripcion_breve')
+
   // Claridad: verificar código y descripción
-  if (contenido.codigo && contenido.descripcionBreve && contenido.codigo.length > 10) {
+  if (codigo && descripcionBreve && codigo.length > 10) {
     resultado.criterios.claridad = true
     resultado.puntuaciones.claridad = 85
   } else {
@@ -385,8 +414,8 @@ function validateCodeAgent(
   }
   
   // Ejemplos concretos: verificar que el código sea un ejemplo práctico
-  if (contenido.codigo && (contenido.codigo.includes('function') || contenido.codigo.includes('const') ||
-      contenido.codigo.includes('print') || contenido.codigo.includes('console'))) {
+  if (codigo && (codigo.includes('function') || codigo.includes('const') ||
+      codigo.includes('print') || codigo.includes('console'))) {
     resultado.criterios.ejemplosConcretos = true
     resultado.puntuaciones.ejemplosConcretos = 90
   } else {
@@ -394,8 +423,14 @@ function validateCodeAgent(
   }
   
   // Adecuación a edad: verificar complejidad del código
-  const lineasCodigo = contenido.codigo?.split('\n').length || 0
-  const complejidad = lineasCodigo > 15 ? 80 : lineasCodigo > 8 ? 60 : 40
+  const lineasCodigo = codigo?.split('\n').length || 0
+  const hasControlFlow = /for\s*\(|while\s*\(|if\s*\(|switch\s*\(|try\s*\{/.test(codigo)
+  const hasFunctions = /\bfunction\b|=>/.test(codigo)
+  let complejidad = 25
+  if (lineasCodigo > 6) complejidad += 12
+  if (lineasCodigo > 10) complejidad += 18
+  if (hasControlFlow) complejidad += 15
+  if (hasFunctions) complejidad += 8
   if (adecuadoParaEdad(complejidad, rangoEdad)) {
     resultado.criterios.adecuacionEdad = true
     resultado.puntuaciones.adecuacionEdad = 75
@@ -404,7 +439,7 @@ function validateCodeAgent(
   }
   
   // Progresión lógica: verificar comentarios en el código
-  if (contenido.codigo && (contenido.codigo.includes('//') || contenido.codigo.includes('#'))) {
+  if (codigo && (codigo.includes('//') || codigo.includes('#'))) {
     resultado.criterios.progresionLogica = true
     resultado.puntuaciones.progresionLogica = 80
   } else {
@@ -412,8 +447,8 @@ function validateCodeAgent(
   }
   
   // Engagement: verificar que el código sea interesante
-  if (contenido.descripcionBreve?.toLowerCase().includes('ejemplo') ||
-      contenido.descripcionBreve?.toLowerCase().includes('práctico')) {
+  if (descripcionBreve?.toLowerCase().includes('ejemplo') ||
+      descripcionBreve?.toLowerCase().includes('práctico')) {
     resultado.criterios.engagement = true
     resultado.puntuaciones.engagement = 70
   } else {
@@ -421,7 +456,7 @@ function validateCodeAgent(
   }
   
   // Cobertura temática: verificar que el código sea sobre el tema
-  if (contenido.descripcionBreve?.toLowerCase().includes(tema.toLowerCase())) {
+  if (descripcionBreve?.toLowerCase().includes(tema.toLowerCase())) {
     resultado.criterios.coberturaTemática = true
     resultado.puntuaciones.coberturaTemática = 85
   } else {
@@ -439,8 +474,23 @@ function validateVisualAgent(
   tema: string,
   agenteId: string
 ): void {
-  // Claridad: verificar que haya contenido visual
-  if (contenido.svg_string || contenido.svgString || contenido.frames || contenido.secciones || contenido.url) {
+  const prompt = pickString(contenido, 'prompt')
+  const concepto = pickString(contenido, 'concepto')
+  const altText = pickString(contenido, 'alt_text', 'altText')
+  const caption = pickString(contenido, 'caption')
+  const svgFallback = pickString(contenido, 'svg_fallback', 'svgFallback')
+  const url = pickString(contenido, 'url')
+
+  // Claridad: verificar que haya contenido visual usable según el contrato real del agente
+  if (
+    contenido.svg_string ||
+    contenido.svgString ||
+    contenido.frames ||
+    contenido.secciones ||
+    url ||
+    prompt ||
+    svgFallback
+  ) {
     resultado.criterios.claridad = true
     resultado.puntuaciones.claridad = 80
   } else {
@@ -457,15 +507,37 @@ function validateVisualAgent(
   } else if (agenteId === 'hl-infographic-agent' && contenido.secciones?.length > 0) {
     resultado.criterios.ejemplosConcretos = true
     resultado.puntuaciones.ejemplosConcretos = 90
+  } else if (agenteId === 'hl-image-agent' && prompt && caption && (svgFallback || url || altText)) {
+    resultado.criterios.ejemplosConcretos = true
+    resultado.puntuaciones.ejemplosConcretos = 85
   } else {
     resultado.observaciones.push('Visual no parece educativo')
     resultado.puntuaciones.ejemplosConcretos = 60
   }
   
-  // Adecuación a edad: SVG usa complejidad baja (30) porque siempre es adecuado visualmente
-  const complejidad = agenteId === 'hl-svg-agent' ? 30 :
-                     agenteId === 'hl-gif-agent' ? 60 :
-                     agenteId === 'hl-infographic-agent' ? 80 : 50
+  // Adecuación a edad: medir la complejidad real del visual en vez de castigar por tipo.
+  let complejidad = 50
+  if (agenteId === 'hl-svg-agent') {
+    complejidad = 30
+  } else if (agenteId === 'hl-gif-agent') {
+    const frameCount = Array.isArray(contenido.frames) ? contenido.frames.length : 0
+    complejidad = frameCount > 6 ? 65 : 30
+  } else if (agenteId === 'hl-infographic-agent') {
+    const secciones = Array.isArray(contenido.secciones) ? contenido.secciones : []
+    const maxTitulo = Math.max(0, ...secciones.map((s: any) => String(s?.titulo ?? '').length))
+    const maxValor = Math.max(0, ...secciones.map((s: any) => String(s?.valor ?? '').length))
+    complejidad = 18
+    if (secciones.length > 3) complejidad += 14
+    if (maxTitulo > 28) complejidad += 6
+    if (maxValor > 60) complejidad += 10
+    if (maxValor > 90) complejidad += 10
+  } else if (agenteId === 'hl-image-agent') {
+    const baseText = [prompt, altText, caption].filter(Boolean).join('. ')
+    complejidad = Math.max(10, Math.round(calcularComplejidad(baseText) * 0.7))
+    if (prompt.length > 180) complejidad += 10
+    if (caption.length > 120) complejidad += 10
+    if (contenido?.estilo === 'chart') complejidad += 10
+  }
   if (adecuadoParaEdad(complejidad, rangoEdad)) {
     resultado.criterios.adecuacionEdad = true
     resultado.puntuaciones.adecuacionEdad = 75
@@ -491,6 +563,20 @@ function validateVisualAgent(
   } else if (agenteId === 'hl-gif-agent' && contenido.frames?.length > 0) {
     resultado.criterios.coberturaTemática = true
     resultado.puntuaciones.coberturaTemática = 75
+  } else if (agenteId === 'hl-image-agent' && (concepto || prompt || caption)) {
+    const normalizedTopic = tema.toLowerCase()
+    const normalizedVisual = `${concepto} ${prompt} ${caption}`.toLowerCase()
+    if (
+      !tema ||
+      normalizedVisual.includes(normalizedTopic) ||
+      concepto.length > 0
+    ) {
+      resultado.criterios.coberturaTemática = true
+      resultado.puntuaciones.coberturaTemática = 80
+    } else {
+      resultado.observaciones.push('Visual no relacionado con el tema')
+      resultado.puntuaciones.coberturaTemática = 60
+    }
   } else {
     resultado.observaciones.push('Visual no relacionado con el tema')
     resultado.puntuaciones.coberturaTemática = 60

@@ -13,5 +13,10 @@ export const generarRetoTool: Tool = {
     },
     required: ['titulo', 'contexto', 'pasos', 'criterios_exito'],
   },
-  execute: async (params) => ({ ok: true, output: params }),
+  execute: async (params) => ({ ok: true, output: {
+    titulo: params.titulo,
+    contexto: params.contexto,
+    pasos: params.pasos,
+    criteriosExito: params.criterios_exito,
+  } }),
 }

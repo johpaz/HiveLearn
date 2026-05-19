@@ -1,4 +1,5 @@
 import type { Tool } from '../../types/tool'
+import type { FeedbackOutput } from '../../types'
 
 export interface LeccionCompletada {
   xpTotal: number
@@ -6,6 +7,7 @@ export interface LeccionCompletada {
   mensaje: string
   nodosCompletados: number
   totalNodos: number
+  feedbackFinal?: FeedbackOutput | null
 }
 
 let _completionResult: LeccionCompletada | null = null
@@ -16,6 +18,9 @@ export function getCompletionResult(): LeccionCompletada | null {
 
 export function createCompletarLeccionTool(
   sendToClient: (msg: object) => void,
+  opts?: {
+    buildFinalFeedback?: (summary: LeccionCompletada) => Promise<FeedbackOutput | null>
+  },
 ): Tool {
   return {
     name: 'completar_leccion',
@@ -62,7 +67,13 @@ export function createCompletarLeccionTool(
         mensaje: (args.mensaje as string) ?? '¡Lección completada!',
         nodosCompletados: (args.nodosCompletados as number) ?? 0,
         totalNodos: (args.totalNodos as number) ?? 0,
+        feedbackFinal: null,
       }
+
+      const feedbackFinal = opts?.buildFinalFeedback
+        ? await opts.buildFinalFeedback(result).catch(() => null)
+        : null
+      result.feedbackFinal = feedbackFinal
       _completionResult = result
 
       sendToClient({
@@ -72,7 +83,9 @@ export function createCompletarLeccionTool(
         mensaje: result.mensaje,
         nodosCompletados: result.nodosCompletados,
         totalNodos: result.totalNodos,
-      })
+        feedbackFinal: result.feedbackFinal,
+      }
+      )
 
       return JSON.stringify({ ok: true, ...result })
     },

@@ -1,14 +1,11 @@
 /**
- * Registry de los 17 agentes del enjambre HiveLearn:
- *   1 coordinador (hl-coordinator-agent, role='coordinator')
- *  16 workers especializados (role='worker')
- *
- * Se insertan en la tabla `agents` al inicializar con ON CONFLICT DO UPDATE,
- * preservando la selección de provider/modelo que el usuario haya configurado.
+ * Registry histórico de agentes HiveLearn.
+ * El sistema mantiene varios agentes legacy en BD por compatibilidad,
+ * pero el pipeline activo de generación usa solo el subconjunto reducido.
  */
 import type { Database } from 'bun:sqlite'
 const HIVELEARN_PROVIDER_ID = 'ollama'
-const HIVELEARN_MODEL_ID = 'gemma2:9b'
+const HIVELEARN_MODEL_ID = 'gemma4-e4b'
 import { COORDINATOR_PROMPT } from './coordinator.prompt'
 import { PROFILE_PROMPT } from './prompts/profile.prompt'
 import { INTENT_PROMPT } from './prompts/intent.prompt'
@@ -26,11 +23,10 @@ import { EVALUATION_PROMPT } from './prompts/evaluation.prompt'
 import { FEEDBACK_PROMPT } from './prompts/feedback.prompt'
 import { AUDIO_PROMPT } from './prompts/audio.prompt'
 import { ONBOARDING_PROMPT } from './prompts/onboarding.prompt'
-import { MONITOR_PROMPT } from './prompts/monitor.prompt'
-import { VISION_PEDAGOGICA_PROMPT } from './prompts/vision-pedagogica.prompt'
 
 export const AGENT_IDS = {
   coordinator: 'hl-coordinator-agent',
+  onboarding: 'hl-onboarding-agent',
   profile: 'hl-profile-agent',
   intent: 'hl-intent-agent',
   structure: 'hl-structure-agent',
@@ -47,8 +43,6 @@ export const AGENT_IDS = {
   gamification: 'hl-gamification-agent',
   evaluation: 'hl-evaluation-agent',
   feedback: 'hl-feedback-agent',
-  monitor: 'hl-monitor-agent',
-  visionPedagogica: 'hl-vision-pedagogica-agent',
 } as const
 
 interface AgentDef {
@@ -61,25 +55,37 @@ interface AgentDef {
 
 const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.coordinator, name: 'HiveLearnCoordinator', description: 'Coordina el enjambre educativo completo', systemPrompt: COORDINATOR_PROMPT, maxIterations: 10 },
+  { id: AGENT_IDS.onboarding, name: 'OnboardingAgent', description: 'Conversación inicial adaptativa para conocer al alumno', systemPrompt: ONBOARDING_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.profile, name: 'ProfileAgent', description: 'Construye el perfil de adaptación del alumno', systemPrompt: PROFILE_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.intent, name: 'IntentAgent', description: 'Extrae tema, nivel y tono de la meta del alumno', systemPrompt: INTENT_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.structure, name: 'StructureAgent', description: 'Diseña la estructura del mundo de aprendizaje (zonas PixiJS)', systemPrompt: STRUCTURE_PROMPT, maxIterations: 10 },
+  { id: AGENT_IDS.structure, name: 'StructureAgent', description: 'Diseña el esqueleto completo del programa de estudio', systemPrompt: STRUCTURE_PROMPT, maxIterations: 10 },
   { id: AGENT_IDS.explanation, name: 'ExplanationAgent', description: 'Genera explicaciones de conceptos (máx 70 palabras)', systemPrompt: EXPLANATION_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.exercise, name: 'ExerciseAgent', description: 'Crea ejercicios prácticos con pistas', systemPrompt: EXERCISE_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.quiz, name: 'QuizAgent', description: 'Genera preguntas de quiz con 4 opciones', systemPrompt: QUIZ_PROMPT, maxIterations: 3 },
+  { id: AGENT_IDS.quiz, name: 'QuizAgent', description: 'Legacy worker de quiz; reemplazado por AssessmentAgent en el pipeline activo', systemPrompt: QUIZ_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.challenge, name: 'ChallengeAgent', description: 'Diseña retos prácticos con pasos y criterios', systemPrompt: CHALLENGE_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.code, name: 'CodeAgent', description: 'Genera bloques de código (máx 15 líneas)', systemPrompt: CODE_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.svg, name: 'SVGAgent', description: 'Genera diagramas SVG educativos (400x300)', systemPrompt: SVG_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.gif, name: 'GifAgent', description: 'Genera frames de animación (5-8 frames)', systemPrompt: GIF_PROMPT, maxIterations: 3 },
+  { id: AGENT_IDS.svg, name: 'SVGAgent', description: 'Legacy worker visual; reemplazado por ImageAgent en el pipeline activo', systemPrompt: SVG_PROMPT, maxIterations: 3 },
+  { id: AGENT_IDS.gif, name: 'GifAgent', description: 'Legacy worker visual; reemplazado por ImageAgent en el pipeline activo', systemPrompt: GIF_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.infographic, name: 'InfographicAgent', description: 'Crea infografías con 3-5 secciones de datos clave', systemPrompt: INFOGRAPHIC_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.image, name: 'ImageAgent', description: 'Genera imágenes educativas o SVG descriptivo fallback', systemPrompt: `Eres ImageAgent de HiveLearn. Genera una imagen educativa para el concepto indicado usando la tool generar_imagen. Si no puedes generar una imagen real, crea un SVG representativo detallado como fallback. El SVG debe ser educativo y claro (400x300px). Responde SOLO con una tool call.`, maxIterations: 3 },
+  { id: AGENT_IDS.image, name: 'ImageAgent', description: 'Único worker visual del pipeline activo; genera apoyo visual educativo del nodo', systemPrompt: `Eres ImageAgent de HiveLearn. Usa SOLO la tool generar_imagen. Eres el único worker visual general del pipeline. Genera una imagen educativa clara y simple para el concepto indicado. Si no puedes producir bitmap real, crea una representación visual educativa equivalente y simple como fallback. Responde SOLO con una tool call.`, maxIterations: 3 },
   { id: AGENT_IDS.gamification, name: 'GamificationAgent', description: 'Asigna XP, logros y gamificación adaptada por edad', systemPrompt: GAMIFICATION_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.evaluation, name: 'EvaluationAgent', description: 'Genera 5 preguntas de evaluación final', systemPrompt: EVALUATION_PROMPT, maxIterations: 3 },
+  { id: AGENT_IDS.evaluation, name: 'AssessmentAgent', description: 'Único worker de assessment; genera quiz por nodo y evaluación final', systemPrompt: EVALUATION_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.feedback, name: 'FeedbackAgent', description: 'Feedback motivador on-demand por respuesta del alumno', systemPrompt: FEEDBACK_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.audio, name: 'AudioAgent', description: 'Genera script de narración educativa (Web Speech API)', systemPrompt: AUDIO_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.monitor, name: 'MonitorAgent', description: 'Monitorea la atención del alumno vía análisis de frame de webcam', systemPrompt: MONITOR_PROMPT, maxIterations: 1 },
-  { id: AGENT_IDS.visionPedagogica, name: 'VisionPedagogicaAgent', description: 'Analiza objetos mostrados a la cámara y genera preguntas pedagógicas', systemPrompt: VISION_PEDAGOGICA_PROMPT, maxIterations: 1 },
 ]
+
+const ACTIVE_AGENT_IDS = new Set<string>([
+  AGENT_IDS.coordinator,
+  AGENT_IDS.onboarding,
+  AGENT_IDS.explanation,
+  AGENT_IDS.exercise,
+  AGENT_IDS.infographic,
+  AGENT_IDS.image,
+  AGENT_IDS.audio,
+  AGENT_IDS.gamification,
+  AGENT_IDS.evaluation,
+  AGENT_IDS.feedback,
+])
 
 export function registerHiveLearnAgents(db: Database): void {
   const insertWorker = db.prepare(`
@@ -120,7 +126,7 @@ export function registerHiveLearnAgents(db: Database): void {
       10,
     )
 
-    // Insertar 16 agentes workers
+    // Insertar todos los workers conocidos; el pipeline activo se controla con enabled
     for (const agent of HIVELEARN_AGENTS) {
       if (agent.id === AGENT_IDS.coordinator) continue
       insertWorker.run(
@@ -132,6 +138,11 @@ export function registerHiveLearnAgents(db: Database): void {
         HIVELEARN_MODEL_ID,
         agent.maxIterations,
       )
+    }
+
+    for (const agentId of Object.values(AGENT_IDS)) {
+      const enabled = ACTIVE_AGENT_IDS.has(agentId) ? 1 : 0
+      db.prepare(`UPDATE hl_agents SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(enabled, agentId)
     }
   })
   tx()

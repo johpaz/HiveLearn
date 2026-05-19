@@ -1,6 +1,9 @@
 # Hive Server - Guía de Despliegue y Consumo API
 
-Servidor local de inferencia LLM con API compatible OpenAI, basado en `llama-server` (binarios oficiales de llama.cpp).
+Servidor local de inferencia LLM con API compatible OpenAI, basado en `llama-server` y binarios oficiales de `llama.cpp`.
+
+> Este documento describe el escenario de `llama-server` externo.
+> Si estás usando el Local LLM administrado por HiveLearn, revisa también `docs/LOCAL-LLM-SETUP.md`.
 
 ---
 
@@ -26,9 +29,28 @@ Servidor local de inferencia LLM con API compatible OpenAI, basado en `llama-ser
 
 Los 3 modos **nunca** van juntos. Cada uno es un servidor `llama-server` independiente en un puerto distinto.
 
+## Nota sobre MTP
+
+En este proyecto llamamos “modelos MTP” a los modelos GGUF catalogados para usarse con speculative decoding / MTP en versiones recientes de `llama.cpp`.
+
+Eso implica dos condiciones:
+
+1. El modelo debe estar marcado como compatible.
+2. El binario de `llama.cpp` debe ser una release suficientemente nueva para soportar flags MTP.
+
+Ejemplos de flags asociados a MTP en `llama.cpp` reciente:
+
+- `--spec-type mtp`
+- `--spec-draft-n-max`
+- `--spec-draft-ngl`
+
+Si el binario no reconoce esos flags, el problema no es el modelo sino la versión del runtime.
+
 ---
 
 ## 1. Descarga e Instalación de Binarios Oficiales
+
+Para este modo, el runtime correcto es siempre el binario oficial de `llama.cpp`, no `hive-cli`.
 
 ### Binarios disponibles por plataforma y backend
 
@@ -51,11 +73,13 @@ Los 3 modos **nunca** van juntos. Cada uno es un servidor `llama-server` indepen
 | Windows | ARM64 | CPU | `llama-{VER}-bin-win-cpu-arm64.zip` | Ninguna |
 | Android | ARM64 | Vulkan | `llama-{VER}-bin-android-arm64.tar.gz` | Cualquiera |
 
-`{VER}` = versión de la release, ej: `b9025`. Última release: https://github.com/ggml-org/llama.cpp/releases
+`{VER}` = versión de la release, ej: `b9193`. Última referencia consultada en este ajuste documental: `b9193` del 17 de mayo de 2026. Revisa siempre la release actual en:
+
+- https://github.com/ggml-org/llama.cpp/releases
 
 ### Script de instalación con autodetección
 
-El script detecta automáticamente el OS, arquitectura y GPU disponible, y descarga el binario correcto:
+El script detecta automáticamente el OS, arquitectura y GPU disponible, y descarga el binario oficial correcto.
 
 ```bash
 #!/usr/bin/env bash
@@ -237,6 +261,17 @@ export LD_LIBRARY_PATH=./bin-llama/llama-b9025:$LD_LIBRARY_PATH
 
 ## 2. Descarga de Modelos
 
+### Modelos de HiveLearn catalogados como MTP
+
+Estos son los modelos locales del proyecto marcados como compatibles con flujos MTP:
+
+- `Gemma 4 E2B Q4_K_XL`
+- `Gemma 4 E4B Q4_K_XL`
+- `Gemma 4 26B-A4B Q4_K_M`
+- `Gemma 4 31B Q4_K_XL`
+
+En todos los casos, si el flujo es multimodal, también se requiere `mmproj-BF16.gguf`.
+
 ```bash
 mkdir -p models
 cd models
@@ -257,6 +292,17 @@ curl -L -o mmproj-BF16.gguf \
 ---
 
 ## 3. Levantar el Servidor por Modo
+
+### Arranque inicial vs arranques posteriores
+
+Hay dos escenarios distintos:
+
+1. `llama-server` externo:
+   El usuario lo instala y lo levanta manualmente o con un supervisor como `systemd`, `pm2` o scripts propios.
+2. Local LLM administrado por HiveLearn:
+   La primera instalación del runtime oficial de `llama.cpp` debe dispararse manualmente desde HiveLearn. Después de esa primera instalación, al arrancar el server principal de Hive/HiveLearn, el runtime local ya instalado debería poder reutilizarse automáticamente.
+
+Este documento cubre el caso 1. El comportamiento del caso 2 se documenta en `docs/LOCAL-LLM-SETUP.md`.
 
 ### Configuración común a todos los modos
 

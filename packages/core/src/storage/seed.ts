@@ -1,5 +1,8 @@
 import { getDb } from "./sqlite"
 import { logger } from "../utils/logger"
+import * as toolCatalog from "../tools"
+import * as skillCatalog from "../skills"
+import type { Tool } from "../types/tool"
 
 /**
  * Seed de datos predeterminados para Hive
@@ -10,6 +13,17 @@ import { logger } from "../utils/logger"
 export interface SeedData {
   providers: Array<{ id: string; name: string; baseUrl?: string; category?: string }>
   models: Array<{ id: string; providerId: string; name: string; modelType: string; contextWindow?: number; capabilities?: string }>
+}
+
+interface SearchSkill {
+  name: string
+  version?: string
+  description: string
+  icon?: string
+  category?: string
+  tools?: string[]
+  triggers?: string[]
+  steps?: Array<{ name: string; description?: string }>
 }
 
 export const SEED_DATA: SeedData = {
@@ -172,28 +186,107 @@ export const SEED_DATA: SeedData = {
 
 const log = logger.child("seed");
 
+function isToolCandidate(value: unknown): value is Tool {
+  return !!value
+    && typeof value === "object"
+    && typeof (value as Tool).name === "string"
+    && typeof (value as Tool).description === "string"
+    && !!(value as Tool).parameters
+}
+
+function isSkillCandidate(value: unknown): value is SearchSkill {
+  return !!value
+    && typeof value === "object"
+    && typeof (value as SearchSkill).name === "string"
+    && typeof (value as SearchSkill).description === "string"
+}
+
+function buildToolSearchText(tool: Tool): string {
+  const props = Object.entries(tool.parameters?.properties ?? {}).map(([key, def]) => {
+    const parts = [key, def.description ?? "", def.type ?? ""].filter(Boolean)
+    return parts.join(" ")
+  })
+  const required = tool.parameters?.required?.join(" ") ?? ""
+  return [
+    tool.name,
+    tool.description,
+    props.join(" "),
+    required,
+  ].filter(Boolean).join("\n")
+}
+
+function buildSkillSearchText(skill: SearchSkill): string {
+  return [
+    skill.name,
+    skill.description,
+    skill.category ?? "",
+    (skill.tools ?? []).join(" "),
+    (skill.triggers ?? []).join(" "),
+    (skill.steps ?? []).map(step => `${step.name} ${step.description ?? ""}`).join(" "),
+  ].filter(Boolean).join("\n")
+}
+
+function seedSearchIndex(): void {
+  const db = getDb()
+  const tools = Object.values(toolCatalog).filter(isToolCandidate)
+  const skills = Object.values(skillCatalog).filter(isSkillCandidate)
+
+  const deleteIndex = db.prepare(`DELETE FROM hl_search_index WHERE entidad_tipo = ?`)
+  const deleteFts = db.prepare(`DELETE FROM hl_search_fts WHERE entidad_tipo = ?`)
+  const insertIndex = db.prepare(`
+    INSERT INTO hl_search_index (entidad_tipo, entidad_id, contenido_texto, metadata_json)
+    VALUES (?, ?, ?, ?)
+  `)
+  const insertFts = db.prepare(`
+    INSERT INTO hl_search_fts (contenido_texto, entidad_tipo, entidad_id, metadata_json)
+    VALUES (?, ?, ?, ?)
+  `)
+
+  const tx = db.transaction(() => {
+    for (const entityType of ["tool", "skill"] as const) {
+      deleteIndex.run(entityType)
+      deleteFts.run(entityType)
+    }
+
+    for (const tool of tools) {
+      const metadata = JSON.stringify({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+        source: "seed",
+      })
+      const content = buildToolSearchText(tool)
+      insertIndex.run("tool", tool.name, content, metadata)
+      insertFts.run(content, "tool", tool.name, metadata)
+    }
+
+    for (const skill of skills) {
+      const metadata = JSON.stringify({
+        name: skill.name,
+        version: skill.version ?? null,
+        description: skill.description,
+        category: skill.category ?? null,
+        icon: skill.icon ?? null,
+        tools: skill.tools ?? [],
+        triggers: skill.triggers ?? [],
+        steps: skill.steps ?? [],
+        source: "seed",
+      })
+      const content = buildSkillSearchText(skill)
+      insertIndex.run("skill", skill.name, content, metadata)
+      insertFts.run(content, "skill", skill.name, metadata)
+    }
+  })
+
+  tx()
+  log.info(`[seed] ✅ Índice FTS5 actualizado con ${tools.length} tools y ${skills.length} skills`)
+}
+
 // Initial playbook rules for ACE (Agentic Context Engineering)
 
 
 
 
-
-export function seedIfEmpty(): void {
-  const db = getDb()
-
-  log.info("[seed] 🌱 Checking if seed is needed...")
-
-  // Check if providers exist
-  const providerCount = db.query('SELECT COUNT(*) as count FROM providers').get() as { count: number }
-  
-  if (providerCount.count > 0) {
-    log.info(`[seed] ⏭️  Skipping seed - ${providerCount.count} providers already exist`)
-    return
-  }
-
-  log.info("[seed] 🌱 No providers found, seeding default data...")
-  seedAllData()
-}
 
 export function seedAllData(): void {
   const db = getDb()
@@ -244,6 +337,7 @@ export function seedAllData(): void {
       log.warn(`[seed] ⚠️  ${skippedModels.length} models saltados: ${skippedModels.join(', ')}`);
     }
     log.info(`[seed] ✅ ${modelCount} models procesados, ${insertedModels.length} insertados`);
+    seedSearchIndex()
 
 
   } catch (err) {
@@ -300,5 +394,3 @@ export function getActiveElements<T extends Record<string, any>>(
   const results = db.query<T, []>(`SELECT * FROM ${table} WHERE active = 1`).all()
   return results
 }
-
-

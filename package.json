@@ -1,6 +1,6 @@
 {
   "name": "@johpaz/hivelearn",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "HiveLearn — Plataforma de aprendizaje adaptativo con IA",
   "type": "module",
   "bin": {
@@ -16,25 +16,18 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --cwd packages/cli src/index.ts start",
+    "dev": "bun run --cwd packages/ui build && bun run --cwd packages/cli scripts/generate-ui-bundle.ts && HIVE_DEV=true bun run --cwd packages/cli src/index.ts start",
     "dev:ui": "bun run --cwd packages/ui dev",
-    "dev:server": "bun run build:ui && bun run copy:assets && NODE_ENV=development bun run --cwd packages/core dev",
+    "dev:server": "NODE_ENV=development bun run --cwd packages/core dev",
     "dev:cli": "bun run --cwd packages/cli dev",
     "build": "bun run build:core && bun run build:ui && bun run build:cli && bun run copy:assets",
     "build:core": "bun build packages/core/src/index.ts --outdir dist/core --target bun && bun build packages/core/src/gateway/index.ts --bundle --outfile dist/server.js --target bun",
     "build:ui": "bun run --cwd packages/ui build",
     "build:cli": "bun run --cwd packages/cli build",
-    "copy:assets": "rm -rf dist/ui && cp -r packages/ui/dist dist/ui",
+    "copy:assets": "mkdir -p dist/ui && cp -r packages/ui/dist/* dist/ui/ 2>/dev/null || true",
     "start": "bun run --cwd packages/cli src/index.ts start",
     "typecheck": "bun run --filter '*' typecheck",
-    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist",
-    "migrate:api-keys": "bun run scripts/migrate-api-keys.ts",
-    "migrate:schema": "bun run scripts/migrate-schema.ts",
-    "build:godot": "echo 'Abrir Godot Editor para exportar'",
-    "build:godot:html5": "godot --headless --export-release 'HTML5' packages/godot/export/html5/index.html",
-    "build:godot:linux": "godot --headless --export-release 'Linux' packages/godot/export/linux/HiveLearn",
-    "build:godot:windows": "godot --headless --export-release 'Windows' packages/godot/export/windows/HiveLearn.exe",
-    "build:godot:arm64": "godot --headless --export-release 'Linux ARM64' packages/godot/export/linux-arm64/HiveLearn"
+    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
@@ -44,11 +37,5 @@
   },
   "engines": {
     "bun": ">=1.0.0"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.92.0",
-    "@google/genai": "^1.51.0",
-    "ollama": "^0.6.3",
-    "openai": "^6.35.0"
   }
 }

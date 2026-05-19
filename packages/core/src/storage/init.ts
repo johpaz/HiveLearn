@@ -4,9 +4,9 @@
  * Es idempotente: todos los DDL usan IF NOT EXISTS.
  */
 import type { Database } from 'bun:sqlite'
-import { HIVELEARN_SCHEMA_V1, HIVELEARN_SCHEMA_V2, HIVELEARN_SCHEMA_V3, HIVELEARN_SCHEMA_V4, HIVELEARN_SCHEMA_V5, HIVELEARN_SCHEMA_V6, HIVELEARN_SCHEMA_V7 } from './hivelearn-schema'
+import { HIVELEARN_SCHEMA_V1, HIVELEARN_SCHEMA_V2, HIVELEARN_SCHEMA_V3, HIVELEARN_SCHEMA_V4, HIVELEARN_SCHEMA_V5, HIVELEARN_SCHEMA_V6, HIVELEARN_SCHEMA_V7_MIGRATE_PROGRESS, HIVELEARN_SCHEMA_V8, HIVELEARN_SCHEMA_V9 } from './hivelearn-schema'
 import { registerHiveLearnAgents } from '../agent/registry'
-import { seedIfEmpty } from './seed'
+import { seedAllData } from './seed'
 
 /** Añade una columna a una tabla solo si no existe (compatible con cualquier versión de SQLite) */
 function ensureColumn(db: Database, table: string, column: string, definition: string): void {
@@ -18,12 +18,15 @@ function ensureColumn(db: Database, table: string, column: string, definition: s
 
 export function initHiveLearnStorage(db: Database): void {
   // Schema principal (providers, models)
-  // API keys are stored securely using Bun.secrets (OS keychain)
   db.exec('PRAGMA foreign_keys = ON')
   db.exec(`
     CREATE TABLE IF NOT EXISTS providers (
       id              TEXT PRIMARY KEY,
       name            TEXT NOT NULL UNIQUE,
+      api_key_encrypted TEXT,
+      api_key_iv      TEXT,
+      headers_encrypted TEXT,
+      headers_iv      TEXT,
       base_url        TEXT,
       category        TEXT NOT NULL DEFAULT 'llm',
       num_ctx         INTEGER,
@@ -49,15 +52,6 @@ export function initHiveLearnStorage(db: Database): void {
   // HiveLearn schema v1+
   db.exec(HIVELEARN_SCHEMA_V1)
 
-  // V1 migrations: columnas añadidas después de la creación inicial de la tabla
-  ensureColumn(db, 'hl_student_profiles', 'alumno_id', 'TEXT DEFAULT NULL')
-  // FK en hl_sessions/hl_session_metrics referencia alumno_id — SQLite exige UNIQUE index
-  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_hl_student_alumno_id ON hl_student_profiles(alumno_id)')
-  ensureColumn(db, 'hl_student_profiles', 'apodo', "TEXT NOT NULL DEFAULT ''")
-  ensureColumn(db, 'hl_student_profiles', 'nombre', "TEXT NOT NULL DEFAULT ''")
-  ensureColumn(db, 'hl_student_profiles', 'nickname', "TEXT NOT NULL DEFAULT ''")
-  ensureColumn(db, 'hl_student_profiles', 'avatar', "TEXT NOT NULL DEFAULT '👤'")
-
   // V2: CREATE TABLE y CREATE INDEX (sin ALTER TABLE)
   try {
     db.exec(HIVELEARN_SCHEMA_V2)
@@ -69,33 +63,6 @@ export function initHiveLearnStorage(db: Database): void {
   // V2 ALTER TABLE: añadir columnas idempotente sin IF NOT EXISTS (no soportado en SQLite < 3.37)
   ensureColumn(db, 'hl_sessions', 'rating', 'INTEGER DEFAULT NULL')
   ensureColumn(db, 'hl_sessions', 'rating_comentario', 'TEXT DEFAULT NULL')
-  // Columnas tema/objetivo pueden faltar en tablas creadas antes de la V1 actual
-  ensureColumn(db, 'hl_sessions', 'tema', 'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'objetivo', "TEXT NOT NULL DEFAULT ''")
-  // Casilla individual por agente (una columna por cada worker del swarm)
-  ensureColumn(db, 'hl_sessions', 'agente_profile',          'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_intent',           'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_structure',        'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_explanation',      'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_exercise',         'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_quiz',             'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_challenge',        'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_code',             'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_svg',              'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_gif',              'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_infographic',      'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_image',            'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_audio',            'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_gamification',     'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_evaluation',       'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_feedback',         'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_monitor',          'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'agente_vision_pedagogica','TEXT DEFAULT NULL')
-  // Conclusiones del coordinador: síntesis final para crear el programa de formación
-  ensureColumn(db, 'hl_sessions', 'coordinador_conclusiones','TEXT DEFAULT NULL')
-
-  // hl_topics: tabla referenciada por hl_programs.topic_slug — stub para satisfacer la FK
-  db.exec('CREATE TABLE IF NOT EXISTS hl_topics (slug TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT \'\')')
 
   // V3: tabla hl_onboarding_messages + columnas de pausa/restauración de sesión
   try {
@@ -108,10 +75,26 @@ export function initHiveLearnStorage(db: Database): void {
   ensureColumn(db, 'hl_sessions', 'paused_at',          'DATETIME DEFAULT NULL')
   ensureColumn(db, 'hl_sessions', 'last_node_id',        'TEXT DEFAULT NULL')
   ensureColumn(db, 'hl_sessions', 'session_state_json',  'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_agents', 'prompt_patch',          'TEXT DEFAULT NULL')
+  ensureColumn(db, 'hl_agents', 'last_prompt_update_reason', 'TEXT DEFAULT NULL')
 
   // V4: tabla hl_lesson_interactions (entrega dirigida por coordinador)
   try {
     db.exec(HIVELEARN_SCHEMA_V4)
+  } catch (e) {
+    const msg = (e as Error).message ?? ''
+    if (!msg.includes('already exists')) throw e
+  }
+
+  try {
+    db.exec(HIVELEARN_SCHEMA_V8)
+  } catch (e) {
+    const msg = (e as Error).message ?? ''
+    if (!msg.includes('already exists')) throw e
+  }
+
+  try {
+    db.exec(HIVELEARN_SCHEMA_V9)
   } catch (e) {
     const msg = (e as Error).message ?? ''
     if (!msg.includes('already exists')) throw e
@@ -125,7 +108,8 @@ export function initHiveLearnStorage(db: Database): void {
     if (!msg.includes('already exists')) throw e
   }
 
-  // V6: tabla hl_curricula (faltaba en V1) + hl_monitor_frames
+  // V6: columna nickname en hl_student_profiles + índice único
+  ensureColumn(db, 'hl_student_profiles', 'nickname', 'TEXT')
   try {
     db.exec(HIVELEARN_SCHEMA_V6)
   } catch (e) {
@@ -133,44 +117,15 @@ export function initHiveLearnStorage(db: Database): void {
     if (!msg.includes('already exists')) throw e
   }
 
-  // V6 columnas: curriculo_id en hl_sessions + campos de monitor en hl_student_profiles
-  ensureColumn(db, 'hl_sessions', 'curriculo_id', 'INTEGER DEFAULT NULL')
-  ensureColumn(db, 'hl_sessions', 'nodos_completados', 'INTEGER DEFAULT 0')
-  ensureColumn(db, 'hl_student_profiles', 'ritmo_atencion', "TEXT DEFAULT 'normal'")
-  ensureColumn(db, 'hl_student_profiles', 'estilo_aprendizaje', "TEXT DEFAULT 'mixto'")
-  ensureColumn(db, 'hl_student_profiles', 'necesidades_esp', 'INTEGER DEFAULT 0')
-  ensureColumn(db, 'hl_student_profiles', 'monitor_activo', 'INTEGER DEFAULT 1')
-  ensureColumn(db, 'hl_student_profiles', 'intervalo_custom', 'INTEGER DEFAULT NULL')
-  ensureColumn(db, 'hl_student_profiles', 'umbral_custom', 'INTEGER DEFAULT NULL')
-
-  // V7: hl_node_effectiveness + hl_achievements
-  try {
-    db.exec(HIVELEARN_SCHEMA_V7)
-  } catch (e) {
-    const msg = (e as Error).message ?? ''
-    if (!msg.includes('already exists')) throw e
+  // V7: migrar hl_onboarding_progress para que step pueda ser 'nickname'
+  // Detectar si la tabla vieja aún tiene el CHECK sin 'nickname'
+  const progressSchema = (db.query(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='hl_onboarding_progress'"
+  ).get() as { sql?: string } | undefined)?.sql ?? ''
+  if (!progressSchema.includes("'nickname'")) {
+    db.exec(HIVELEARN_SCHEMA_V7_MIGRATE_PROGRESS)
   }
 
-  // V7 columnas: hl_sessions.status (5 estados reemplazan binario completada)
-  ensureColumn(db, 'hl_sessions', 'status', "TEXT DEFAULT 'active' CHECK(status IN ('active','paused','completed','abandoned','error'))")
-
-  // V7 columnas: hl_student_profiles ampliados
-  ensureColumn(db, 'hl_student_profiles', 'idioma', "TEXT DEFAULT 'es'")
-  ensureColumn(db, 'hl_student_profiles', 'intereses', "TEXT DEFAULT '[]'")
-  ensureColumn(db, 'hl_student_profiles', 'avatar_config_json', 'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_student_profiles', 'accessibility_needs', "TEXT DEFAULT '{}'")
-
-  // V7 columnas: progreso del mundo persistido en DB
-  ensureColumn(db, 'hl_student_profiles', 'racha_actual', 'INTEGER DEFAULT 0')
-  ensureColumn(db, 'hl_student_profiles', 'zona_actual', 'INTEGER DEFAULT 1')
-  ensureColumn(db, 'hl_student_profiles', 'modulos_completados_json', "TEXT DEFAULT '[]'")
-  ensureColumn(db, 'hl_student_profiles', 'bee_state', "TEXT DEFAULT 'following'")
-  ensureColumn(db, 'hl_student_profiles', 'dificultad_actual', "TEXT DEFAULT 'adaptativa'")
-
-  // V7 columnas: contexto/metadatos en hl_lesson_interactions
-  ensureColumn(db, 'hl_lesson_interactions', 'context_json', 'TEXT DEFAULT NULL')
-  ensureColumn(db, 'hl_lesson_interactions', 'metadata_json', 'TEXT DEFAULT NULL')
-
   registerHiveLearnAgents(db)
-  seedIfEmpty() // Seed solo si la BD está vacía
+  seedAllData()
 }

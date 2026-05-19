@@ -13,5 +13,10 @@ export const generarQuizTool: Tool = {
     },
     required: ['pregunta', 'opciones', 'indice_correcto', 'explicaciones_incorrectas'],
   },
-  execute: async (params) => ({ ok: true, output: params }),
+  execute: async (params) => ({ ok: true, output: {
+    pregunta: params.pregunta,
+    opciones: params.opciones,
+    indicesCorrecto: params.indice_correcto,
+    explicacionesIncorrectas: params.explicaciones_incorrectas,
+  } }),
 }

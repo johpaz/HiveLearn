@@ -28,7 +28,7 @@ export class AnthropicProvider implements LLMProvider {
       case "text":
         return { type: "text", text: part.text }
       case "image_url": {
-        const url = part.image_url?.url ?? ''
+        const url = part.image_url?.url ?? ""
         if (url.startsWith("data:")) {
           const match = url.match(/^data:([^;]+);base64,(.+)$/)
           if (match) return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } }
@@ -38,7 +38,7 @@ export class AnthropicProvider implements LLMProvider {
       case "image_base64":
         return { type: "image", source: { type: "base64", media_type: part.mimeType, data: part.base64 } }
       case "document":
-        return { type: "text", text: `[Document: ${part.fileName || "file"}] (base64 content not displayed)` }
+        return { type: "document", source: { type: "base64", media_type: part.mimeType, data: part.base64 } }
       default:
         return { type: "text", text: JSON.stringify(part) }
     }
@@ -55,18 +55,19 @@ export class AnthropicProvider implements LLMProvider {
     const Anthropic = await import("@anthropic-ai/sdk")
     const client = new Anthropic.default({ apiKey: options.apiKey })
 
-    const systemText = (options.messages ?? [])
+    const safeMessages = options.messages ?? []
+    const systemText = safeMessages
       .filter((m) => m.role === "system")
-      .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+      .map((m) => m.content)
       .join("\n\n")
 
     const anthropicMessages: any[] = []
 
-    for (const msg of (options.messages ?? [])) {
+    for (const msg of safeMessages) {
       if (msg.role === "system") continue
 
       if (msg.role === "tool") {
-        const block = { type: "tool_result", tool_use_id: msg.tool_call_id, content: msg.content }
+        const block = { type: "tool_result", tool_use_id: msg.tool_call_id || crypto.randomUUID(), content: msg.content }
         const last = anthropicMessages[anthropicMessages.length - 1]
         if (last?.role === "user" && Array.isArray(last.content)) {
           last.content.push(block)
@@ -106,7 +107,7 @@ export class AnthropicProvider implements LLMProvider {
     if (tools.length) body.tools = tools
 
     // Extended thinking — only for supported models
-    const thinkingEnabled = options.thinking?.enabled && supportsThinking(options.model ?? '')
+    const thinkingEnabled = options.thinking?.enabled && supportsThinking(options.model || "")
     if (thinkingEnabled) {
       body.thinking = { type: "enabled", budget_tokens: options.thinking?.budget_tokens ?? 10000 }
     }

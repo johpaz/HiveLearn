@@ -1,17 +1,31 @@
 /** Tipos compartidos entre backend y UI de HiveLearn */
-export type { MonitorEstado, NivelAlerta, AccionMonitor, EstiloIntervencion, MonitorProfile, MonitorEvent, MonitorFrameContext } from './monitor.types'
-export { getDefaultMonitorProfile } from './monitor.types'
 
-
+export type RangoEdad = 'nino' | 'adolescente' | 'adulto'
 export type TipoPedagogico = 'concept' | 'exercise' | 'quiz' | 'challenge' | 'milestone' | 'evaluation'
 export type TipoVisual = 'text_card' | 'code_block' | 'svg_diagram' | 'gif_guide' | 'infographic' | 'chart' | 'animated_card' | 'image_ai' | 'audio_ai'
 export type TipoPregunta = 'verdadero_falso' | 'multiple_choice' | 'respuesta_corta' | 'completar_codigo'
 export type NivelPrevio = 'principiante' | 'principiante_base' | 'intermedio'
+export type EstiloAprendizaje = 'visual' | 'lectura' | 'retos' | 'balanceado' | 'mis_retos'
 export type EstadoNodo = 'bloqueado' | 'disponible' | 'completado'
 
 // ─── Coordinator & Agent Status ──────────────────────────────────────────────
 export type AgentStatus = 'idle' | 'pending' | 'running' | 'thinking' | 'tool_call' | 'completed' | 'failed'
 export type CoordinatorStatus = 'idle' | 'analyzing' | 'delegating' | 'assembling' | 'rendering' | 'completed' | 'error'
+export type SwarmTimelineKind =
+  | 'swarm_started'
+  | 'swarm_progress'
+  | 'coordinator_phase_changed'
+  | 'worker_dispatched'
+  | 'worker_started'
+  | 'worker_tool_call'
+  | 'worker_completed'
+  | 'worker_failed'
+  | 'worker_result_received'
+  | 'node_repair_started'
+  | 'node_repair_completed'
+  | 'program_review_started'
+  | 'program_review_completed'
+  | 'swarm_completed'
 
 export interface CoordinatorState {
   status: CoordinatorStatus
@@ -20,36 +34,50 @@ export interface CoordinatorState {
   totalWorkers: number
 }
 
-export type EstadoAlumno = 'onboarding' | 'activo' | 'inactivo'
+export interface SwarmTimelineEvent {
+  sessionId: string
+  timestamp: number
+  kind: SwarmTimelineKind
+  status: AgentStatus | CoordinatorStatus
+  label: string
+  progress?: number
+  phase?: string
+  agentId?: string | null
+  agentName?: string | null
+  taskId?: string | null
+  nodeId?: string | null
+  summary?: string | null
+  error?: string | null
+  metadata?: Record<string, unknown>
+}
 
 export interface StudentProfile {
   alumnoId: string
+  nickname?: string
   nombre: string
-  nickname: string
-  avatar: string
   edad: number
-  estado?: EstadoAlumno
-  sesionesTotal?: number
-  xpAcumulado?: number
-  idioma?: string
-  intereses?: string[]
-  avatarConfigJson?: string | null
-  ritmoAtencion?: string
-  estiloAprendizaje?: string
-  necesidadesEsp?: number
-  accesibilidadJson?: string
-  creadoEn?: string
-  ultimoAcceso?: string
+  rangoEdad: RangoEdad
+  tiempoSesion: 15 | 30 | 45
+  nivelPrevio: NivelPrevio
+  estilo: EstiloAprendizaje
+  sesionesTotal: number
+  xpAcumulado: number
+  nivelActual: string
 }
 
 export interface PerfilAdaptacion {
+  rangoEdad: RangoEdad
   duracionSesion: number
   nodosRecomendados: number
+  estilo: EstiloAprendizaje
+  nivelPrevio: NivelPrevio
   tono: string
 }
 
 export interface IntentResult {
   tema: string
+  nivelDetectado: NivelPrevio
+  topicSlug: string | null
   tono: string
   confianza: number
 }
@@ -61,6 +89,7 @@ export interface NodoLesson {
   titulo: string
   concepto: string
   nivel: NivelPrevio
+  rangoEdad: RangoEdad
   posX: number
   posY: number
   estado: EstadoNodo
@@ -116,9 +145,12 @@ export interface ExplicacionOutput {
 
 export interface EjercicioOutput {
   enunciado: string
+  pasos: string[]
   ejemploRespuesta: string
   respuestaCorrecta: string
   pistaOpcional?: string
+  opciones?: string[]
+  indiceCorrecto?: number
 }
 
 export interface QuizOutput {
@@ -205,6 +237,7 @@ export interface LessonProgram {
   alumnoId: string
   tema: string
   topicSlug: string | null
+  rangoEdad: RangoEdad
   nodos: NodoLesson[]
   gamificacion: GamificacionOutput
   evaluacion: EvaluacionOutput
@@ -217,7 +250,3 @@ export interface SwarmProgress {
   porcentaje: number
   mensaje: string
 }
-
-// ─── A2UI Mundo Types (Canvas 2) ─────────────────────────────────────────────
-export * from './a2ui-mundo.types'
-export * from './tool'

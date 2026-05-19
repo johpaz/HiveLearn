@@ -9,7 +9,8 @@ export { SwarmPipelinePreview } from "./SwarmPipelinePreview";
 export { ConfigInsightCard } from "./ConfigInsightCard";
 export { StatusMessage } from "./StatusMessage";
 
-export { ProviderManager } from "./ApiKeyManager";
-export type { FullProvider } from "./ApiKeyManager";
-
+export { ApiKeyManager } from "./ApiKeyManager";
+export { OllamaImporter } from "./OllamaImporter";
 export { SwarmVisualizer } from "./SwarmVisualizer";
+export { LocalLLMManager } from "./LocalLLMManager";
+export { TTSManager } from "./TTSManager";

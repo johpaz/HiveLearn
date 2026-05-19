@@ -6,18 +6,14 @@
  * by its specific adapter, providing clean separation of concerns.
  */
 
-import { loadConfig, startGateway, logger, getHiveDir, initializeDatabase, registerEmbeddedUI } from "@johpaz/hivelearn-core";
+import { loadConfig, startGateway, logger, getHiveDir, initializeDatabase, registerEmbeddedUI } from "@hivelearn/core";
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, openSync } from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
-import path from "node:path";
+import * as path from "node:path";
+import { spawn, ChildProcess } from "child_process";
 import { embeddedUI } from "../ui-bundle.generated";
 import pkg from "../../package.json";
 
 const VERSION = pkg.version;
-const log = logger.child('gateway-cli')
-
-// Child processes management
-const children: ChildProcess[] = []
 
 // Import adapter system
 import {
@@ -32,8 +28,12 @@ import {
   getHiveDir as getAdapterHiveDir,
   findFreePort,
   waitForHttpPort,
+  isDevMode,
+  isChildProcess,
   getDistDir,
 } from "../adapters";
+
+const children: ChildProcess[] = [];
 
 /**
  * Get the active installation adapter
@@ -237,52 +237,53 @@ async function isRunning(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Wait for gateway port to be ready
+ */
+async function waitForPort(port: number, timeout: number = 30000): Promise<boolean> {
+  return waitForHttpPort(port, "/health", timeout);
+}
+
+/**
+ * Wait for Vite dev server
+ */
+async function waitForVite(port: number, timeout: number = 30000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}`, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(200),
+      });
+      if (response.ok || response.status === 200) {
+        return true;
+      }
+    } catch {
+      // Port not ready yet
+    }
+    await Bun.sleep(200);
+  }
+  return false;
+}
+
 /**
  * Start command - main entry point
- * Simplificado: siempre usa puerto 8787, sin .env, sin adapter config
- * Hace build automático en desarrollo para detectar errores temprano
  */
 export async function start(flags: string[]): Promise<void> {
   const daemon = flags.includes("--daemon");
   const skipCheck = flags.includes("--skip-check");
-  const isDev = process.argv[1]?.endsWith(".ts");
+  const devInternal = flags.includes("--dev-internal");
 
-  // Hardcoded defaults - no adapter config, no .env
-  const PORT = 8787;
-  const HOST = "127.0.0.1";
+  const isDev = isDevMode();
+  const isChild = isChildProcess();
 
-  // Auto-build in development mode to catch errors early
-  if (isDev && !skipCheck) {
-    log.info("🔨 Building in development mode...\n");
-    try {
-      const { execSync } = await import("node:child_process");
-      const rootDir = path.join(process.cwd(), "..", "..");
-      
-      // Build core
-      log.info("📦 Building core...");
-      execSync(
-        "bun build packages/core/src/index.ts --outdir dist/core --target bun && bun build packages/core/src/gateway/index.ts --bundle --outfile dist/server.js --target bun",
-        { stdio: "inherit", cwd: rootDir }
-      );
-      
-      // Build UI
-      log.info("📦 Building UI...");
-      execSync("bun run build", { stdio: "inherit", cwd: path.join(rootDir, "packages/ui") });
-      
-      // Build CLI
-      log.info("📦 Building CLI...");
-      execSync(
-        "bun run scripts/generate-ui-bundle.ts && bun build src/index.ts --outfile dist/hive.js --target bun",
-        { stdio: "inherit", cwd: path.join(rootDir, "packages/cli") }
-      );
-      
-      log.info("✅ Build completed\n");
-    } catch (error) {
-      log.error("❌ Build failed. Fix errors and try again.");
-      log.error((error as Error).message);
-      process.exit(1);
-    }
-  }
+  // Detect and set adapter
+  const adapter = await getAdapter();
+  const config = await adapter.getConfig();
+
+  // Skip onboarding check if running as child process
+  const isGatewayChild = process.env.HIVE_GATEWAY_CHILD === "1";
 
   if (!skipCheck && await isRunning()) {
     console.log("⚠️  Hive Gateway ya está corriendo");
@@ -299,12 +300,31 @@ export async function start(flags: string[]): Promise<void> {
     // Use default logger settings
   }
 
-  // Show banner
-  console.log(`
+  // Show banner only if not running as child process
+  if (!isGatewayChild) {
+    console.log(`
  ╔══════════════════════════════════════════════════════════════╗
- ║  🐝 HiveLearn v${VERSION.padEnd(46)}║
+ ║                                                              ║
+ ║              _    _  _____ __      __ ______                 ║
+ ║             | |  | ||_   _|\\ \\    / /|  ____|                ║
+ ║             | |__| |  | |   \\ \\  / / | |__                   ║
+ ║             |  __  |  | |    \\ \\/ /  |  __|                  ║
+ ║             | |  | | _| |_    \\  /   | |____                 ║
+ ║             |_|  |_||_____|    \\/    |______|                ║
+ ║                                                              ║
+ ║           _       ______          _____   _   _              ║
+ ║          | |     |  ____|   /\\   |  __ \\ | \\ | |             ║
+ ║          | |     | |__     /  \\  | |__) ||  \\| |             ║
+ ║          | |     |  __|   / /\\ \\ |  _  / | . \` |             ║
+ ║          | |____ | |____ / ____ \\| | \\ \\ | |\\  |             ║
+ ║          |______||______/_/    \\_\\_|  \\_\\_| \\_|              ║
+ ║                                                              ║
+ ║  🐝 Personal AI Swarm Education — v${VERSION.padEnd(10)} ║
  ╚══════════════════════════════════════════════════════════════╝
+
+📦 Installation: ${adapter.name}
 `);
+  }
 
   // Handle daemon mode
   if (daemon) {
@@ -322,58 +342,245 @@ export async function start(flags: string[]): Promise<void> {
     return;
   }
 
-  // Set environment
-  process.env.HIVELEARN_PORT = PORT.toString();
-  process.env.HIVELEARN_HOST = HOST;
-
-  // Si corremos desde el código fuente, reconstruir UI y servir desde disco
-  const isRunningFromSource = existsSync(path.join(process.cwd(), 'packages/ui/package.json'))
-  if (isRunningFromSource) {
-    process.env.NODE_ENV = 'development'
-    console.log('🔨 Construyendo UI...')
-    const { $ } = await import('bun')
-    await $`bun run --cwd packages/ui build`.quiet()
-    console.log('✅ UI lista')
-    // embeddedUIBundle queda null → server.ts usa packages/ui/dist como fallback
-  } else {
-    process.env.NODE_ENV = 'production'
-    registerEmbeddedUI(embeddedUI)
+  // Development mode
+  if (isDev) {
+    await handleDevMode(adapter, config.gateway, daemon);
+    return;
   }
-  const coreConfig = await loadConfig();
-  
-  logger.info('Starting HiveLearn Gateway', { port: PORT, host: HOST });
-  
-  await startGateway(coreConfig);
-  
-  // Open browser
-  const url = `http://localhost:${PORT}`;
+
+  // Production mode
+  await handleProductionMode(adapter, config.gateway, daemon);
+}
+
+/**
+ * Handle development mode startup
+ * Gateway serves built UI with HMR injection (Vite on 5173 for hot reload only)
+ */
+async function handleDevMode(
+  adapter: InstallationAdapter,
+  gatewayConfig: GatewayConfig,
+  daemon: boolean
+): Promise<void> {
+  if (isChildProcess()) {
+    logger.info("Starting Gateway server (child process)...");
+    registerEmbeddedUI(embeddedUI);
+    const coreConfig = await loadConfig();
+    await startGateway(coreConfig);
+    return;
+  }
+
+  // Kill any existing process on the gateway port before spawning
+  try {
+    const { execSync } = await import("node:child_process");
+    const pids = execSync(`lsof -ti :${PORTS.GATEWAY}`, { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (pids) {
+      for (const pid of pids.split("\n")) {
+        try { process.kill(parseInt(pid), "SIGTERM"); } catch { }
+      }
+      await Bun.sleep(500);
+    }
+  } catch { }
+
+  // Spawn Gateway child process
+  const spawnGateway = (): ReturnType<typeof spawn> => {
+    const gw = spawn(process.execPath, [process.argv[1] || "", "start", "--skip-check"], {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, HIVE_DEV: "true", NODE_ENV: "development", HIVE_GATEWAY_CHILD: "1" },
+    });
+
+    gw.stdout?.on("data", (data) => {
+      const lines = data.toString().split("\n");
+      for (const line of lines) {
+        if (line.trim()) console.log(`[Gateway] ${line}`);
+      }
+    });
+
+    gw.stderr?.on("data", (data) => {
+      const lines = data.toString().split("\n");
+      for (const line of lines) {
+        if (line.trim()) console.error(`[Gateway] ${line}`);
+      }
+    });
+
+    gw.on("error", (error) => {
+      console.error(`❌ Error iniciando Gateway: ${error.message}`);
+    });
+
+    gw.on("exit", (code) => {
+      if (code === 0) {
+        console.log("[Gateway] Reiniciando tras setup...");
+        const newGw = spawnGateway();
+        const idx = children.indexOf(gw);
+        if (idx !== -1) children.splice(idx, 1, newGw);
+      }
+    });
+
+    if (!daemon) {
+      children.push(gw);
+    } else {
+      gw.unref();
+    }
+
+    return gw;
+  };
+
+  const gatewayProcess = spawnGateway();
+  console.log(`[CLI] Gateway spawned, pid=${gatewayProcess.pid}`);
+
+  // Wait for gateway
+  console.log("⏳ Esperando gateway...");
+  console.log(`[CLI] Waiting for gateway on port ${PORTS.GATEWAY}...`);
+  const gatewayReady = await waitForHttpPort(PORTS.GATEWAY, "/health", 30000);
+  console.log(`[CLI] Gateway ready: ${gatewayReady}`);
+
+  if (!gatewayReady) {
+    console.error("⚠️  Gateway no respondió a tiempo");
+    return;
+  }
+
+  await Bun.sleep(300);
+
+  console.log("✅ Gateway listo\n");
+
+  // Open browser - HiveLearn no requiere setup
+  const url = `http://localhost:${PORTS.GATEWAY}`;
+
   console.log(`
+╔════════════════════════════════════════╗
+║  🐝  HiveLearn — Listo                 ║
+╠════════════════════════════════════════╣
+║  UI:        ${url.padEnd(24)}║
+║  API:       http://127.0.0.1:${PORTS.GATEWAY}     ║
+║  WebSocket: ws://127.0.0.1:${PORTS.GATEWAY}/ws   ║
+║  Canvas:    ws://127.0.0.1:${PORTS.GATEWAY}/canvas║
+╠════════════════════════════════════════╣
+║  🎓 Administrando tu aprendizaje       ║
+╚════════════════════════════════════════╝
+`);
+
+  openBrowser(url);
+
+  if (!daemon) {
+    await new Promise(() => { }); // Infinite wait
+  }
+}
+
+/**
+ * Handle production mode startup
+ */
+async function handleProductionMode(
+  adapter: InstallationAdapter,
+  gatewayConfig: GatewayConfig,
+  daemon: boolean
+): Promise<void> {
+  if (isChildProcess()) {
+    process.env.NODE_ENV = 'production';
+    registerEmbeddedUI(embeddedUI);
+    const coreConfig = await loadConfig();
+    await startGateway(coreConfig);
+    return;
+  }
+
+  // Get UI directory from adapter config
+  const adapterConfig = await adapter.getConfig();
+  // Detect Docker environment
+  const isDocker = adapterConfig.type === "docker"
+    || (adapterConfig.type === "binary" && process.env.HIVE_UI_DIR === "/app/ui");
+
+  const uiPort = gatewayConfig.port;
+  const spawnGatewayProd = (): ReturnType<typeof spawn> => {
+    // Determine the correct command to spawn the gateway child process.
+    // Three cases:
+    //   1. Docker container (/app/hive-server)
+    //   2. Bundled JS or TS source → bun <script> start --skip-check
+    //   3. Compiled Bun binary (no .js/.ts extension) → re-exec process itself
+    const scriptPath = process.argv[1] || "";
+    const isDockerContainer = process.env.HIVE_UI_DIR === "/app/ui";
+    const isBunScript = scriptPath.endsWith(".js") || scriptPath.endsWith(".ts");
+
+    let command: string;
+    let args: string[];
+
+    if (isDockerContainer) {
+      // Running inside Docker container
+      command = "/app/hive-server";
+      args = ["start", "--skip-check"];
+    } else if (isBunScript) {
+      // Bundled JS (npm package) or TypeScript source: use Bun runtime
+      command = process.execPath;
+      args = [scriptPath, "start", "--skip-check"];
+    } else {
+      // Compiled Bun binary: process.execPath IS the binary
+      command = process.execPath;
+      args = ["start", "--skip-check"];
+    }
+
+    // Create clean environment without NODE_ENV from parent
+    const childEnv = { ...process.env };
+    delete childEnv.NODE_ENV;
+
+    const gw = spawn(command, args, {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...childEnv, NODE_ENV: "production", HIVE_GATEWAY_CHILD: "1", ...(getDistDir() ? { HIVE_DIST_DIR: getDistDir()! } : {}) },
+    });
+
+    gw.stdout?.on("data", (data) => {
+      const lines = data.toString().split("\n");
+      for (const line of lines) {
+        if (line.trim()) console.log(`[Gateway] ${line}`);
+      }
+    });
+
+    gw.stderr?.on("data", (data) => {
+      const lines = data.toString().split("\n");
+      for (const line of lines) {
+        if (line.trim()) console.error(`[Gateway] ${line}`);
+      }
+    });
+
+    gw.on("error", (error) => {
+      console.error(`❌ Error iniciando Gateway: ${error.message}`);
+    });
+
+    gw.on("exit", (code) => {
+      if (code === 0) {
+        console.log("[Gateway] Reiniciando tras setup...");
+        const newGw = spawnGatewayProd();
+        const idx = children.indexOf(gw);
+        if (idx !== -1) children.splice(idx, 1, newGw);
+      }
+    });
+
+    children.push(gw);
+    return gw;
+  };
+
+  spawnGatewayProd();
+
+  // Open browser when gateway is ready - HiveLearn no requiere setup
+  const gatewayPort = gatewayConfig.port || 8787;
+  waitForHttpPort(gatewayPort, "/", 30000).then((ready) => {
+    if (!ready) {
+      console.error(`Gateway did not respond in time`);
+      return;
+    }
+    const url = `http://localhost:${gatewayPort}`;
+
+    console.log(`
 ╔════════════════════════════════════════╗
 ║  🎓  HiveLearn — Listo                 ║
 ╠════════════════════════════════════════╣
+║  Abriendo navegador:                   ║
 ║  ${url.padEnd(38)}║
 ╚════════════════════════════════════════╝
 `);
-  
-  setTimeout(() => {
-    try {
-      const platform = process.platform;
-      let cmd: string;
-      if (platform === 'win32') cmd = `start "" "${url}"`;
-      else if (platform === 'darwin') cmd = `open "${url}"`;
-      else cmd = `gio open "${url}" 2>/dev/null || xdg-open "${url}" 2>/dev/null || true`;
-      
-      Bun.spawn([platform === 'win32' ? 'cmd' : '/bin/sh', platform === 'win32' ? '/c' : '-c', cmd], {
-        detached: true,
-        stdio: ['ignore', 'ignore', 'ignore'],
-      });
-    } catch (e) {
-      logger.warn('Could not open browser', { error: (e as Error).message });
-    }
-  }, 1000);
-  
-  // Keep alive
-  await new Promise(() => {});
+
+    openBrowser(url);
+  });
+
+  await new Promise(() => { }); // Keep parent alive
 }
 
 /**

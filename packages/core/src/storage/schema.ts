@@ -2,14 +2,19 @@ export const SCHEMA = `
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
 
-  -- Providers: linked to user
-  -- API keys are stored securely using Bun.secrets (OS keychain)
+  -- ENCRYPTION KEY (stored separately, used for encrypting sensitive data)
+  -- The encryption key is derived from HIVE_MASTER_KEY env var or generated on first run
+  -- Providers: linked to user (API key encrypted)
   -- Solo la empresa (OpenAI, Groq, ElevenLabs, etc.)
   -- La API key es del provider, no del modelo
   -- category: 'llm', 'stt', 'tts' (default: llm)
   CREATE TABLE IF NOT EXISTS providers (
     id              TEXT PRIMARY KEY,
     name            TEXT NOT NULL UNIQUE,
+    api_key_encrypted TEXT,
+    api_key_iv      TEXT,
+    headers_encrypted TEXT,
+    headers_iv      TEXT,
     base_url        TEXT,
     category        TEXT NOT NULL DEFAULT 'llm',
     num_ctx         INTEGER,

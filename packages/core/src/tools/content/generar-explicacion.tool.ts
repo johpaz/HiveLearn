@@ -12,5 +12,9 @@ export const generarExplicacionTool: Tool = {
     },
     required: ['titulo', 'explicacion', 'ejemplo_concreto'],
   },
-  execute: async (params) => ({ ok: true, output: params }),
+  execute: async (params) => ({ ok: true, output: {
+    titulo: params.titulo,
+    explicacion: params.explicacion,
+    ejemploConcreto: params.ejemplo_concreto,
+  } }),
 }

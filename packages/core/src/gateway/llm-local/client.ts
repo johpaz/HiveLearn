@@ -18,7 +18,7 @@ function getBaseURL(): string {
     const protocol = win.location.protocol === "https:" ? "wss:" : "ws:"
     return `${protocol}//${win.location.host}`
   }
-  return process.env.HIVE_LOCAL_WS_URL ?? "ws://localhost:3000"
+  return process.env.HIVE_LOCAL_WS_URL ?? `ws://localhost:${process.env.PORT ?? 8787}`
 }
 
 const BASE_URL = getBaseURL()

@@ -1,64 +1,38 @@
-/**
- * Local LLM Provider (hive-cli)
- * Implementa la interfaz LLMProvider para usar modelos locales via hive-cli
- */
-
-import type { LLMProvider, LLMCallOptions, LLMResponse } from "./interface"
-import { generateLocalComplete, isLocalLLMAvailable } from "../../gateway/llm-local/client"
-import { getRecommendedModel } from "../../gateway/llm-local/models"
 import { logger } from "../../utils/logger"
+import { OpenAICompatBase } from "./openai-compat-base"
+import type { LLMCallOptions } from "./interface"
 
-const log = logger.child("llm-provider:local-llama")
+const log = logger.child("llm-client")
 
-export class LocalLlamaProvider implements LLMProvider {
-  async call(options: LLMCallOptions): Promise<LLMResponse> {
-    if (!(await isLocalLLMAvailable())) {
-      throw new Error("Local LLM no está disponible. Ejecuta 'hivelearn llm start' primero.")
-    }
+export class LocalLlamaProvider extends OpenAICompatBase {
+  constructor() { super("local-llama") }
 
-    // Extraer el prompt del último mensaje usuario
-    const lastMessage = options.messages?.[options.messages.length - 1]
-    let prompt = ""
+  protected isLocalProvider(): boolean { return true }
 
-    if (typeof lastMessage?.content === "string") {
-      prompt = lastMessage.content
-    } else if (Array.isArray(lastMessage?.content)) {
-      const textPart = lastMessage.content.find((p) => p.type === "text")
-      prompt = textPart?.text ?? ""
-    }
-
-    // Determinar modelo según el contexto
-    const mode = this.detectMode(options)
-    const model = getRecommendedModel(mode)
-
-    log.info(`[local-llama] Generando con modelo ${model} (modo: ${mode})`)
-
-    const text = await generateLocalComplete({
-      prompt,
-      model: model as any,
-      nPredict: options.maxTokens ?? 512,
-    })
-
-    return {
-      content: text,
-      usage: {
-        promptTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-      },
+  /** Auto-start the local llama server if not already running. */
+  protected async beforeCall(options: LLMCallOptions): Promise<void> {
+    try {
+      const { startLocalLLMServer } = await import("../../gateway/llm-local/runtime")
+      if (options.model) {
+        await startLocalLLMServer()
+      }
+    } catch (err) {
+      log.warn(`[llm-client] local-llama auto-start failed or skipped: ${err}`)
     }
   }
 
-  private detectMode(options: LLMCallOptions): "text" | "image" | "audio" | "all" {
-    const lastMessage = options.messages?.[options.messages.length - 1]
-    if (!Array.isArray(lastMessage?.content)) return "text"
-
-    const hasImage = lastMessage.content.some((p) => p.type === "image_url" || p.type === "image_base64")
-    const hasAudio = false // Audio aún no soportado en ContentPart
-
-    if (hasImage && hasAudio) return "all"
-    if (hasImage) return "image"
-    if (hasAudio) return "audio"
-    return "text"
+  /**
+   * Many GGUF chat templates don't support native tool calling via body.tools,
+   * so we inject tool descriptions into the system prompt as a fallback.
+   */
+  protected injectToolsIntoPrompt(body: any, preparedTools: any[]): void {
+    const toolDescriptions = preparedTools.map(t => JSON.stringify(t.function)).join("\n")
+    const instruction = `You have access to the following tools. To call a tool, output a JSON block like: <tool_call>{"name": "tool_name", "arguments": {"arg1": "value"}}</tool_call>\n\nTools:\n${toolDescriptions}`
+    const sysMsg = body.messages.find((m: any) => m.role === "system")
+    if (sysMsg) {
+      sysMsg.content += "\n\n" + instruction
+    } else {
+      body.messages.unshift({ role: "system", content: instruction })
+    }
   }
 }

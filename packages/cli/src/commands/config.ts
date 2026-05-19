@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { loadConfig } from "@johpaz/hivelearn-core";
+import { loadConfig } from "@hivelearn/core";
 
 export async function config(subcommand: string | undefined, args: string[]): Promise<void> {
   switch (subcommand) {

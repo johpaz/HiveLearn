@@ -2,7 +2,7 @@ import * as p from "@clack/prompts";
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
-import { loadConfig, getHiveDir, initializeDatabase } from "@johpaz/hivelearn-core";
+import { loadConfig, getHiveDir, initializeDatabase } from "@hivelearn/core";
 import {
   detectAdapter,
   detectAllAdapters,
@@ -166,7 +166,7 @@ export async function doctor(): Promise<void> {
   // Workspace — leer desde agents.workspace en la BD
   let workspacePath: string | null = null;
   try {
-    const { initializeDatabase, getDb } = await import("@johpaz/hivelearn-core");
+    const { initializeDatabase, getDb } = await import("@hivelearn/core");
     initializeDatabase();
     const db = getDb();
     // Try to get workspace from config or environment
@@ -191,7 +191,7 @@ export async function doctor(): Promise<void> {
 
   // HiveLearn — verificar tablas y Ollama
   try {
-    const { getDb } = await import("@johpaz/hivelearn-core");
+    const { getDb } = await import("@hivelearn/core");
     const db = getDb();
 
     // Verificar si el schema de HiveLearn está aplicado

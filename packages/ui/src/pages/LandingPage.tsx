@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { HeroMiniWorld } from '@/components/landing/HeroMiniWorld'
 
 interface LandingPageProps {
   onStart: () => void
@@ -28,25 +27,77 @@ const GemmaLogo = ({ className }: { className?: string }) => (
   </svg>
 )
 
-const PixiJSLogo = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 512 512" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M256 48L464 160V336L256 448L48 336V160L256 48Z" fill="#E91E63" fillOpacity="0.15"/>
-    <path d="M256 48L464 160L256 272L48 160L256 48Z" fill="#E91E63"/>
-    <path d="M464 160V336L256 448L256 272L464 160Z" fill="#8B5CF6"/>
-    <path d="M48 160V336L256 448L256 272L48 160Z" fill="#06B6D4"/>
-    <circle cx="256" cy="260" r="50" fill="#FFFFFF"/>
-    <path d="M256 220L276 250L256 280L236 250L256 220Z" fill="#E91E63"/>
-  </svg>
+const BeeIcon = ({ className, isQueen = false }: { className?: string; isQueen?: boolean }) => (
+  <div className={`relative ${className}`}>
+    <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_0_15px_rgba(251,191,36,0.5)]">
+      <g className="animate-[wing-flap_0.1s_infinite]">
+        <path d="M50 40 C30 20 10 30 20 50 C30 70 50 60 50 40" fill="rgba(255,255,255,0.7)" stroke="white" strokeWidth="1" />
+        <path d="M50 40 C70 20 90 30 80 50 C70 70 50 60 50 40" fill="rgba(255,255,255,0.7)" stroke="white" strokeWidth="1" />
+      </g>
+      <ellipse cx="50" cy="55" rx="20" ry="15" fill={isQueen ? "#F59E0B" : "#FBBF24"} />
+      <path d="M40 45 Q50 40 60 45" fill="none" stroke="#1F2937" strokeWidth="2" strokeLinecap="round" />
+      <path d="M35 55 Q50 50 65 55" fill="none" stroke="#1F2937" strokeWidth="3" />
+      <path d="M40 65 Q50 60 60 65" fill="none" stroke="#1F2937" strokeWidth="2" />
+      <circle cx="68" cy="50" r="8" fill={isQueen ? "#F59E0B" : "#FBBF24"} />
+      <circle cx="72" cy="48" r="1.5" fill="#1F2937" />
+      {isQueen && <path d="M65 38 L68 32 L71 38" fill="#F59E0B" stroke="#1F2937" strokeWidth="1" />} {/* Crown */}
+      <path d="M70 42 Q75 35 80 38" fill="none" stroke="#1F2937" strokeWidth="1" />
+      <path d="M68 42 Q65 35 60 38" fill="none" stroke="#1F2937" strokeWidth="1" />
+      <path d="M30 55 L20 55" stroke="#1F2937" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+    {isQueen && (
+      <div className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-hive-amber/20 border border-hive-amber/30 px-3 py-1 rounded-full backdrop-blur-md">
+        <span className="text-[10px] font-black uppercase tracking-widest text-hive-amber">La Reina Orquestadora</span>
+      </div>
+    )}
+  </div>
 )
 
-
+const SwarmVisual = () => {
+  return (
+    <div className="relative h-[400px] lg:h-[600px] w-full flex items-center justify-center">
+      {/* The Queen */}
+      <div className="absolute z-20 animate-bounce duration-[3000ms]">
+        <BeeIcon className="w-32 h-32" isQueen={true} />
+      </div>
+      
+      {/* The 9 Workers */}
+      <div className="absolute inset-0 z-10 pointer-events-none opacity-60">
+        {Array.from({ length: 9 }).map((_, i) => {
+          const angle = (i / 9) * Math.PI * 2
+          const radiusX = 35 + Math.random() * 15 // % of container width
+          const radiusY = 35 + Math.random() * 15 // % of container height
+          const x = 50 + Math.cos(angle) * radiusX
+          const y = 50 + Math.sin(angle) * radiusY
+          
+          return (
+            <div 
+              key={i}
+              className="absolute animate-pulse"
+              style={{
+                top: `${y}%`,
+                left: `${x}%`,
+                transform: 'translate(-50%, -50%)',
+                transition: 'all 5s ease-in-out',
+                animation: `float-${i % 4} ${3 + Math.random() * 2}s infinite ease-in-out`,
+                animationDelay: `${Math.random() * 2}s`
+              }}
+            >
+              <BeeIcon className="w-10 h-10 opacity-50" />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProps) {
   const features = [
     {
       icon: '🧠',
-      title: '18 Agentes Especializados',
-      description: 'Un enjambre completo de agentes IA trabajando juntos para crear tu lección personalizada.',
+      title: '8 Agentes Constructores',
+      description: 'Coordinador + 7 workers especializados construyen tu lección en paralelo. Más 1 agente de chat y 1 de feedback.',
     },
     {
       icon: '🎯',
@@ -124,7 +175,7 @@ export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProp
             </h1>
             
             <p className="text-lg md:text-xl text-white/40 max-w-xl mb-10 font-medium leading-relaxed animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-200">
-              HiveLearn orquestra un enjambre de 18 agentes especializados para crear tu camino educativo único. Velocidad extrema con Bun, inteligencia profunda con Gemma 4.
+              HiveLearn orquestra un enjambre de 10 agentes especializados para crear tu camino educativo único: 8 construyen el programa, 1 conduce el chat y 1 genera feedback. Velocidad extrema con Bun, inteligencia profunda con Gemma 4.
             </p>
             
             <div className="flex flex-col sm:flex-row items-center gap-6 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-300">
@@ -175,26 +226,9 @@ export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProp
             </div>
           </div>
 
-          {/* Right Column: Mini-Mundo PixiJS */}
-          <div className="order-1 lg:order-2 w-full flex flex-col items-center justify-center gap-4">
-            {/* Logos del stack */}
-            <div className="flex items-center gap-6 mb-2">
-              <div className="flex flex-col items-center gap-1 group">
-                <BunLogo className="w-10 h-10 group-hover:scale-110 transition-transform duration-300" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40 group-hover:text-hive-amber transition-colors">Bun</span>
-              </div>
-              <div className="w-px h-8 bg-white/10" />
-              <div className="flex flex-col items-center gap-1 group">
-                <GemmaLogo className="w-10 h-10 group-hover:scale-110 transition-transform duration-300" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40 group-hover:text-hive-blue transition-colors">Gemma 4</span>
-              </div>
-              <div className="w-px h-8 bg-white/10" />
-              <div className="flex flex-col items-center gap-1 group">
-                <PixiJSLogo className="w-10 h-10 group-hover:scale-110 transition-transform duration-300" />
-                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40 group-hover:text-[#E91E63] transition-colors">PixiJS</span>
-              </div>
-            </div>
-            <HeroMiniWorld />
+          {/* Right Column: Bee Swarm Visual */}
+          <div className="order-1 lg:order-2 w-full">
+            <SwarmVisual />
           </div>
 
         </div>
@@ -206,7 +240,7 @@ export function LandingPage({ onStart, onSessions, onHowToUse }: LandingPageProp
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="text-center">
-              <div className="text-4xl font-bold text-hive-amber mb-2">18</div>
+              <div className="text-4xl font-bold text-hive-amber mb-2">10</div>
               <div className="text-sm text-muted-foreground">Agentes IA</div>
             </div>
             <div className="text-center">
