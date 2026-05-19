@@ -1,189 +1,374 @@
-# 🐝 HiveLearn
+# HiveLearn: Pipeline de 8 Agentes
 
-**Plataforma de aprendizaje adaptativo con IA**
+## Objetivo
 
-HiveLearn es un sistema educativo impulsado por un enjambre de 16 agentes de IA especializados que generan lecciones personalizadas según el perfil, estilo y objetivos de cada estudiante.
+Este documento define el pipeline objetivo de HiveLearn para generar un programa educativo completo con menor latencia, menos puntos de fallo y mayor coherencia pedagógica.
 
-## ✨ Características
+La meta es dejar atrás el swarm sobredimensionado y operar con un núcleo de 8 agentes:
 
-- **16 Agentes Especializados**: Perfil, intención, estructura, explicación, ejercicios, quiz, retos, código, SVG, GIF, infografías, imágenes, gamificación, evaluación y feedback
-- **Onboarding Conversacional**: Chat interactivo que recoge información del estudiante paso a paso
-- **Persistencia Incremental**: Guardado automático del progreso en cada paso del onboarding
-- **Reanudación**: Capacidad de retomar donde se quedó si se corta la conexión
-- **UI Responsiva**: Diseño mobile-first con temática pixel/abeja
-- **Animaciones de Delegación**: Visualización en tiempo real de cómo el coordinador delega tareas a los workers
-- **Base de Datos Independiente**: SQLite propio, separado del repositorio principal de Hive
+1. `hl-coordinator-agent`
+2. `hl-content-agent`
+3. `hl-practice-agent`
+4. `hl-assessment-agent`
+5. `hl-image-agent`
+6. `hl-infographic-agent`
+7. `hl-audio-agent`
+8. `hl-gamification-agent`
 
-## 📦 Estructura del Monorepo
+## Principios
 
-```
-hivelearn/
-├── packages/
-│   ├── core/          # Núcleo backend (agentes, swarm, tools, persistencia)
-│   ├── server/        # Gateway HTTP + WebSocket en Bun
-│   └── ui/            # Frontend React + Vite 8 + Tailwind 4
-├── scripts/           # Scripts de build y dev
-├── data/              # Base de datos SQLite (gitignored)
-└── package.json       # Root package.json (workspaces)
-```
+- El coordinador es dueño del plan, no solo del enrutamiento.
+- Cada worker debe tener solo la tool que necesita.
+- La edad, nivel, tono, meta e intención del alumno deben condicionar toda decisión de contenido.
+- No se entrega un programa con nodos incompletos, placeholders silenciosos o contenido incompatible con la edad.
+- El camino feliz debe ser corto; la reparación solo corre cuando hace falta.
 
-## 🚀 Inicio Rápido
+## Agentes y Responsabilidades
 
-### Prerrequisitos
+### 1. `hl-coordinator-agent`
 
-- Bun >= 1.0.0
-- Node.js >= 18 (opcional, para compatibilidad)
+Responsabilidad:
+- entender el perfil del alumno
+- clasificar intención
+- definir la estructura del programa
+- decidir el tipo pedagógico y visual de cada nodo
+- coordinar repair y review final
 
-### Instalación
+Tools:
+- `planificar_programa`
+- `buscar_en_hivelearn`
+- `reparar_nodo_completo`
+- `revisar_programa`
+- `actualizar_prompt_agente`
 
-```bash
-# Instalar dependencias
-bun install
+Skills esperadas:
+- planificación pedagógica
+- adaptación por edad
+- decisión de medios
+- control de calidad
+- recuperación ante fallos
 
-# Configurar variables de entorno
-cp .env.example .env
-# Editar .env con tus configuraciones
-```
+### 2. `hl-content-agent`
 
-### Desarrollo
+Responsabilidad:
+- generar explicación principal por nodo
+- producir contenido conceptual y milestones
 
-```bash
-# Modo desarrollo (server + UI)
-bun run dev
+Tool:
+- `generar_explicacion`
 
-# O por separado:
-bun run dev:server   # Server en puerto 8787
-bun run dev:ui       # UI en puerto 5173
-```
+Skills esperadas:
+- explicación clara
+- tono motivador
+- ejemplo concreto
+- simplificación por rango de edad
 
-### Build
+### 3. `hl-practice-agent`
 
-```bash
-# Construir todos los paquetes
-bun run build
+Responsabilidad:
+- generar práctica guiada
+- producir ejercicios o retos según el tipo del nodo
 
-# O individualmente:
-bun run build:core
-bun run build:server
-bun run build:ui
-```
+Tool:
+- `generar_ejercicio`
 
-### Producción
+Skills esperadas:
+- aprendizaje activo
+- pasos guiados
+- ejemplo de respuesta
+- pista y respuesta correcta
 
-```bash
-# Construir y ejecutar
-bun run build
-bun run --cwd packages/server start
-```
+### 4. `hl-assessment-agent`
 
-## 🎨 Diseño UI
+Responsabilidad:
+- generar quiz de nodo o evaluación de cierre
 
-### Colores Corporativos
+Tool:
+- `generar_evaluacion`
 
-- **Primario**: `#fbbf24` (amarillo abeja)
-- **Fondo**: `#0a0e27` (azul oscuro pixel)
-- **Acentos**: Gradientes azul/violeta
-- **Estilo**: Pixel art + moderno
+Skills esperadas:
+- evaluación formativa
+- preguntas alineadas al objetivo
+- dificultad adaptada a la edad
 
-### Componentes Principales
+### 5. `hl-image-agent`
 
-1. **SwarmCanvas**: Animación de 16 agentes trabajando
-2. **ChatOnboardingScreen**: Conversacional responsivo con guardado incremental
-3. **A2UILessonScreen**: Entrega de lección interactiva
-4. **EvaluationScreen**: Evaluación final
-5. **ResultScreen**: Resultados con gamificación
+Responsabilidad:
+- generar el apoyo visual principal del nodo
+- resolver internamente la representación más adecuada para el concepto
 
-## 🗄️ Base de Datos
+Tool:
+- `generar_imagen`
 
-HiveLearn usa SQLite con las siguientes tablas principales:
+Skills esperadas:
+- representación visual simple
+- soporte conceptual
+- adecuación visual para `nino`, `adolescente` o `adulto`
 
-- `hl_agents`: Configuración de los 16 agentes
-- `hl_student_profiles`: Perfiles de estudiantes
-- `hl_curricula`: Currículos generados
-- `hl_sessions`: Sesiones de aprendizaje
-- `hl_onboarding_messages`: Historial del chat de onboarding
-- `hl_onboarding_progress`: Progreso incremental del onboarding
-- `hl_lesson_interactions`: Interacciones durante la lección
+### 6. `hl-infographic-agent`
 
-La BD se almacena en:
-- Producción: `~/.hivelearn/hivelearn.db`
-- Desarrollo: `./data/hivelearn.db`
+Responsabilidad:
+- generar infografías cuando el nodo sea de resumen, comparación o cierre
 
-## 📡 API Endpoints
+Tool:
+- `generar_infografia`
 
-### REST
+Skills esperadas:
+- síntesis visual
+- jerarquía de información
+- baja complejidad para niños
 
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/hivelearn/config` | Obtener configuración |
-| POST | `/api/hivelearn/config` | Guardar configuración |
-| POST | `/api/hivelearn/generate` | Generar lección (SSE) |
-| GET | `/api/hivelearn/sessions` | Listar sesiones |
+### 7. `hl-audio-agent`
 
-### WebSocket
+Responsabilidad:
+- generar guion de narración educativa
+- producir contenido apto para TTS
 
-| Endpoint | Descripción |
-|----------|-------------|
-| `/hivelearn-onboarding` | Chat de onboarding |
-| `/hivelearn-lesson` | Entrega de lección |
-| `/hivelearn-events` | Eventos en tiempo real |
+Tool:
+- `generar_audio`
 
-## 🧠 Enjambre de Agentes
+Skills esperadas:
+- narración clara
+- tono cálido
+- ritmo simple
+- apoyo auditivo por edad
 
-### Coordinador
-- **hl-coordinator-agent**: Coordina los 16 workers especializados
+### 8. `hl-gamification-agent`
 
-### Workers (16 agentes)
-1. **hl-profile-agent**: Construye perfil del alumno
-2. **hl-intent-agent**: Extrae tema y objetivo
-3. **hl-structure-agent**: Diseña esqueleto del programa
-4. **hl-explanation-agent**: Genera explicaciones
-5. **hl-exercise-agent**: Crea ejercicios prácticos
-6. **hl-quiz-agent**: Genera preguntas de quiz
-7. **hl-challenge-agent**: Diseña retos
-8. **hl-code-agent**: Genera bloques de código
-9. **hl-svg-agent**: Crea diagramas SVG
-10. **hl-gif-agent**: Genera animaciones
-11. **hl-infographic-agent**: Crea infografías
-12. **hl-image-agent**: Genera imágenes
-13. **hl-gamification-agent**: Asigna XP y logros
-14. **hl-evaluation-agent**: Genera evaluación final
-15. **hl-feedback-agent**: Feedback motivador
+Responsabilidad:
+- asignar XP
+- proponer recompensas
+- reforzar progresión y celebración
 
-## 🔧 Configuración
+Tool:
+- `generar_gamificacion`
 
-### Variables de Entorno
+Skills esperadas:
+- motivación
+- progresión equilibrada
+- refuerzo positivo
 
-```bash
-# Server
-HIVELEARN_PORT=8787
-HIVELEARN_HOST=0.0.0.0
+## Qué sale del pipeline principal
 
-# Database
-HIVELEARN_DB_PATH=~/.hivelearn/hivelearn.db
+Estos agentes no deben formar parte del swarm principal de generación:
 
-# Provider (opcional, se puede configurar vía API)
-HIVELEARN_PROVIDER=ollama
-HIVELEARN_MODEL=gemma4-e4b
-```
+- `hl-onboarding-agent`
+- `hl-feedback-agent`
 
-## 📝 Licencia
+Estos flujos siguen existiendo, pero fuera del pipeline de creación del programa.
 
-MIT License - ver [LICENSE](LICENSE) para más detalles.
+También salen del camino principal:
 
-## 🤝 Contribuir
+- `hl-profile-agent`
+- `hl-intent-agent`
+- `hl-structure-agent`
+- `hl-challenge-agent`
+- `hl-code-agent`
+- `hl-quiz-agent`
+- `hl-svg-agent`
+- `hl-gif-agent`
 
-1. Fork el repositorio
-2. Crea una rama de feature (`git checkout -b feature/amazing-feature`)
-3. Commit tus cambios (`git commit -m 'Add amazing feature'`)
-4. Push a la rama (`git push origin feature/amazing-feature`)
-5. Abre un Pull Request
+Sus responsabilidades quedan absorbidas por el coordinador o por agentes más amplios.
 
-## 📧 Contacto
+## Pipeline Operativo
 
-- **Author**: HiveLearn Team
-- **Email**: support@hivelearn.dev
+### Fase 0. Onboarding
 
----
+Entrada:
+- nickname
+- nombre
+- edad
+- tema
+- objetivo
+- estilo
 
-**Hecho con ❤️ para el aprendizaje adaptativo**
+Salida:
+- perfil persistido del alumno
+- sesión lista para generación
+
+Esta fase no pertenece al swarm de 8 agentes.
+
+### Fase 1. Plan del programa
+
+El coordinador recibe:
+- perfil completo
+- meta
+- contexto del alumno
+
+El coordinador llama:
+- `planificar_programa`
+
+Salida esperada:
+- `LessonBlueprint`
+- tema
+- nodos
+- `tipoPedagogico`
+- `tipoVisual`
+- XP por nodo
+
+### Fase 2. Generación por nodo
+
+Para cada nodo, el sistema crea:
+
+- 1 tarea pedagógica obligatoria
+- 0 o 1 tarea media opcional
+
+Ejemplos:
+- un nodo conceptual usa `hl-content-agent`
+- un nodo práctico usa `hl-practice-agent`
+- un nodo de verificación usa `hl-assessment-agent`
+- un nodo con apoyo visual usa `hl-image-agent`
+- un nodo de resumen usa `hl-infographic-agent`
+- un nodo auditivo usa `hl-audio-agent`
+
+### Fase 3. Gamificación
+
+Cuando los nodos ya están completos:
+- `hl-gamification-agent` distribuye XP, refuerzos y recompensas
+
+### Fase 4. Repair
+
+Si un worker falla:
+- el coordinador revisa el nodo incompleto
+- usa `buscar_en_hivelearn` si necesita contexto adicional
+- llama `reparar_nodo_completo`
+
+Si el nodo sigue incompleto:
+- la generación falla explícitamente
+
+### Fase 5. Review final
+
+El coordinador revisa:
+- coherencia pedagógica
+- progresión
+- adecuación por edad
+- equilibrio de XP
+- completitud real del programa
+
+Tool:
+- `revisar_programa`
+
+Si el proveedor falla en esta etapa:
+- debe existir fallback determinístico local
+- no se debe perder un programa ya reparado
+
+## Contexto que debe recibir cada agent
+
+Todo worker debe recibir en su `taskDescription`, como mínimo:
+
+- `tema`
+- `objetivo`
+- `concepto`
+- `rangoEdad`
+- `nivelPrevio`
+- `tono`
+- `estilo`
+- `duracionSesion`
+- `tipoPedagogico`
+- `tipoVisual`
+- `nodeId`
+
+No basta con declararlo en el `system prompt`. El runtime debe inyectarlo en cada tarea.
+
+## Reglas por edad
+
+### `nino`
+
+Priorizar:
+- `image_ai`
+- `audio_ai`
+
+Usar con cautela:
+- `infographic`
+
+Evitar por defecto:
+- `code_block`
+- visuales densos
+- texto largo
+
+### `adolescente`
+
+Permitir:
+- más detalle conceptual
+- práctica más abierta
+- evaluaciones con mayor dificultad
+
+### `adulto`
+
+Permitir:
+- mayor densidad de contenido
+- explicaciones comparativas
+- estructuras más extensas
+
+## Tiempos Esperados
+
+Objetivo operativo para 5 nodos:
+
+- camino feliz: `45s` a `90s`
+- con algunos retries o repair ligero: `90s` a `150s`
+- por encima de `180s`: degradación que debe revisarse
+
+No es aceptable como baseline:
+- `4` o `5` minutos para 5 nodos
+- más de `10` llamadas críticas en serie
+- generar nodos huecos y luego “taparlos” con fallback
+
+## Ventajas de este pipeline
+
+### 1. Menor latencia
+
+Se eliminan workers base redundantes y saltos innecesarios.
+
+### 2. Menos puntos de fallo
+
+Menos agentes significa:
+- menos retries
+- menos tool-calls
+- menos inconsistencias entre outputs
+
+### 3. Mejor coherencia pedagógica
+
+El coordinador define la estructura con contexto completo del alumno.
+
+### 4. Mejor trazabilidad
+
+Cada worker tiene una sola responsabilidad clara y una sola tool.
+
+### 5. Mejor repair
+
+Cuando algo falla, el coordinador repara el nodo completo en lugar de ensamblar piezas rotas.
+
+## Riesgos a evitar
+
+- dejar prompts legacy en BD activos sobre workers ya refactorizados
+- exponer más de una tool a un worker sin necesidad
+- seguir aceptando texto plano cuando la salida es ambigua
+- permitir que el orquestador cree fallback silencioso
+- usar tipos visuales incompatibles con la edad del alumno
+
+## Estado actual de transición
+
+La implementación ya avanzó en estas áreas:
+
+- el coordinador absorbe `profile`, `intent` y `structure`
+- se eliminó el fallback silencioso de contenido en el orquestador
+- se añadieron guardrails por edad para la selección visual
+- la UI principal ya dejó de mostrar varios agentes legacy
+- tools y skills ya se indexan en FTS para `buscar_en_hivelearn`
+
+Todavía hay consolidaciones pendientes:
+
+- dejar `ImageAgent` como único worker visual real
+- dejar `AssessmentAgent` como único worker de quiz y evaluación
+- terminar de reflejar el modelo de 8 agentes en todos los paneles de configuración
+
+## Criterios de aceptación
+
+El pipeline se considera correcto cuando:
+
+- el coordinador genera el blueprint sin lanzar `profile/intent/structure` como workers
+- cada worker corre con una sola tool
+- no se entrega ningún programa con nodos incompletos
+- la review final corre solo sobre programas completos
+- el tiempo total para 5 nodos se mantiene normalmente por debajo de `90s`
+- la UI, el seed inicial y la documentación muestran el mismo modelo operativo
