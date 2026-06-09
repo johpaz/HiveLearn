@@ -318,7 +318,7 @@ export function HiveLearnSessionsPage() {
   };
 
   const handleResume = (id: string) => {
-    navigate(`/program?session=${id}`);
+    navigate(`/play/${id}`);
   };
 
   const filteredSessions = sessions.filter(s => {

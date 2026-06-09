@@ -83,7 +83,9 @@ function App() {
 
               {/* Layout para el Módulo de Aprendizaje (Enfoque) */}
               <Route element={<LearningLayout><Outlet /></LearningLayout>}>
-                <Route path="/onboarding"  element={<ChatOnboardingScreen />} />
+                {/* El flujo de aprendizaje ahora es el juego (/play); el chat queda como fallback */}
+                <Route path="/onboarding"  element={<Navigate to="/play" replace />} />
+                <Route path="/onboarding-chat" element={<ChatOnboardingScreen />} />
                 <Route path="/generation"  element={<LoadingScreen />} />
                 <Route path="/program"     element={<A2UILessonScreen />} />
                 <Route path="/evaluation"  element={<EvaluationScreen />} />

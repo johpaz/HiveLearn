@@ -14,8 +14,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Game, GameBridge, BootScene, emptyProgress, type GameProgress } from '@hivelearn/game'
 // Importar desde el submódulo puro: el índice de core arrastra el backend
 // (gateway, llm-local) al bundle del navegador
@@ -40,6 +39,7 @@ export function GamePlayScreen() {
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { sessionId: routeSessionId } = useParams()
   const devLevel = searchParams.get('devLevel') === '1'
 
   useEffect(() => {
@@ -56,17 +56,65 @@ export function GamePlayScreen() {
 
     bridge.on('game:ready', () => {
       const { program, sessionId } = useLessonStore.getState()
-      if (program) {
+      if (program && (!routeSessionId || program.sessionId === routeSessionId)) {
         const world = lessonToLevelSpecs(program)
         bridge.emit('program:loaded', {
           world,
           progress: loadProgress(sessionId ?? program.sessionId) ?? emptyProgress(),
         })
+      } else if (routeSessionId) {
+        void restoreFromBackend(routeSessionId)
       } else if (!devLevel) {
         bridge.emit('program:none', {})
         openOnboarding()
       }
     })
+
+    /** Reanudar una sesión guardada: /play/:sessionId */
+    async function restoreFromBackend(sessionId: string) {
+      try {
+        const res = await fetch(`/api/hivelearn/sessions/${sessionId}/restore`)
+        if (!res.ok) throw new Error(`No se pudo restaurar la sesión (${res.status})`)
+        const data = await res.json()
+        const nodos = JSON.parse(data.nodos_json || '[]')
+        const program = {
+          sessionId: data.session_id,
+          alumnoId: data.alumno_id,
+          tema: data.meta ?? '',
+          topicSlug: data.topic_slug ?? null,
+          rangoEdad: data.rango_edad,
+          nodos,
+          gamificacion: { xpRecompensa: data.xp_total ?? 0, logros: [], mensajeCelebracion: '¡Continuemos!' },
+          evaluacion: { preguntas: data.evaluacion_json ? JSON.parse(data.evaluacion_json).preguntas ?? [] : [] },
+          perfilAdaptacion: {
+            rangoEdad: data.rango_edad,
+            duracionSesion: 30,
+            nodosRecomendados: nodos.length,
+            estilo: 'balanceado',
+            nivelPrevio: 'principiante',
+            tono: 'amigable',
+          },
+        }
+        const store = useLessonStore.getState()
+        store.restoreSession(program as never, {
+          sessionId: data.session_id,
+          xpTotal: data.xp_total ?? 0,
+          nodosCompletados: [],
+          lastNodeId: data.last_node_id ?? null,
+          sessionStateJson: data.session_state_json ?? null,
+          paused_at: data.paused_at ?? null,
+        })
+        bridge.emit('program:loaded', {
+          world: lessonToLevelSpecs(program as never),
+          progress: loadProgress(data.session_id) ?? emptyProgress(),
+        })
+      } catch (err) {
+        console.error('[GamePlayScreen] restore falló:', err)
+        // sin sesión válida: arrancar onboarding dentro del juego
+        bridge.emit('program:none', {})
+        openOnboarding()
+      }
+    }
 
     bridge.on('progress:save', ({ progress }) => {
       const { sessionId, program } = useLessonStore.getState()
@@ -250,7 +298,7 @@ export function GamePlayScreen() {
       game.destroy()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devLevel])
+  }, [devLevel, routeSessionId])
 
   return (
     <div
