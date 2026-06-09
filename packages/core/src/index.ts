@@ -31,6 +31,10 @@ export type {
 } from './types'
 
 export type { CalificacionOutput, CalificacionInput } from './tools/evaluation/calificar-evaluacion.tool'
+
+// ─── Contrato del juego de plataformas (LevelSpec) ───────────────────────────
+export type { LevelSpec, WorldSpec, ConceptBlock, BossSpec, BossQuestion, WorldTheme } from './lesson/levelSpec'
+export { lessonToLevelSpecs, themeForSlug, WORLD_THEMES } from './lesson/levelSpec'
 export type { SessionData, SessionMetrics } from './storage/LessonPersistence'
 
 // ─── Swarm y sesión ───────────────────────────────────────────────────────────

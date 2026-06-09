@@ -18,6 +18,7 @@ const A2UILessonScreen = lazy(() => import("@/pages/A2UILessonScreen").then(m =>
 const LoadingScreen = lazy(() => import("@/pages/LoadingScreen").then(m => ({ default: m.LoadingScreen })));
 const EvaluationScreen = lazy(() => import("@/pages/EvaluationScreen").then(m => ({ default: m.EvaluationScreen })));
 const ResultScreen = lazy(() => import("@/pages/ResultScreen").then(m => ({ default: m.ResultScreen })));
+const GamePlayScreen = lazy(() => import("@/pages/GamePlayScreen").then(m => ({ default: m.GamePlayScreen })));
 
 const queryClient = new QueryClient();
 
@@ -91,6 +92,10 @@ function App() {
                 <Route path="/loading"     element={<Navigate to="/generation" replace />} />
                 <Route path="/lesson"      element={<Navigate to="/program"    replace />} />
               </Route>
+
+              {/* Juego de plataformas (pantalla completa, sin layout) */}
+              <Route path="/play" element={<GamePlayScreen />} />
+              <Route path="/play/:sessionId" element={<GamePlayScreen />} />
 
               {/* 404 */}
               <Route path="*" element={<Navigate to="/" replace />} />

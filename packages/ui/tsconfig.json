@@ -25,7 +25,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@hivelearn/core/*": ["../core/src/*"],
-      "@hivelearn/core": ["../core/src/index.ts"]
+      "@hivelearn/core": ["../core/src/index.ts"],
+      "@hivelearn/game": ["../game/src/index.ts"]
     }
   },
   "include": ["src"],
