@@ -162,6 +162,8 @@ export function GamePlayScreen() {
     // ── Onboarding: WS existente, Maya pregunta dentro del juego ────────────
 
     function openOnboarding() {
+      // 'game:ready' se emite en Boot y de nuevo en Tutorial: un solo WS
+      if (ws) return
       const stored = localStorage.getItem('hivelearn-onboarding-session')
       const sessionId = stored ?? `onboarding-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       localStorage.setItem('hivelearn-onboarding-session', sessionId)

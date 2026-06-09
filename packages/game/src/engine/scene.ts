@@ -28,6 +28,9 @@ export class SceneManager {
   private current: Scene | null = null
   private overlay = new Graphics()
   private transitioning = false
+  /** Transición pedida mientras otra estaba en curso (p.ej. una escena que
+   *  enruta síncronamente dentro de su enter()): se procesa al terminar. */
+  private pending: { scene: Scene; viewW: number; viewH: number } | null = null
 
   constructor(private stage: Container) {
     this.overlay.zIndex = 1000
@@ -39,7 +42,10 @@ export class SceneManager {
 
   /** Cambia de escena con cortina de hexágonos */
   async goTo(next: Scene, viewW: number, viewH: number): Promise<void> {
-    if (this.transitioning) return
+    if (this.transitioning) {
+      this.pending = { scene: next, viewW, viewH }
+      return
+    }
     this.transitioning = true
 
     if (this.current) {
@@ -56,6 +62,12 @@ export class SceneManager {
 
     if (this.overlay.parent) await this.curtain(viewW, viewH, false)
     this.transitioning = false
+
+    if (this.pending) {
+      const p = this.pending
+      this.pending = null
+      await this.goTo(p.scene, p.viewW, p.viewH)
+    }
   }
 
   /** Anima la cortina hexagonal entrando (cover=true) o saliendo */
