@@ -17,8 +17,10 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSearchParams } from 'react-router-dom'
 import { Game, GameBridge, BootScene, emptyProgress, type GameProgress } from '@hivelearn/game'
-import { lessonToLevelSpecs } from '@hivelearn/core'
-import type { StudentProfile } from '@hivelearn/core'
+// Importar desde el submódulo puro: el índice de core arrastra el backend
+// (gateway, llm-local) al bundle del navegador
+import { lessonToLevelSpecs } from '@hivelearn/core/lesson/levelSpec'
+import type { StudentProfile } from '@hivelearn/core/types'
 import { useLessonStore } from '../store/lessonStore'
 import { wsUrl } from '../lib/wsUrl'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
