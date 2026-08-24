@@ -3,7 +3,7 @@
  * virtuales para tablets escolares). Las escenas leen estados, no eventos.
  */
 
-export type GameAction = 'left' | 'right' | 'up' | 'down' | 'jump' | 'interact' | 'pause'
+export type GameAction = 'left' | 'right' | 'up' | 'down' | 'jump' | 'interact' | 'pause' | 'talk'
 
 const KEYMAP: Record<string, GameAction> = {
   ArrowLeft: 'left', KeyA: 'left',
@@ -13,6 +13,7 @@ const KEYMAP: Record<string, GameAction> = {
   Space: 'jump',
   KeyE: 'interact', Enter: 'interact',
   Escape: 'pause',
+  KeyV: 'talk',
 }
 
 export class Input {

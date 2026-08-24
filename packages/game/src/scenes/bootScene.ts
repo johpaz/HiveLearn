@@ -11,7 +11,8 @@ import { Scene } from '../engine/scene'
 import { demoLevelSpec } from '../levels/generator'
 import { LevelScene } from './levelScene'
 import { WorldMapScene } from './worldMapScene'
-import { TutorialScene } from './tutorialScene'
+import { HiveHubScene } from './hiveHubScene'
+import { CeremonyScene } from './ceremonyScene'
 
 export class BootScene extends Scene {
   private bee!: Sprite
@@ -22,7 +23,7 @@ export class BootScene extends Scene {
 
   enter() {
     const g = this.game
-    g.app.renderer.background.color = 0x1a1a2e
+    g.app.renderer.background.color = g.themedSky(0x1a1a2e)
 
     this.bee = new Sprite(g.textures.bee.idle)
     this.bee.anchor.set(0.5)
@@ -46,7 +47,7 @@ export class BootScene extends Scene {
       g.world = {
         id: 'demo',
         nombre: 'Mundo de Prueba',
-        theme: 'prado',
+        theme: 'jardin',
         levels: [demoLevelSpec()],
       }
       void this.route(new LevelScene(g, g.currentLevel))
@@ -59,11 +60,13 @@ export class BootScene extends Scene {
       void this.route(new WorldMapScene(g))
     }))
     this.unsubs.push(g.bridge.on('program:none', () => {
-      void this.route(new TutorialScene(g))
+      // Sin programa: "La Colmena Viva" — ceremonia de onboarding Three.js pura.
+      // hiveDB decide el saludo (contexto de sesión) y el enjambre reacciona a la meta.
+      void this.route(new CeremonyScene(g))
     }))
     this.unsubs.push(g.bridge.on('program:generating', () => {
-      // sesión a medio generar: el tutorial muestra la zona de espera
-      void this.route(new TutorialScene(g))
+      // sesión a medio generar: la colmena muestra a las abejas trabajando
+      void this.route(new HiveHubScene(g, 'generating'))
     }))
 
     // avisar a React que el juego ya escucha

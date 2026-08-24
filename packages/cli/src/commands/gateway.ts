@@ -6,7 +6,7 @@
  * by its specific adapter, providing clean separation of concerns.
  */
 
-import { loadConfig, startGateway, logger, getHiveDir, initializeDatabase, registerEmbeddedUI } from "@hivelearn/core";
+import { loadConfig, startGateway, logger, getHiveDir, registerEmbeddedUI } from "@hivelearn/core";
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, openSync } from "node:fs";
 import * as path from "node:path";
 import { spawn, ChildProcess } from "child_process";

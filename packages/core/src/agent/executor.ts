@@ -40,9 +40,12 @@ function extractValidationContext(taskDesc: string): {
 
 export class HiveLearnExecutor {
   private persistence: LessonPersistence
+  /** Outputs de nodos de un run anterior (reanudación), keyed por node.id */
+  private priorOutputs?: Map<string, string>
 
-  constructor() {
+  constructor(priorOutputs?: Map<string, string>) {
     this.persistence = new LessonPersistence()
+    this.priorOutputs = priorOutputs
   }
 
   async execute(
@@ -50,6 +53,10 @@ export class HiveLearnExecutor {
     depResults: Record<string, string>,
     threadId: string
   ): Promise<string> {
+    // ── Reanudación: reutilizar output persistido de un run anterior ─────
+    const prior = this.priorOutputs?.get(node.id)
+    if (prior) return prior
+
     const hasDeps = Object.keys(depResults).length > 0
     const contextBlock = hasDeps
       ? `\n\n---\nResultados de agentes anteriores:\n${JSON.stringify(depResults, null, 2)}\n---`
@@ -64,10 +71,10 @@ export class HiveLearnExecutor {
     if (isCacheable) {
       const meta = extractCacheKey(node.taskDescription)
       if (meta) {
-        const cached = nodeCache.get(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad)
+        const cached = await nodeCache.get(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad)
         if (cached) {
-          nodeCache.hit(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad)
-          this.persistence.saveAgentOutput(threadId, node.agentId, node.id, cached.outputJson, 0, 'ok')
+          await nodeCache.hit(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad)
+          await this.persistence.saveAgentOutput(threadId, node.agentId, node.id, cached.outputJson, 0, 'ok')
           return cached.outputJson
         }
       }
@@ -95,11 +102,11 @@ export class HiveLearnExecutor {
       throw err
     } finally {
       const durationMs = Date.now() - t0
-      this.persistence.saveAgentOutput(threadId, node.agentId, node.id, output, durationMs, status)
+      await this.persistence.saveAgentOutput(threadId, node.agentId, node.id, output, durationMs, status)
       // Guardar en cache si fue exitoso y es cacheable
       if (status === 'ok' && isCacheable && output) {
         const meta = extractCacheKey(node.taskDescription)
-        if (meta) nodeCache.set(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad, output)
+        if (meta) await nodeCache.set(node.agentId, meta.conceptoSlug, meta.nivel, meta.rangoEdad, output)
       }
     }
 

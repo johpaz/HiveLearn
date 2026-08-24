@@ -53,9 +53,9 @@ export function createEnviarInteraccionTool(
     addXp?: (amount: number) => void
   },
 ): Tool {
-  const loadCurriculumNodes = (): NodoLesson[] => {
+  const loadCurriculumNodes = async (): Promise<NodoLesson[]> => {
     const persistence = new LessonPersistence()
-    const full = persistence.getSessionWithCurriculum(sessionId)
+    const full = await persistence.getSessionWithCurriculum(sessionId)
     return full?.nodosJson ? JSON.parse(full.nodosJson) : []
   }
 
@@ -208,7 +208,7 @@ export function createEnviarInteraccionTool(
       let messages = args.a2uiMessages as object[] | undefined
 
       if (!isRenderableA2UI(messages)) {
-        const nodos = loadCurriculumNodes()
+        const nodos = await loadCurriculumNodes()
         const nodo = nodos.find((candidate) => candidate.id === nodoId)
         if (!nodo) {
           throw new Error(`No se encontró nodo ${nodoId} para generar A2UI`)
@@ -243,7 +243,7 @@ export function createEnviarInteraccionTool(
         // Para nodos no evaluables, avanzar determinísticamente al siguiente nodo sin
         // depender de otro turno del coordinador.
         if (action.name === 'complete_node') {
-          const nodos = loadCurriculumNodes()
+          const nodos = await loadCurriculumNodes()
           const currentIdx = nodos.findIndex((candidate) => candidate.id === currentNodeId)
           const nextNode = currentIdx >= 0 ? nodos[currentIdx + 1] : null
           if (!nextNode) break
@@ -259,7 +259,7 @@ export function createEnviarInteraccionTool(
         }
 
         if (action.name === 'check_answer') {
-          const nodos = loadCurriculumNodes()
+          const nodos = await loadCurriculumNodes()
           const currentNode = nodos.find((candidate) => candidate.id === currentNodeId)
           if (currentNode) {
             const evaluation = evaluateNodeAnswer(currentNode, action)

@@ -35,12 +35,12 @@ export class LessonDeliverySession {
 
   private async buildFinalFeedback(summary: LeccionCompletada): Promise<FeedbackOutput | null> {
     try {
-      const full = this.persistence.getSessionWithCurriculum(this.sessionId)
+      const full = await this.persistence.getSessionWithCurriculum(this.sessionId)
       if (!full) return null
 
       const nodos: NodoLesson[] = JSON.parse(full.nodosJson || '[]')
-      const profile = this.persistence.getStudentProfile(full.alumnoId)
-      const interactions = this.persistence.getInteractions(this.sessionId)
+      const profile = await this.persistence.getStudentProfile(full.alumnoId)
+      const interactions = await this.persistence.getInteractions(this.sessionId)
       const lastInteraction = [...interactions].reverse().find(i => i.sender === 'student')
       let studentAction: Record<string, unknown> | null = null
       if (lastInteraction?.action_json) {
@@ -121,7 +121,7 @@ export class LessonDeliverySession {
       log.info(`[delivery] start sessionId=${this.sessionId}`)
 
       // 1. Cargar programa y perfil desde BD
-      const full = this.persistence.getSessionWithCurriculum(this.sessionId)
+      const full = await this.persistence.getSessionWithCurriculum(this.sessionId)
       if (!full) {
         log.warn(`[delivery] session not found sessionId=${this.sessionId}`)
         this.send({ type: 'error', message: 'Sesión no encontrada' })
@@ -135,9 +135,9 @@ export class LessonDeliverySession {
         return
       }
 
-      const profile = this.persistence.getStudentProfile(full.alumnoId)
-      const interactions = this.persistence.getInteractions(this.sessionId)
-      this.turnIndex = this.persistence.getNextTurnIndex(this.sessionId)
+      const profile = await this.persistence.getStudentProfile(full.alumnoId)
+      const interactions = await this.persistence.getInteractions(this.sessionId)
+      this.turnIndex = await this.persistence.getNextTurnIndex(this.sessionId)
       log.info(
         `[delivery] loaded session=${this.sessionId} alumnoId=${full.alumnoId} curriculoId=${full.curriculoId} ` +
         `meta="${full.metaAlumno}" topicSlug="${full.topicSlug ?? 'null'}" nodos=${nodos.length} interactions=${interactions.length}`
@@ -195,7 +195,7 @@ export class LessonDeliverySession {
       // 4. Crear tools
       const enviarTool = createEnviarInteraccionTool(
         this.sessionId,
-        (msg) => {
+        async (msg) => {
           this.send(msg)
           // Persistir turno del agente
           const m = msg as any
@@ -203,7 +203,7 @@ export class LessonDeliverySession {
             log.info(
               `[delivery] sent a2ui session=${this.sessionId} nodoId=${m.nodoId ?? 'unknown'} xpDisponible=${m.xpDisponible ?? 0} messages=${Array.isArray(m.messages) ? m.messages.length : 0}`
             )
-            this.persistence.saveInteraction(this.sessionId, this.turnIndex++, 'agent', {
+            await this.persistence.saveInteraction(this.sessionId, this.turnIndex++, 'agent', {
               nodoId: m.nodoId,
               a2uiJson: JSON.stringify(m.messages),
               xpAwarded: m.xpDisponible ?? 0,
@@ -225,7 +225,7 @@ export class LessonDeliverySession {
           log.info(
             `[delivery] received student action session=${this.sessionId} nodoId=${String(args.nodoId ?? 'unknown')} action=${parsed.accion ?? 'unknown'}`
           )
-          this.persistence.saveInteraction(this.sessionId, this.turnIndex++, 'student', {
+          await this.persistence.saveInteraction(this.sessionId, this.turnIndex++, 'student', {
             nodoId: args.nodoId as string,
             actionJson: JSON.stringify({ name: parsed.accion, context: parsed.contexto }),
           })

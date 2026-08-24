@@ -63,6 +63,8 @@ export interface StudentProfile {
   sesionesTotal: number
   xpAcumulado: number
   nivelActual: string
+  /** Energía/humor declarado en el onboarding más reciente (baja|media|alta) */
+  energiaUltima?: 'baja' | 'media' | 'alta'
 }
 
 export interface PerfilAdaptacion {

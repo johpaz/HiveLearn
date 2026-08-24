@@ -9,7 +9,8 @@
 import { resolveProviderConfig } from './llm-client'
 import { runAgentLoop } from './agent-loop'
 import type { Tool } from '../types/tool'
-import { getDb } from '../storage/sqlite'
+import { getDb } from '../storage/hivedb'
+import type { AgentDoc } from './registry'
 import { logger } from '../utils/logger'
 import { AGENT_PROMPTS } from './prompts'
 
@@ -29,7 +30,8 @@ export async function runHiveLearnAgent(opts: {
 }): Promise<string> {
   const db = getDb()
 
-  const agent = db.query<any, [string]>('SELECT * FROM hl_agents WHERE id = ?').get(opts.agentId)
+  const agentEntry = await db.collection<AgentDoc>('hl_agents').get(opts.agentId)
+  const agent = agentEntry?.doc
   if (!agent) throw new Error(`HiveLearn agent not found in DB: ${opts.agentId}`)
 
   // agents.model_id es el nombre real de la API (ej. "gemini-3-flash-preview")

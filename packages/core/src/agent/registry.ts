@@ -2,8 +2,11 @@
  * Registry histórico de agentes HiveLearn.
  * El sistema mantiene varios agentes legacy en BD por compatibilidad,
  * pero el pipeline activo de generación usa solo el subconjunto reducido.
+ *
+ * Motor: @johpaz/hive-db — los agentes viven en la colección `hl_agents`.
  */
-import type { Database } from 'bun:sqlite'
+import { getDb, nowIso } from '../storage/hivedb'
+import type { Collection } from '@johpaz/hive-db'
 const HIVELEARN_PROVIDER_ID = 'ollama'
 const HIVELEARN_MODEL_ID = 'gemma4-e4b'
 import { COORDINATOR_PROMPT } from './coordinator.prompt'
@@ -53,6 +56,22 @@ interface AgentDef {
   maxIterations: number
 }
 
+/** Documento de hl_agents (mismos campos que la tabla sqlite anterior) */
+export interface AgentDoc {
+  name: string
+  description: string | null
+  system_prompt: string | null
+  role: string
+  provider_id: string | null
+  model_id: string | null
+  max_iterations: number
+  tools_json: string
+  prompt_patch: string | null
+  last_prompt_update_reason: string | null
+  enabled: number
+  updated_at: string
+}
+
 const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.coordinator, name: 'HiveLearnCoordinator', description: 'Coordina el enjambre educativo completo', systemPrompt: COORDINATOR_PROMPT, maxIterations: 10 },
   { id: AGENT_IDS.onboarding, name: 'OnboardingAgent', description: 'Conversación inicial adaptativa para conocer al alumno', systemPrompt: ONBOARDING_PROMPT, maxIterations: 3 },
@@ -87,88 +106,59 @@ const ACTIVE_AGENT_IDS = new Set<string>([
   AGENT_IDS.feedback,
 ])
 
-export function registerHiveLearnAgents(db: Database): void {
-  const insertWorker = db.prepare(`
-    INSERT INTO hl_agents (id, name, description, system_prompt, role, provider_id, model_id, max_iterations, tools_json, enabled)
-    VALUES (?, ?, ?, ?, 'worker', ?, ?, ?, '[]', 1)
-    ON CONFLICT(id) DO UPDATE SET
-      name          = excluded.name,
-      description   = excluded.description,
-      system_prompt = excluded.system_prompt,
-      max_iterations= excluded.max_iterations,
-      provider_id   = COALESCE(hl_agents.provider_id, excluded.provider_id),
-      model_id      = COALESCE(hl_agents.model_id, excluded.model_id),
-      updated_at    = CURRENT_TIMESTAMP
-  `)
+function agentsCollection(): Collection<AgentDoc> {
+  return getDb().collection<AgentDoc>('hl_agents')
+}
 
-  const insertCoordinator = db.prepare(`
-    INSERT INTO hl_agents (id, name, description, system_prompt, role, provider_id, model_id, max_iterations, tools_json, enabled)
-    VALUES (?, ?, ?, ?, 'coordinator', ?, ?, ?, '[]', 1)
-    ON CONFLICT(id) DO UPDATE SET
-      name          = excluded.name,
-      description   = excluded.description,
-      system_prompt = excluded.system_prompt,
-      max_iterations= excluded.max_iterations,
-      provider_id   = COALESCE(hl_agents.provider_id, excluded.provider_id),
-      model_id      = COALESCE(hl_agents.model_id, excluded.model_id),
-      updated_at    = CURRENT_TIMESTAMP
-  `)
+export async function registerHiveLearnAgents(): Promise<void> {
+  const agents = agentsCollection()
+  const now = nowIso()
 
-  const tx = db.transaction(() => {
-    // Insertar coordinador
-    insertCoordinator.run(
-      AGENT_IDS.coordinator,
-      'HiveLearnCoordinator',
-      'Coordina el enjambre educativo completo',
-      COORDINATOR_PROMPT,
-      HIVELEARN_PROVIDER_ID,
-      HIVELEARN_MODEL_ID,
-      10,
-    )
-
-    // Insertar todos los workers conocidos; el pipeline activo se controla con enabled
-    for (const agent of HIVELEARN_AGENTS) {
-      if (agent.id === AGENT_IDS.coordinator) continue
-      insertWorker.run(
-        agent.id,
-        agent.name,
-        agent.description,
-        agent.systemPrompt,
-        HIVELEARN_PROVIDER_ID,
-        HIVELEARN_MODEL_ID,
-        agent.maxIterations,
-      )
-    }
-
-    for (const agentId of Object.values(AGENT_IDS)) {
-      const enabled = ACTIVE_AGENT_IDS.has(agentId) ? 1 : 0
-      db.prepare(`UPDATE hl_agents SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(enabled, agentId)
-    }
-  })
-  tx()
+  // Upsert de cada agente conocido (INSERT ... ON CONFLICT DO UPDATE del schema anterior):
+  // - name/description/system_prompt/max_iterations se refrescan siempre
+  // - provider_id/model_id se preservan si ya existen (COALESCE del SQL anterior)
+  for (const agent of HIVELEARN_AGENTS) {
+    const role = agent.id === AGENT_IDS.coordinator ? 'coordinator' : 'worker'
+    const existing = await agents.get(agent.id)
+    await agents.put(agent.id, {
+      name: agent.name,
+      description: agent.description,
+      system_prompt: agent.systemPrompt,
+      role,
+      provider_id: existing?.doc.provider_id ?? HIVELEARN_PROVIDER_ID,
+      model_id: existing?.doc.model_id ?? HIVELEARN_MODEL_ID,
+      max_iterations: agent.maxIterations,
+      tools_json: existing?.doc.tools_json ?? '[]',
+      prompt_patch: existing?.doc.prompt_patch ?? null,
+      last_prompt_update_reason: existing?.doc.last_prompt_update_reason ?? null,
+      enabled: ACTIVE_AGENT_IDS.has(agent.id) ? 1 : 0,
+      updated_at: now,
+    })
+  }
 }
 
 /**
  * Actualiza todos los agentes de HiveLearn con el provider_id y model_id seleccionados.
  * Esto permite que el enjambre use el provider/modelo que el usuario eligió.
  */
-export function updateHiveLearnAgentsProviderModel(
-  db: Database,
+export async function updateHiveLearnAgentsProviderModel(
   providerId: string,
   modelId: string
-): void {
-  // Incluir los 15 agentes (coordinador + 14 workers)
-  const allAgentIds = Object.values(AGENT_IDS)
-  const stmt = db.prepare(`
-    UPDATE hl_agents
-    SET provider_id = ?, model_id = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id IN (${allAgentIds.map(() => '?').join(', ')})
-  `)
+): Promise<void> {
+  const agents = agentsCollection()
+  const now = nowIso()
 
-  const tx = db.transaction(() => {
-    stmt.run(providerId, modelId, ...allAgentIds)
-  })
-  tx()
+  // Incluir los 15 agentes (coordinador + 14 workers)
+  for (const agentId of Object.values(AGENT_IDS)) {
+    const existing = await agents.get(agentId)
+    if (!existing) continue
+    await agents.put(agentId, {
+      ...existing.doc,
+      provider_id: providerId,
+      model_id: modelId,
+      updated_at: now,
+    })
+  }
 }
 
 export { HIVELEARN_AGENTS }

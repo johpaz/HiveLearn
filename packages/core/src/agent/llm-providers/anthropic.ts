@@ -53,7 +53,7 @@ export class AnthropicProvider implements LLMProvider {
 
   async call(options: LLMCallOptions): Promise<LLMResponse> {
     const Anthropic = await import("@anthropic-ai/sdk")
-    const client = new Anthropic.default({ apiKey: options.apiKey })
+    const client: any = new Anthropic.default({ apiKey: options.apiKey })
 
     const safeMessages = options.messages ?? []
     const systemText = safeMessages

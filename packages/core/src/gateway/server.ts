@@ -3,8 +3,9 @@
  * 
  * Gateway independiente con rutas API, WebSocket y serving de UI
  */
-import { getDb } from '../storage/sqlite'
+import { getDb } from '../storage/hivedb'
 import { LessonDeliverySession, LessonPersistence, runHiveLearnSession, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
+import { getGenerationRun, listGenerationRuns, type GenerationRunStatus } from '../agent/run-store'
 import { logger } from '../utils/logger'
 import { encryptApiKey } from '../crypto/encrypt'
 import { decryptApiKey } from '../crypto/decrypt'
@@ -27,6 +28,13 @@ import {
   installPiper,
   installVoice,
 } from './tts/install'
+import { getSttStatus, transcribeAudio, dumpWavForDebug } from './stt/logic'
+import {
+  openAgentChatWS,
+  handleAgentChatWS,
+  closeAgentChatWS,
+  isValidGameAgentId,
+} from './agent-chat'
 import type { LLMMessage } from '../agent/llm-client'
 import type { StudentProfile, SwarmTimelineEvent } from '../types'
 
@@ -41,6 +49,8 @@ interface OnboardingFieldMap {
   edad?: string
   tema?: string
   objetivo?: string
+  energia?: string
+  tiempo_disponible?: string
   estilo?: string
 }
 
@@ -104,6 +114,14 @@ function isLocalProviderRecord(provider: Record<string, unknown> | undefined): b
   )
 }
 
+function base64ToArrayBuffer(b64: string): ArrayBuffer {
+  const clean = b64.replace(/^data:.*;base64,/, '')
+  const binary = atob(clean)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
+}
+
 function parseCapabilities(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === 'string')
@@ -128,9 +146,23 @@ function calcNivelFromXp(xp: number): string {
   return 'Leyenda'
 }
 
+/** Tema persistido en onboarding (p. ej. prefill desde el selector del juego),
+ *  usado como fallback si el LLM omite `tema` al llamar submit_profile. */
+async function persistedOnboardingTema(persistence: LessonPersistence, sessionId: string): Promise<string | undefined> {
+  try {
+    const progress = await persistence.getOnboardingProgress(sessionId)
+    const campos = (progress?.camposCompletados ?? {}) as Record<string, string>
+    return campos.tema || undefined
+  } catch {
+    return undefined
+  }
+}
+
 function normalizeOnboardingFields(fields: OnboardingFieldMap): {
   perfil: Record<string, string | number>
   meta: string
+  energia: 'baja' | 'media' | 'alta'
+  tiempoDisponible: 15 | 30 | 45
 } {
   const edad = Number.parseInt(fields.edad ?? '18', 10)
   const rangoEdad = edad <= 12 ? 'nino' : edad <= 17 ? 'adolescente' : 'adulto'
@@ -153,13 +185,16 @@ function normalizeOnboardingFields(fields: OnboardingFieldMap): {
       nombre: fields.nombre?.trim() || 'Alumno',
       edad: Number.isFinite(edad) ? edad : 18,
       rangoEdad,
-      tiempoSesion: 30,
+      tiempoSesion: normalizeTiempoDisponible(fields.tiempo_disponible),
       nivelPrevio: 'principiante',
       estilo,
       sesionesTotal: 0,
       xpAcumulado: 0,
       nivelActual: 'Aprendiz',
     },
+    // Contexto de sesión viva para la ceremonia del enjambre (WS swarm-dialogue)
+    energia: normalizeEnergia(fields.energia),
+    tiempoDisponible: normalizeTiempoDisponible(fields.tiempo_disponible),
     meta: fields.tema?.trim()
       ? `${fields.tema.trim()}${fields.objetivo?.trim() ? ` — ${fields.objetivo.trim()}` : ''}`
       : (fields.objetivo?.trim() || 'Aprender un tema nuevo'),
@@ -224,9 +259,9 @@ function asTimelineEvent(eventName: string, payload: any): SwarmTimelineEvent | 
   }
 }
 
-function broadcastTimelineEvent(timelineEvent: SwarmTimelineEvent, payload: any): void {
+async function broadcastTimelineEvent(timelineEvent: SwarmTimelineEvent, payload: any): Promise<void> {
   const persistence = new LessonPersistence()
-  persistence.saveSwarmTimelineEvent(timelineEvent)
+  await persistence.saveSwarmTimelineEvent(timelineEvent)
 
   for (const ws of eventSubscribers) {
     wsSend(ws, { type: 'swarm_timeline', payload: timelineEvent })
@@ -279,6 +314,70 @@ function handleWsMessage(ws: ServerWebSocket<WSData>, message: string | ArrayBuf
 const onboardingHistories = new Map<string, LLMMessage[]>()
 const onboardingProfileCache = new Map<string, any>() // StudentProfile de alumno existente por sessionId
 
+// ── Ceremonia del Enjambre (diálogo 100% LLM entre abejas) ──
+const swarmDialogueSessions = new Map<string, ServerWebSocket<WSData>>()
+const swarmDialogueRunning = new Set<string>()
+
+interface SwarmDialogueRequest {
+  type: 'start'
+  sessionId?: string
+  perfil: { nombre: string; edad?: number; rangoEdad?: string; estilo?: string }
+  tema: string
+  objetivo?: string
+  energia?: 'baja' | 'media' | 'alta'
+  tiempoDisponible?: number
+  participantes?: string[]
+}
+
+async function handleSwarmDialogueWS(ws: ServerWebSocket<WSData>, raw: string): Promise<void> {
+  try {
+    const data = JSON.parse(raw) as SwarmDialogueRequest
+    const url = new URL(`http://localhost${ws.data.path}${ws.data.search ?? ''}`)
+    const sessionId = data.sessionId || url.searchParams.get('sessionId') || 'unknown'
+
+    if (data.type !== 'start') return
+    if (!data.tema?.trim() || !data.perfil?.nombre) {
+      wsSend(ws, { type: 'error', message: "Campos requeridos: perfil.nombre y tema" })
+      return
+    }
+    if (swarmDialogueRunning.has(sessionId)) {
+      wsSend(ws, { type: 'error', message: 'La ceremonia ya está en curso para esta sesión' })
+      return
+    }
+
+    swarmDialogueRunning.add(sessionId)
+    wsSend(ws, { type: 'ceremony_started', tema: data.tema })
+
+    try {
+      const { runCeremonyDialogue } = await import('../agent/swarm/dialogue')
+      const lines = await runCeremonyDialogue(
+        {
+          sessionId,
+          perfil: data.perfil,
+          tema: data.tema.trim().slice(0, 120),
+          objetivo: data.objetivo?.slice(0, 200) ?? null,
+          energia: data.energia ?? null,
+          tiempoDisponible: data.tiempoDisponible ?? null,
+          participantes: data.participantes,
+        },
+        {
+          onLineStart: (agentId) => wsSend(ws, { type: 'bee_line_start', agentId }),
+          onDelta: ({ agentId, delta }) => wsSend(ws, { type: 'bee_line_delta', agentId, delta }),
+          onLineDone: (line) => wsSend(ws, { type: 'bee_line', ...line }),
+        },
+      )
+      wsSend(ws, { type: 'ceremony_complete', lines })
+    } catch (e) {
+      log.warn(`[swarm-dialogue] error: ${(e as Error).message}`)
+      wsSend(ws, { type: 'error', message: (e as Error).message })
+    } finally {
+      swarmDialogueRunning.delete(sessionId)
+    }
+  } catch (e) {
+    wsSend(ws, { type: 'error', message: `Mensaje inválido: ${(e as Error).message}` })
+  }
+}
+
 const ONBOARDING_TOOLS = [
   {
     name: 'save_field',
@@ -287,24 +386,26 @@ const ONBOARDING_TOOLS = [
       type: 'object',
       required: ['field_key', 'field_value'],
       properties: {
-        field_key: { type: 'string', enum: ['nickname', 'nombre', 'edad', 'tema', 'objetivo', 'estilo'] },
+        field_key: { type: 'string', enum: ['nickname', 'nombre', 'edad', 'tema', 'objetivo', 'energia', 'tiempo_disponible', 'estilo'] },
         field_value: { type: 'string' },
       },
     },
   },
   {
     name: 'submit_profile',
-    description: 'Llama esta tool cuando tengas nickname, tema, objetivo y estilo. nombre y edad son opcionales si el alumno ya existe en BD.',
+    description: 'Llama esta tool cuando tengas nickname, tema, objetivo, energia, tiempo_disponible y estilo. nombre y edad son opcionales si el alumno ya existe en BD.',
     parameters: {
       type: 'object',
-      required: ['nickname', 'tema', 'objetivo', 'estilo'],
+      required: ['nickname', 'tema', 'objetivo', 'energia', 'tiempo_disponible', 'estilo'],
       properties: {
-        nickname: { type: 'string' },
-        nombre:   { type: 'string' },
-        edad:     { type: 'string' },
-        tema:     { type: 'string' },
-        objetivo: { type: 'string' },
-        estilo:   { type: 'string' },
+        nickname:          { type: 'string' },
+        nombre:            { type: 'string' },
+        edad:              { type: 'string' },
+        tema:              { type: 'string' },
+        objetivo:          { type: 'string' },
+        energia:           { type: 'string', description: 'baja | media | alta' },
+        tiempo_disponible: { type: 'string', description: 'minutos disponibles para la sesión de hoy' },
+        estilo:            { type: 'string' },
       },
     },
   },
@@ -318,8 +419,28 @@ function detectFieldFromQuestion(agentMsg: string): string | null {
   if (q.includes('años') || q.includes('cuántos') || q.includes('edad')) return 'edad'
   if (q.includes('aprender') || q.includes('tema') || q.includes('estudiar') || q.includes('gustaría')) return 'tema'
   if (q.includes('para qué') || q.includes('necesitas') || q.includes('objetivo') || q.includes('para que')) return 'objetivo'
+  if (q.includes('pila') || q.includes('motor') || q.includes('energía') || q.includes('energia') || q.includes('ánimo') || q.includes('animo') || q.includes('vienes hoy')) return 'energia'
+  if (q.includes('minutos') || q.includes('tiempo')) return 'tiempo_disponible'
   if (q.includes('prefieres') || q.includes('estilo') || q.includes('visual') || q.includes('reto') || q.includes('leyendo')) return 'estilo'
   return null
+}
+
+/** Campos del onboarding conversacional, en orden de captura */
+const ONBOARDING_FIELD_ORDER = ['nickname', 'nombre', 'edad', 'tema', 'objetivo', 'energia', 'tiempo_disponible', 'estilo'] as const
+
+/** Normaliza energía declarada a baja|media|alta */
+function normalizeEnergia(raw: string | undefined): 'baja' | 'media' | 'alta' {
+  const v = (raw ?? '').toLowerCase().trim()
+  if (v.startsWith('b') || v.includes('cansad') || v.includes('pila') || v.includes('tranquil')) return 'baja'
+  if (v.startsWith('a') || v.includes('motiv') || v.includes('motor') || v.includes('emocion') || v.includes('emoción') || v.includes('genial')) return 'alta'
+  return 'media'
+}
+
+/** Normaliza tiempo disponible a los buckets del planificador (15/30/45) */
+function normalizeTiempoDisponible(raw: string | undefined): 15 | 30 | 45 {
+  const n = parseInt((raw ?? '').replace(/[^0-9]/g, ''), 10)
+  if (!Number.isFinite(n) || n <= 0) return 30
+  return n <= 20 ? 15 : n <= 37 ? 30 : 45
 }
 
 async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string): Promise<void> {
@@ -336,9 +457,9 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
       if (onboardingHistories.has(sessionId)) return
 
       // Intentar reanudar desde BD
-      const dbMessages = persistence.getOnboardingMessages(sessionId)
+      const dbMessages = await persistence.getOnboardingMessages(sessionId)
       if (dbMessages.length > 0) {
-        const progress = persistence.getOnboardingProgress(sessionId)
+        const progress = await persistence.getOnboardingProgress(sessionId)
         const campos = (progress?.camposCompletados ?? {}) as Record<string, string>
         const reconstructed: LLMMessage[] = dbMessages.map(m => ({
           role: m.role === 'agent' ? 'assistant' : 'user',
@@ -355,18 +476,43 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
         return
       }
 
-      // Sesión nueva: saludo inicial
+      // Sesión nueva: "Despertar de la Colmena" — hiveDB decide el saludo
+      const { buildSessionContext } = await import('../onboarding/session-context')
+      const prefillNickname = typeof data.prefill?.nickname === 'string' ? data.prefill.nickname.trim() : null
+      const sessionContext = await buildSessionContext(persistence, {
+        nickname: prefillNickname,
+        alumnoId: null,
+      })
+      // Notifica al cliente el contexto ANTES de hablar (el juego puede preparar la ceremonia)
+      wsSend(ws, { type: 'session_context', payload: sessionContext })
+
+      const prefillTema = typeof data.prefill?.tema === 'string' && data.prefill.tema.trim()
+        ? data.prefill.tema.trim().slice(0, 120)
+        : null
+      let initialPrompt =
+        `Inicia la conversación de onboarding. Usa este CONTEXTO REAL de hiveDB como punto de partida ` +
+        `(kind="${sessionContext.kind}"): "${sessionContext.saludo}"\n` +
+        `Si kind es distinto de "nuevo", saluda al alumno por su nombre y ofrece la acción sugerida ` +
+        `(retomar sesión / terminar su programa / nuevo reto) SIN interrogar de más; luego continúa con los campos que falten. ` +
+        `Si es "nuevo", preséntate brevemente como Maya y pide el nickname del alumno.`
+      if (prefillTema && sessionContext.kind === 'nuevo') {
+        // El juego ya capturó el tema en el selector: persistirlo de forma
+        // determinista para no depender de que el LLM llame save_field('tema').
+        await persistence.saveOnboardingProgress(sessionId, 'tema', 'tema', prefillTema, { tema: prefillTema }, prefillTema)
+        initialPrompt += `\nEl alumno ya eligió aprender sobre "${prefillTema}" (NO vuelvas a preguntar el tema; al completar el perfil usa tema="${prefillTema}"). Menciónalo con entusiasmo y pide el nickname.`
+      }
+
       const { runHiveLearnConversation } = await import('../agent/conversation')
       const { AGENT_IDS } = await import('../agent/registry')
       const result = await runHiveLearnConversation({
         agentId: AGENT_IDS.onboarding,
-        messages: [{ role: 'user', content: 'Inicia la conversación de onboarding. Saluda brevemente y pide el nickname del alumno (su apodo o nombre de usuario).' } as LLMMessage],
+        messages: [{ role: 'user', content: initialPrompt } as LLMMessage],
         tools: ONBOARDING_TOOLS,
         maxTokens: 500,
         temperature: 0.7,
       })
       onboardingHistories.set(sessionId, [{ role: 'assistant', content: result.content } as LLMMessage])
-      persistence.saveOnboardingMessage(sessionId, 'agent', result.content)
+      await persistence.saveOnboardingMessage(sessionId, 'agent', result.content)
       wsSend(ws, { type: 'agent_message', text: result.content })
       return
     }
@@ -385,7 +531,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
     let history = onboardingHistories.get(sessionId) ?? []
     history.push({ role: 'user', content: userText } as LLMMessage)
     onboardingHistories.set(sessionId, history)
-    persistence.saveOnboardingMessage(sessionId, 'user', userText)
+    await persistence.saveOnboardingMessage(sessionId, 'user', userText)
 
     const result = await runHiveLearnConversation({
       agentId: AGENT_IDS.onboarding,
@@ -402,7 +548,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
 
         if (args.field_key === 'nickname') {
           log.info(`[onboarding] Looking up student by nickname="${args.field_value}"`)
-          existingStudent = persistence.findStudentByNickname(args.field_value)
+          existingStudent = await persistence.findStudentByNickname(args.field_value)
         log.info(
           existingStudent
             ? `[onboarding] Existing student found for nickname="${args.field_value}" alumnoId="${existingStudent.alumnoId}"`
@@ -411,12 +557,12 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
       }
 
       // Guardar en BD
-      const progress = persistence.getOnboardingProgress(sessionId)
+      const progress = await persistence.getOnboardingProgress(sessionId)
       const currentFields = (progress?.camposCompletados ?? {}) as OnboardingFieldMap
       const nextFields = { ...currentFields, [args.field_key]: args.field_value }
-      persistence.saveOnboardingProgress(
+      await persistence.saveOnboardingProgress(
         sessionId,
-        args.field_key as 'nickname' | 'nombre' | 'edad' | 'tema' | 'objetivo' | 'estilo',
+        args.field_key as (typeof ONBOARDING_FIELD_ORDER)[number],
         args.field_key,
         args.field_value,
         nextFields,
@@ -428,10 +574,10 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
       if (args.field_key === 'nickname') {
         const existing = existingStudent
         if (existing) {
-          const activeSession = persistence.getActiveSession(existing.alumnoId)
+          const activeSession = await persistence.getActiveSession(existing.alumnoId)
           if (activeSession?.sessionId) {
-            const fullSession = persistence.getSessionWithCurriculum(activeSession.sessionId)
-            const restored = persistence.restoreSessionState(activeSession.sessionId)
+            const fullSession = await persistence.getSessionWithCurriculum(activeSession.sessionId)
+            const restored = await persistence.restoreSessionState(activeSession.sessionId)
             if (fullSession?.nodosJson) {
               wsSend(ws, {
                 type: 'active_session_found',
@@ -453,7 +599,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
           history.push({ role: 'assistant', content: `[guardé nickname: ${args.field_value}]` } as LLMMessage)
           history.push({
             role: 'user',
-            content: `[CONTEXTO DEL SISTEMA: El alumno con nickname "${args.field_value}" ya existe. nombre="${existing.nombre}", edad="${existing.edad}", rangoEdad="${existing.rangoEdad}". NO preguntes nombre ni edad. Solo captura: tema (qué quiere aprender), objetivo (para qué) y estilo (visual/lectura/retos/balanceado). Al tenerlos, llama submit_profile incluyendo nombre="${existing.nombre}" y edad="${existing.edad}".]`,
+            content: `[CONTEXTO DEL SISTEMA: El alumno con nickname "${args.field_value}" ya existe. nombre="${existing.nombre}", edad="${existing.edad}", rangoEdad="${existing.rangoEdad}". NO preguntes nombre ni edad. Solo captura: tema (qué quiere aprender), objetivo (para qué), energia (baja/media/alta — "¿Cómo vienes hoy?"), tiempo_disponible (minutos para hoy) y estilo (visual/lectura/retos/balanceado). Al tenerlos, llama submit_profile incluyendo nombre="${existing.nombre}" y edad="${existing.edad}".]`,
           } as LLMMessage)
           onboardingHistories.set(sessionId, history)
           onboardingProfileCache.set(sessionId, existing)
@@ -477,7 +623,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
           })
           history.push({ role: 'assistant', content: followUp.content } as LLMMessage)
           onboardingHistories.set(sessionId, history)
-          persistence.saveOnboardingMessage(sessionId, 'agent', followUp.content)
+          await persistence.saveOnboardingMessage(sessionId, 'agent', followUp.content)
           wsSend(ws, { type: 'agent_message', text: followUp.content })
           return
         }
@@ -510,19 +656,21 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
           nickname: fArgs.nickname ?? '',
           nombre:   fArgs.nombre   ?? cached?.nombre ?? '',
           edad:     fArgs.edad     ?? String(cached?.edad ?? '18'),
-          tema:     fArgs.tema,
+          tema:     fArgs.tema     ?? await persistedOnboardingTema(persistence, sessionId),
           objetivo: fArgs.objetivo,
+          energia:  fArgs.energia,
+          tiempo_disponible: fArgs.tiempo_disponible,
           estilo:   fArgs.estilo,
         })
-        persistence.completeOnboarding(sessionId, normalized.perfil as Record<string, string>, normalized.meta)
+        await persistence.completeOnboarding(sessionId, normalized.perfil as Record<string, string>, normalized.meta)
         onboardingProfileCache.delete(sessionId)
-        wsSend(ws, { type: 'complete', perfil: normalized.perfil, meta: normalized.meta })
+        wsSend(ws, { type: 'complete', perfil: normalized.perfil, meta: normalized.meta, energia: normalized.energia, tiempoDisponible: normalized.tiempoDisponible })
         return
       }
 
       history.push({ role: 'assistant', content: followUp.content } as LLMMessage)
       onboardingHistories.set(sessionId, history)
-      persistence.saveOnboardingMessage(sessionId, 'agent', followUp.content)
+      await persistence.saveOnboardingMessage(sessionId, 'agent', followUp.content)
       wsSend(ws, { type: 'agent_message', text: followUp.content })
       return
     }
@@ -535,13 +683,15 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
         nickname: args.nickname ?? '',
         nombre:   args.nombre   ?? cached?.nombre ?? '',
         edad:     args.edad     ?? String(cached?.edad ?? '18'),
-        tema:     args.tema,
+        tema:     args.tema     ?? await persistedOnboardingTema(persistence, sessionId),
         objetivo: args.objetivo,
+        energia:  args.energia,
+        tiempo_disponible: args.tiempo_disponible,
         estilo:   args.estilo,
       })
-      persistence.completeOnboarding(sessionId, normalized.perfil as Record<string, string>, normalized.meta)
+      await persistence.completeOnboarding(sessionId, normalized.perfil as Record<string, string>, normalized.meta)
       onboardingProfileCache.delete(sessionId)
-      wsSend(ws, { type: 'complete', perfil: normalized.perfil, meta: normalized.meta })
+      wsSend(ws, { type: 'complete', perfil: normalized.perfil, meta: normalized.meta, energia: normalized.energia, tiempoDisponible: normalized.tiempoDisponible })
       return
     }
 
@@ -549,9 +699,9 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
     // Fallback para modelos locales que no llaman tools: inferir el campo
     // respondido a partir de la pregunta del coordinador anterior al mensaje del usuario
     {
-      const progress2 = persistence.getOnboardingProgress(sessionId)
+      const progress2 = await persistence.getOnboardingProgress(sessionId)
       const currentFields2 = (progress2?.camposCompletados ?? {}) as OnboardingFieldMap
-      const allFields = ['nickname', 'nombre', 'edad', 'tema', 'objetivo', 'estilo']
+      const allFields = [...ONBOARDING_FIELD_ORDER]
       const missingFields = allFields.filter(f => !currentFields2[f as keyof OnboardingFieldMap])
 
       if (missingFields.length > 0 && userText) {
@@ -560,11 +710,11 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
         const prevAgentMsg = typeof prevAgentContent === 'string' ? prevAgentContent : ''
         const inferredField = detectFieldFromQuestion(prevAgentMsg)
 
-        if (inferredField && missingFields.includes(inferredField)) {
+        if (inferredField && (missingFields as string[]).includes(inferredField)) {
           let existingStudent2 = null as StudentProfile | null
           if (inferredField === 'nickname') {
             log.info(`[onboarding] Looking up student by nickname="${userText}" (fallback)`)
-            existingStudent2 = persistence.findStudentByNickname(userText)
+            existingStudent2 = await persistence.findStudentByNickname(userText)
             log.info(
               existingStudent2
                 ? `[onboarding] Existing student found for nickname="${userText}" alumnoId="${existingStudent2.alumnoId}" (fallback)`
@@ -574,9 +724,9 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
 
           log.info(`[onboarding] Auto-saving field "${inferredField}" = "${userText}" (tool-call fallback)`)
           const nextFields2 = { ...currentFields2, [inferredField]: userText }
-          persistence.saveOnboardingProgress(
+          await persistence.saveOnboardingProgress(
             sessionId,
-            inferredField as 'nickname' | 'nombre' | 'edad' | 'tema' | 'objetivo' | 'estilo',
+            inferredField as (typeof ONBOARDING_FIELD_ORDER)[number],
             inferredField,
             userText,
             nextFields2 as Record<string, string>,
@@ -589,10 +739,10 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
           if (inferredField === 'nickname') {
             const existing2 = existingStudent2
             if (existing2) {
-              const activeSession2 = persistence.getActiveSession(existing2.alumnoId)
+              const activeSession2 = await persistence.getActiveSession(existing2.alumnoId)
               if (activeSession2?.sessionId) {
-                const fullSession2 = persistence.getSessionWithCurriculum(activeSession2.sessionId)
-                const restored2 = persistence.restoreSessionState(activeSession2.sessionId)
+                const fullSession2 = await persistence.getSessionWithCurriculum(activeSession2.sessionId)
+                const restored2 = await persistence.restoreSessionState(activeSession2.sessionId)
                 if (fullSession2?.nodosJson) {
                   wsSend(ws, {
                     type: 'active_session_found',
@@ -612,7 +762,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
 
               history.push({
                 role: 'user',
-                content: `[CONTEXTO DEL SISTEMA: El alumno con nickname "${userText}" ya existe. nombre="${existing2.nombre}", edad="${existing2.edad}", rangoEdad="${existing2.rangoEdad}". NO preguntes nombre ni edad. Solo captura: tema, objetivo, estilo. Al tenerlos, llama submit_profile.]`,
+                content: `[CONTEXTO DEL SISTEMA: El alumno con nickname "${userText}" ya existe. nombre="${existing2.nombre}", edad="${existing2.edad}", rangoEdad="${existing2.rangoEdad}". NO preguntes nombre ni edad. Solo captura: tema, objetivo, energia, tiempo_disponible y estilo. Al tenerlos, llama submit_profile.]`,
               } as LLMMessage)
               onboardingHistories.set(sessionId, history)
               onboardingProfileCache.set(sessionId, existing2)
@@ -651,17 +801,19 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
               edad:     fArgs2.edad     ?? String(cached2?.edad ?? nextFields2.edad ?? '18'),
               tema:     fArgs2.tema     ?? nextFields2.tema ?? '',
               objetivo: fArgs2.objetivo ?? nextFields2.objetivo ?? '',
+              energia:  fArgs2.energia  ?? nextFields2.energia ?? '',
+              tiempo_disponible: fArgs2.tiempo_disponible ?? nextFields2.tiempo_disponible ?? '',
               estilo:   fArgs2.estilo   ?? nextFields2.estilo ?? '',
             })
-            persistence.completeOnboarding(sessionId, normalized2.perfil as Record<string, string>, normalized2.meta)
+            await persistence.completeOnboarding(sessionId, normalized2.perfil as Record<string, string>, normalized2.meta)
             onboardingProfileCache.delete(sessionId)
-            wsSend(ws, { type: 'complete', perfil: normalized2.perfil, meta: normalized2.meta })
+            wsSend(ws, { type: 'complete', perfil: normalized2.perfil, meta: normalized2.meta, energia: normalized2.energia, tiempoDisponible: normalized2.tiempoDisponible })
             return
           }
 
           history.push({ role: 'assistant', content: followUp2.content } as LLMMessage)
           onboardingHistories.set(sessionId, history)
-          persistence.saveOnboardingMessage(sessionId, 'agent', followUp2.content)
+          await persistence.saveOnboardingMessage(sessionId, 'agent', followUp2.content)
           wsSend(ws, { type: 'agent_message', text: followUp2.content })
           return
         }
@@ -671,7 +823,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
     // Sin inferencia posible: enviar respuesta tal como llegó
     history.push({ role: 'assistant', content: result.content } as LLMMessage)
     onboardingHistories.set(sessionId, history)
-    persistence.saveOnboardingMessage(sessionId, 'agent', result.content)
+    await persistence.saveOnboardingMessage(sessionId, 'agent', result.content)
     wsSend(ws, { type: 'agent_message', text: result.content })
   } catch (e) {
     log.error('[ws/onboarding] Error', { error: (e as Error).message })
@@ -802,7 +954,7 @@ export function createServer(): Server {
       
       // Handle WebSocket upgrades
       const upgradeHeader = req.headers.get('Upgrade')
-      const wsPaths = ['/ws/', '/hivelearn-onboarding', '/hivelearn-lesson', '/hivelearn-events', '/canvas']
+      const wsPaths = ['/ws/', '/hivelearn-onboarding', '/hivelearn-lesson', '/hivelearn-events', '/hivelearn-agent-chat', '/hivelearn-swarm-dialogue', '/canvas']
       if (upgradeHeader === 'websocket' && wsPaths.some(p => url.pathname.startsWith(p))) {
         const srv = getBunServer()
         if (srv) {
@@ -883,17 +1035,13 @@ export function createServer(): Server {
       if (url.pathname === '/api/providers' && req.method === 'GET') {
         try {
           const db = getDb()
-          const providerRows = db.query(`
-            SELECT id, name, base_url, category, enabled, active, created_at, api_key_encrypted, num_ctx, num_gpu
-            FROM providers
-            ORDER BY name
-          `).all() as Array<Record<string, unknown>>
-          const modelCounts = db.query(`
-            SELECT provider_id, COUNT(*) AS count
-            FROM models
-            GROUP BY provider_id
-          `).all() as Array<{ provider_id: string; count: number }>
-          const countMap = new Map(modelCounts.map(row => [row.provider_id, Number(row.count ?? 0)]))
+          const providerRows = (await db.collection<Record<string, unknown>>('providers').scan())
+            .map(e => ({ id: e.id, ...e.doc }) as Record<string, unknown>)
+            .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
+          const countMap = new Map<string, number>()
+          for (const m of await db.collection<{ provider_id: string }>('models').scan()) {
+            countMap.set(m.doc.provider_id, (countMap.get(m.doc.provider_id) ?? 0) + 1)
+          }
           const providers = providerRows.map((provider) => {
             const { api_key_encrypted: _apiKeyEncrypted, ...safeProvider } = provider
             return {
@@ -927,11 +1075,9 @@ export function createServer(): Server {
       if (url.pathname === '/api/models' && req.method === 'GET') {
         try {
           const db = getDb()
-          const modelRows = db.query(`
-            SELECT id, provider_id, name, model_type, context_window, capabilities, enabled, active
-            FROM models
-            ORDER BY name
-          `).all() as Array<Record<string, unknown>>
+          const modelRows = (await db.collection<Record<string, unknown>>('models').scan())
+            .map(e => ({ id: e.id, ...e.doc }) as Record<string, unknown>)
+            .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
           const models = modelRows.map((model) => ({
             ...model,
             capabilities: parseCapabilities(model.capabilities),
@@ -960,7 +1106,7 @@ export function createServer(): Server {
         try {
           const providerId = url.pathname.split('/')[3]
           const db = getDb()
-          const provider = db.query('SELECT id, base_url, api_key_encrypted FROM providers WHERE id = ?').get(providerId) as Record<string, unknown> | undefined
+          const provider = (await db.collection<Record<string, unknown>>('providers').get(providerId))?.doc
           return addCorsHeaders(
             new Response(JSON.stringify({
               hasApiKey: Boolean(provider?.api_key_encrypted),
@@ -999,10 +1145,11 @@ export function createServer(): Server {
           }
           const db = getDb()
           const { encrypted, iv } = encryptApiKey(body.apiKey)
-          db.query(`
-            UPDATE providers SET api_key_encrypted = ?, api_key_iv = ?
-            WHERE id = ?
-          `).run(encrypted, iv, providerId)
+          const providersCol = db.collection<Record<string, unknown>>('providers')
+          const existingProvider = await providersCol.get(providerId)
+          if (existingProvider) {
+            await providersCol.put(providerId, { ...existingProvider.doc, api_key_encrypted: encrypted, api_key_iv: iv })
+          }
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true }), {
               status: 200,
@@ -1027,10 +1174,11 @@ export function createServer(): Server {
         try {
           const providerId = url.pathname.split('/')[3]
           const db = getDb()
-          db.query(`
-            UPDATE providers SET api_key_encrypted = NULL, api_key_iv = NULL
-            WHERE id = ?
-          `).run(providerId)
+          const providersCol = db.collection<Record<string, unknown>>('providers')
+          const existingProvider = await providersCol.get(providerId)
+          if (existingProvider) {
+            await providersCol.put(providerId, { ...existingProvider.doc, api_key_encrypted: null, api_key_iv: null })
+          }
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true }), {
               status: 200,
@@ -1055,11 +1203,8 @@ export function createServer(): Server {
         try {
           const providerId = url.pathname.split('/')[3]
           const db = getDb()
-          const provider = db.query(`
-            SELECT id, name, base_url, category, enabled, active, created_at, api_key_encrypted, num_ctx, num_gpu
-            FROM providers
-            WHERE id = ?
-          `).get(providerId) as Record<string, unknown> | undefined
+          const providerEntry = await db.collection<Record<string, unknown>>('providers').get(providerId)
+          const provider = providerEntry ? { id: providerEntry.id, ...providerEntry.doc } as Record<string, unknown> : undefined
 
           if (!provider) {
             return addCorsHeaders(
@@ -1071,12 +1216,9 @@ export function createServer(): Server {
             )
           }
 
-          const models = db.query(`
-            SELECT id, provider_id, name, model_type, context_window, capabilities, enabled, active
-            FROM models
-            WHERE provider_id = ?
-            ORDER BY name
-          `).all(providerId) as Array<Record<string, unknown>>
+          const models = (await db.collection<Record<string, unknown>>('models').findBy('provider_id', providerId))
+            .map(e => ({ id: e.id, ...e.doc }) as Record<string, unknown>)
+            .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
 
           return addCorsHeaders(
             new Response(JSON.stringify({
@@ -1133,8 +1275,9 @@ export function createServer(): Server {
           }
 
           const db = getDb()
-          const result = db.query('UPDATE providers SET enabled = ? WHERE id = ?').run(body.enabled ? 1 : 0, providerId)
-          if ((result as { changes?: number }).changes === 0) {
+          const providersCol = db.collection<Record<string, unknown>>('providers')
+          const providerEntry = await providersCol.get(providerId)
+          if (!providerEntry) {
             return addCorsHeaders(
               new Response(JSON.stringify({ error: 'Provider no encontrado' }), {
                 status: 404,
@@ -1143,6 +1286,7 @@ export function createServer(): Server {
               req
             )
           }
+          await providersCol.put(providerId, { ...providerEntry.doc, enabled: body.enabled ? 1 : 0 })
 
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true, enabled: body.enabled }), {
@@ -1179,8 +1323,9 @@ export function createServer(): Server {
           }
 
           const db = getDb()
-          const result = db.query('UPDATE providers SET num_ctx = ? WHERE id = ?').run(body.num_ctx, providerId)
-          if ((result as { changes?: number }).changes === 0) {
+          const providersCol = db.collection<Record<string, unknown>>('providers')
+          const providerEntry = await providersCol.get(providerId)
+          if (!providerEntry) {
             return addCorsHeaders(
               new Response(JSON.stringify({ error: 'Provider no encontrado' }), {
                 status: 404,
@@ -1189,6 +1334,7 @@ export function createServer(): Server {
               req
             )
           }
+          await providersCol.put(providerId, { ...providerEntry.doc, num_ctx: body.num_ctx })
 
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true, num_ctx: body.num_ctx }), {
@@ -1234,7 +1380,7 @@ export function createServer(): Server {
           }
 
           const db = getDb()
-          const provider = db.query('SELECT id FROM providers WHERE id = ?').get(providerId)
+          const provider = await db.collection('providers').get(providerId)
           if (!provider) {
             return addCorsHeaders(
               new Response(JSON.stringify({ error: 'Provider no encontrado' }), {
@@ -1245,7 +1391,8 @@ export function createServer(): Server {
             )
           }
 
-          const existing = db.query('SELECT id FROM models WHERE id = ?').get(id)
+          const modelsCol = db.collection<Record<string, unknown>>('models')
+          const existing = await modelsCol.get(id)
           if (existing) {
             return addCorsHeaders(
               new Response(JSON.stringify({ error: 'Ya existe un modelo con ese id' }), {
@@ -1260,19 +1407,17 @@ export function createServer(): Server {
             ? body.capabilities.filter((cap): cap is string => typeof cap === 'string' && cap.trim().length > 0)
             : []
 
-          db.query(`
-            INSERT INTO models (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
-            VALUES (?, ?, ?, ?, ?, ?, 1, 0)
-          `).run(
-            id,
-            providerId,
+          await modelsCol.put(id, {
+            provider_id: providerId,
             name,
-            body.modelType?.trim() || 'llm',
-            typeof body.contextWindow === 'number' && Number.isFinite(body.contextWindow)
+            model_type: body.modelType?.trim() || 'llm',
+            context_window: typeof body.contextWindow === 'number' && Number.isFinite(body.contextWindow)
               ? body.contextWindow
               : 20000,
-            JSON.stringify(capabilities)
-          )
+            capabilities: JSON.stringify(capabilities),
+            enabled: 1,
+            active: 0,
+          })
 
           return addCorsHeaders(
             new Response(JSON.stringify({
@@ -1323,8 +1468,9 @@ export function createServer(): Server {
           }
 
           const db = getDb()
-          const result = db.query('UPDATE models SET enabled = ? WHERE id = ?').run(body.enabled ? 1 : 0, modelId)
-          if ((result as { changes?: number }).changes === 0) {
+          const modelsCol = db.collection<Record<string, unknown>>('models')
+          const modelEntry = await modelsCol.get(modelId)
+          if (!modelEntry) {
             return addCorsHeaders(
               new Response(JSON.stringify({ error: 'Modelo no encontrado' }), {
                 status: 404,
@@ -1333,6 +1479,7 @@ export function createServer(): Server {
               req
             )
           }
+          await modelsCol.put(modelId, { ...modelEntry.doc, enabled: body.enabled ? 1 : 0 })
 
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true, enabled: body.enabled }), {
@@ -1374,10 +1521,15 @@ export function createServer(): Server {
             const modelName = model.name
             const modelId = `ollama-${modelName.replace(/:/g, '-')}`
             // Insertar o actualizar modelo
-            db.query(`
-              INSERT OR REPLACE INTO models (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
-              VALUES (?, 'ollama', ?, 'llm', 32000, '["chat", "local"]', 1, 0)
-            `).run(modelId, modelName)
+            await db.collection<Record<string, unknown>>('models').put(modelId, {
+              provider_id: 'ollama',
+              name: modelName,
+              model_type: 'llm',
+              context_window: 32000,
+              capabilities: '["chat", "local"]',
+              enabled: 1,
+              active: 0,
+            })
             imported++
           }
           return addCorsHeaders(
@@ -1404,13 +1556,11 @@ export function createServer(): Server {
         try {
           const persistence = new LessonPersistence()
           const db = getDb()
-          
-          // Check if table exists
-          const tableExists = db.query(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='hl_agents'"
-          ).get()
-          
-          if (!tableExists) {
+
+          // En HiveDB no hay DDL: la colección existe si tiene agentes sembrados
+          const agentCount = await db.collection('hl_agents').count()
+
+          if (agentCount === 0) {
             return addCorsHeaders(
               new Response(JSON.stringify({
                 configured: false,
@@ -1425,7 +1575,7 @@ export function createServer(): Server {
             )
           }
           
-          const providerModel = persistence.getHiveLearnProviderModel()
+          const providerModel = await persistence.getHiveLearnProviderModel()
           return addCorsHeaders(
             new Response(JSON.stringify({
               configured: !!providerModel,
@@ -1468,8 +1618,7 @@ export function createServer(): Server {
             )
           }
           
-          const db = getDb()
-          updateHiveLearnAgentsProviderModel(db, body.providerId, body.modelId)
+          await updateHiveLearnAgentsProviderModel(body.providerId, body.modelId)
           
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true }), {
@@ -1494,8 +1643,38 @@ export function createServer(): Server {
       if (url.pathname === '/api/hivelearn/generate' && req.method === 'POST') {
         try {
           const body = await req.json() as {
-            perfil: any
-            meta: string
+            perfil?: any
+            meta?: string
+            /** Reanuda un run interrumpido: perfil/meta se cargan del run persistido */
+            resumeSessionId?: string
+          }
+
+          // Reanudación: cargar perfil/meta del run persistido
+          let perfil = body.perfil
+          let meta = body.meta
+          if (body.resumeSessionId) {
+            const run = await getGenerationRun(body.resumeSessionId)
+            if (!run) {
+              return addCorsHeaders(
+                new Response(JSON.stringify({ error: 'Run de generación no encontrado' }), {
+                  status: 404,
+                  headers: { 'Content-Type': 'application/json' },
+                }),
+                req
+              )
+            }
+            perfil = perfil ?? JSON.parse(run.perfil_json)
+            meta = meta ?? run.meta
+          }
+
+          if (!perfil || !meta) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'perfil y meta son requeridos' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
           }
 
           // SSE stream
@@ -1525,11 +1704,12 @@ export function createServer(): Server {
             try {
               hlSwarmEmitter.subscribe('*', eventHandler)
 
-              const program = await runHiveLearnSession(body.perfil, body.meta, {
+              const program = await runHiveLearnSession(perfil, meta, {
                 onProgress: (progress) => send({ type: 'progress', payload: progress }),
+                resumeSessionId: body.resumeSessionId,
               })
               const persistence = new LessonPersistence()
-              const curriculum = persistence.getCurriculumBySessionId(program.sessionId)
+              const curriculum = await persistence.getCurriculumBySessionId(program.sessionId)
               send({
                 type: 'complete',
                 payload: {
@@ -1574,11 +1754,87 @@ export function createServer(): Server {
         }
       }
 
+      // GET /api/hivelearn/generation-runs — runs durables de generación (larga duración)
+      // ?status=running|completed|failed|interrupted  ·  /:sessionId para uno solo
+      if (url.pathname.startsWith('/api/hivelearn/generation-runs') && req.method === 'GET') {
+        try {
+          const parts = url.pathname.split('/')
+          const runId = parts.length > 4 ? decodeURIComponent(parts[4]) : null
+
+          if (runId) {
+            const run = await getGenerationRun(runId)
+            if (!run) {
+              return addCorsHeaders(
+                new Response(JSON.stringify({ error: 'Run no encontrado' }), {
+                  status: 404,
+                  headers: { 'Content-Type': 'application/json' },
+                }),
+                req
+              )
+            }
+            return addCorsHeaders(
+              new Response(JSON.stringify({ run }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+              req
+            )
+          }
+
+          const status = url.searchParams.get('status') as GenerationRunStatus | null
+          const runs = await listGenerationRuns(status ?? undefined)
+          return addCorsHeaders(
+            new Response(JSON.stringify({ runs }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[hivelearn/generation-runs] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // GET /api/hivelearn/topics — catálogo de temas para el selector del juego
+      if (url.pathname === '/api/hivelearn/topics' && req.method === 'GET') {
+        try {
+          const col = getDb().collection<{ titulo: string; descripcion: string | null; nivel: string | null; categoria: string | null; activo: number }>('hl_topics')
+          const entries = await col.scan({})
+          const topics = entries
+            .map(e => ({ slug: e.id, titulo: e.doc.titulo, descripcion: e.doc.descripcion ?? null, nivel: e.doc.nivel ?? null, categoria: e.doc.categoria ?? null, activo: e.doc.activo }))
+            .filter(t => t.activo !== 0)
+            .map(({ activo: _activo, ...t }) => t)
+          return addCorsHeaders(
+            new Response(JSON.stringify({ topics }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.error('[hivelearn/topics] Error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
       // GET /api/hivelearn/sessions
       if (url.pathname === '/api/hivelearn/sessions' && req.method === 'GET') {
         try {
           const persistence = new LessonPersistence()
-          const sessions = persistence.getSessionsByAlumno('*')
+          const sessions = await persistence.getSessionsByAlumno('*')
           return addCorsHeaders(
             new Response(JSON.stringify({ sessions }), {
               status: 200,
@@ -1603,7 +1859,7 @@ export function createServer(): Server {
         try {
           const sessionId = url.pathname.split('/')[4]
           const persistence = new LessonPersistence()
-          const session = persistence.getSessionWithCurriculum(sessionId)
+          const session = await persistence.getSessionWithCurriculum(sessionId)
           if (!session) {
             return addCorsHeaders(
               new Response(JSON.stringify({ error: 'Sesión no encontrada' }), {
@@ -1614,7 +1870,8 @@ export function createServer(): Server {
             )
           }
 
-          const restored = persistence.restoreSessionState(sessionId)
+          const restored = await persistence.restoreSessionState(sessionId)
+          const sessionProfile = await persistence.getStudentProfile(session.alumnoId)
           return addCorsHeaders(
             new Response(JSON.stringify({
               session_id: session.sessionId,
@@ -1629,10 +1886,7 @@ export function createServer(): Server {
               nodos_json: session.nodosJson,
               topic_slug: session.topicSlug,
               meta: session.metaAlumno,
-              rango_edad: (() => {
-                const profile = persistence.getStudentProfile(session.alumnoId)
-                return profile?.rangoEdad ?? 'adulto'
-              })(),
+              rango_edad: sessionProfile?.rangoEdad ?? 'adulto',
               last_node_id: restored?.lastNodeId ?? null,
               session_state_json: restored?.stateJson ?? null,
               paused_at: restored?.pausedAt ?? null,
@@ -1677,18 +1931,18 @@ export function createServer(): Server {
           }
 
           const persistence = new LessonPersistence()
-          persistence.updateSessionProgress(
+          await persistence.updateSessionProgress(
             body.sessionId,
             Math.max(0, Number(body.nodosCompletados ?? 0)),
             Math.max(0, Number(body.xpTotal ?? 0)),
           )
 
           if (typeof body.logrosJson === 'string') {
-            persistence.updateSessionLogros(body.sessionId, body.logrosJson)
+            await persistence.updateSessionLogros(body.sessionId, body.logrosJson)
           }
 
           if (typeof body.sessionStateJson === 'string') {
-            persistence.pauseSession(body.sessionId, body.lastNodeId ?? null, body.sessionStateJson)
+            await persistence.pauseSession(body.sessionId, body.lastNodeId ?? null, body.sessionStateJson)
           }
 
           return addCorsHeaders(
@@ -1735,7 +1989,7 @@ export function createServer(): Server {
           const logrosJson = typeof body.logrosJson === 'string' ? body.logrosJson : '[]'
           const persistence = new LessonPersistence()
 
-          persistence.completeSession(
+          await persistence.completeSession(
             body.sessionId,
             xpTotal,
             nivelAlcanzado,
@@ -1766,11 +2020,9 @@ export function createServer(): Server {
       if (url.pathname === '/api/hivelearn/agents' && req.method === 'GET') {
         try {
           const db = getDb()
-          const agents = db.query(`
-            SELECT id, name, description, system_prompt, role, provider_id, model_id, max_iterations, enabled, updated_at
-            FROM hl_agents
-            ORDER BY role DESC, name
-          `).all()
+          const agents = (await db.collection<Record<string, unknown>>('hl_agents').scan())
+            .map(e => ({ id: e.id, ...e.doc }) as Record<string, unknown>)
+            .sort((a, b) => String(b.role ?? '').localeCompare(String(a.role ?? '')) || String(a.name ?? '').localeCompare(String(b.name ?? '')))
           return addCorsHeaders(
             new Response(JSON.stringify({ agents }), {
               status: 200,
@@ -1790,6 +2042,34 @@ export function createServer(): Server {
         }
       }
 
+      // GET /api/hivelearn/agents/:gameId/portrait — retrato del agente.
+      // El path gameId es el HiveAgentId del juego (coordinator, content, ...).
+      // Sirve el archivo cacheado en `data/portraits/{gameId}.{svg,png}`; si no
+      // existe, lo genera bajo demanda con el agente de imagen (SVG pixel-art)
+      // y lo cachea. Si no se puede generar, 404: la UI cae al sprite procedural.
+      if (url.pathname.startsWith('/api/hivelearn/agents/') && url.pathname.endsWith('/portrait') && req.method === 'GET') {
+        const parts = url.pathname.split('/')
+        const agentGameId = parts[4] ?? ''
+        try {
+          const { isValidAgentId } = await import('./tts/agentVoices.js')
+          if (!isValidAgentId(agentGameId)) {
+            return addCorsHeaders(new Response('agentId inválido', { status: 400 }), req)
+          }
+          const { ensurePortrait } = await import('./portraits.js')
+          const portrait = await ensurePortrait(agentGameId)
+          if (!portrait) {
+            return addCorsHeaders(new Response('Not found', { status: 404 }), req)
+          }
+          const file = Bun.file(portrait.path)
+          return addCorsHeaders(
+            new Response(file, { status: 200, headers: { 'Content-Type': portrait.contentType, 'Cache-Control': 'public, max-age=86400' } }),
+            req,
+          )
+        } catch (e) {
+          return addCorsHeaders(new Response((e as Error).message, { status: 500 }), req)
+        }
+      }
+
       // PUT /api/hivelearn/agents/:id - Actualizar configuración de agente
       if (url.pathname.startsWith('/api/hivelearn/agents/') && req.method === 'PUT') {
         try {
@@ -1802,11 +2082,19 @@ export function createServer(): Server {
             system_prompt?: string;
           };
           const db = getDb();
-          db.query(`
-            UPDATE hl_agents
-            SET provider_id = ?, model_id = ?, max_iterations = ?, enabled = ?, system_prompt = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `).run(body.provider_id, body.model_id, body.max_iterations, body.enabled, body.system_prompt || null, agentId);
+          const agentsCol = db.collection<Record<string, unknown>>('hl_agents');
+          const agentEntry = await agentsCol.get(agentId);
+          if (agentEntry) {
+            await agentsCol.put(agentId, {
+              ...agentEntry.doc,
+              provider_id: body.provider_id,
+              model_id: body.model_id,
+              max_iterations: body.max_iterations,
+              enabled: body.enabled,
+              system_prompt: body.system_prompt || null,
+              updated_at: new Date().toISOString(),
+            });
+          }
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true }), {
               status: 200,
@@ -1832,12 +2120,12 @@ export function createServer(): Server {
       if (url.pathname === '/api/hivelearn/metrics' && req.method === 'GET') {
         try {
           const db = getDb()
-          const agentCount = db.query('SELECT COUNT(*) as count FROM hl_agents').get() as any
-          const sessionCount = db.query('SELECT COUNT(*) as count FROM hl_sessions').get() as any
+          const agentCount = await db.collection('hl_agents').count()
+          const sessionCount = await db.collection('hl_sessions').count()
           return addCorsHeaders(
             new Response(JSON.stringify({
-              agents: agentCount?.count ?? 0,
-              sessions: sessionCount?.count ?? 0,
+              agents: agentCount,
+              sessions: sessionCount,
               uptime: process.uptime(),
             }), {
               status: 200,
@@ -1893,7 +2181,7 @@ export function createServer(): Server {
             )
           }
           await downloadModel(modelId)
-          registerModelInDB(modelId)
+          await registerModelInDB(modelId)
           return addCorsHeaders(
             new Response(JSON.stringify({ ok: true, model: body.model }), {
               status: 200,
@@ -1999,10 +2287,111 @@ export function createServer(): Server {
         }
       }
 
-      // POST /api/tts-local/speak
+      // GET /api/stt/estado — disponibilidad del servidor STT (llama-server :8083)
+      if (url.pathname === '/api/stt/estado' && req.method === 'GET') {
+        try {
+          const status = await getSttStatus()
+          return addCorsHeaders(
+            new Response(JSON.stringify(status), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ ok: false, detail: (e as Error).message }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // GET /api/tts-local/agent-voice?agentId=<game HiveAgentId>
+      //     Devuelve la voz Piper resuelta para un agente (utilidad para UI).
+      if (url.pathname === '/api/tts-local/agent-voice' && req.method === 'GET') {
+        try {
+          const agentId = url.searchParams.get('agentId') ?? ''
+          const { resolveAgentVoice, isValidAgentId } = await import('./tts/agentVoices.js')
+          if (!isValidAgentId(agentId as any)) {
+            return addCorsHeaders(
+              new Response(JSON.stringify({ error: 'agentId inválido' }), {
+                status: 400, headers: { 'Content-Type': 'application/json' },
+              }),
+              req,
+            )
+          }
+          const voice = resolveAgentVoice(agentId as Parameters<typeof resolveAgentVoice>[0])
+          return addCorsHeaders(
+            new Response(JSON.stringify({ agentId, voice }), {
+              status: 200, headers: { 'Content-Type': 'application/json' },
+            }),
+            req,
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500, headers: { 'Content-Type': 'application/json' },
+            }),
+            req,
+          )
+        }
+      }
+
+      // POST /api/stt-local/transcribe — recibe WAV (body binario) o { wav: <base64> }
+      if (url.pathname === '/api/stt-local/transcribe' && req.method === 'POST') {
+        try {
+          const ct = req.headers.get('Content-Type') ?? ''
+          let wav: ArrayBuffer
+          if (ct.includes('application/json')) {
+            const body = await req.json() as { wav?: string }
+            if (!body.wav) {
+              return addCorsHeaders(
+                new Response(JSON.stringify({ error: "Campo 'wav' (base64) requerido" }), {
+                  status: 400, headers: { 'Content-Type': 'application/json' },
+                }),
+                req
+              )
+            }
+            wav = base64ToArrayBuffer(body.wav)
+          } else {
+            wav = await req.arrayBuffer()
+            if (wav.byteLength === 0) {
+              return addCorsHeaders(
+                new Response(JSON.stringify({ error: 'Body vacío' }), {
+                  status: 400, headers: { 'Content-Type': 'application/json' },
+                }),
+                req
+              )
+            }
+          }
+          dumpWavForDebug(wav)
+          const { text } = await transcribeAudio(wav)
+          return addCorsHeaders(
+            new Response(JSON.stringify({ text }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        } catch (e) {
+          log.warn('[stt-transcribe] error', { error: (e as Error).message })
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 503,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // POST /api/tts-local/speak — cache-first sobre hl_tts_cache (hiveDB)
       if (url.pathname === '/api/tts-local/speak' && req.method === 'POST') {
         try {
-          const body = await req.json() as { text?: string; voice?: string }
+          const body = await req.json() as { text?: string; voice?: string; agentId?: string }
           if (!body.text?.trim()) {
             return addCorsHeaders(
               new Response(JSON.stringify({ error: "Campo 'text' requerido" }), {
@@ -2012,11 +2401,70 @@ export function createServer(): Server {
               req
             )
           }
-          const audio = await synthesize(body.text, body.voice)
+          // Resuelve lugar: voice explícita → BD (hl_agent_voices) → mapa estático → default
+          let voice = body.voice
+          if (!voice && body.agentId) {
+            try {
+              const { getAgentVoice } = await import('../storage/voices.js')
+              const dbVoice = await getAgentVoice(body.agentId)
+              if (dbVoice?.voice) {
+                voice = dbVoice.voice
+              } else {
+                const { resolveAgentVoice, isValidAgentId } = await import('./tts/agentVoices.js')
+                if (isValidAgentId(body.agentId)) voice = resolveAgentVoice(body.agentId)
+              }
+            } catch { /* fallback a default */ }
+          }
+
+          // 1) Caché de hiveDB — respuestas repetidas instantáneas y offline
+          try {
+            const { ttsCacheGet } = await import('../storage/voices.js')
+            const cached = await ttsCacheGet(voice ?? '', body.text)
+            if (cached) {
+              log.debug(`[tts-speak] cache hit (voice=${voice ?? 'default'}, chars=${body.text.length})`)
+              return addCorsHeaders(
+                new Response(cached, {
+                  status: 200,
+                  headers: { 'Content-Type': 'audio/wav', 'X-TTS-Cache': 'hit' },
+                }),
+                req
+              )
+            }
+          } catch { /* sin caché disponible: sintetiza */ }
+
+          // 2) Sintetiza y guarda en caché
+          const audio = await synthesize(body.text, voice)
+          try {
+            const { ttsCachePut } = await import('../storage/voices.js')
+            await ttsCachePut(voice ?? '', body.text, audio)
+          } catch { /* caché es best-effort */ }
+
           return addCorsHeaders(
             new Response(audio, {
               status: 200,
-              headers: { 'Content-Type': 'audio/wav' },
+              headers: { 'Content-Type': 'audio/wav', 'X-TTS-Cache': 'miss' },
+            }),
+            req
+          )
+        } catch (e) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+            req
+          )
+        }
+      }
+
+      // GET /api/tts-local/voices — identidad sonora de los personajes (hiveDB)
+      if (url.pathname === '/api/tts-local/voices' && req.method === 'GET') {
+        try {
+          const { listAgentVoices } = await import('../storage/voices.js')
+          return addCorsHeaders(
+            new Response(JSON.stringify({ voices: await listAgentVoices() }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
             }),
             req
           )
@@ -2044,8 +2492,8 @@ export function createServer(): Server {
           )
         }
         const p = new LessonPersistence()
-        const dbMessages = p.getOnboardingMessages(sid)
-        const progress = p.getOnboardingProgress(sid)
+        const dbMessages = await p.getOnboardingMessages(sid)
+        const progress = await p.getOnboardingProgress(sid)
         const campos = (progress?.camposCompletados ?? {}) as Record<string, string>
         const completado = progress?.completado ?? false
         const messages = dbMessages.map((m: any) => ({ role: m.role, text: m.content }))
@@ -2072,7 +2520,7 @@ export function createServer(): Server {
 
         const p = new LessonPersistence()
         return addCorsHeaders(
-          new Response(JSON.stringify({ sessionId: sid, events: p.getSwarmTimeline(sid) }), {
+          new Response(JSON.stringify({ sessionId: sid, events: await p.getSwarmTimeline(sid) }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
@@ -2111,6 +2559,21 @@ export function createServer(): Server {
           eventSubscribers.add(ws)
           log.info('[ws] Event subscriber connected')
           wsSend(ws, { type: 'hl:connected' })
+        } else if (path.startsWith('/hivelearn-swarm-dialogue')) {
+          const u = new URL(`http://localhost${path}${search}`)
+          const sessionId = u.searchParams.get('sessionId') ?? 'unknown'
+          swarmDialogueSessions.set(sessionId, ws)
+          log.info('[ws] Swarm dialogue connected', { sessionId })
+          wsSend(ws, { type: 'connected' })
+        } else if (path.startsWith('/hivelearn-agent-chat')) {
+          const u = new URL(`http://localhost${path}${search}`)
+          const sessionId = u.searchParams.get('sessionId') ?? 'unknown'
+          const agentId = u.searchParams.get('agentId') ?? ''
+          if (!isValidGameAgentId(agentId)) {
+            wsSend(ws, { type: 'error', message: `agentId inválido: ${agentId}` })
+          } else {
+            openAgentChatWS(ws, { sessionId, agentIdGame: agentId })
+          }
         } else {
           log.info('[ws] Client connected', { path })
         }
@@ -2132,6 +2595,14 @@ export function createServer(): Server {
         }
         if (path.startsWith('/hivelearn-events')) {
           handleEventsWS(ws, message.toString())
+          return
+        }
+        if (path.startsWith('/hivelearn-agent-chat')) {
+          void handleAgentChatWS(ws, message.toString())
+          return
+        }
+        if (path.startsWith('/hivelearn-swarm-dialogue')) {
+          void handleSwarmDialogueWS(ws, message.toString())
           return
         }
         handleWsMessage(ws, message)
@@ -2158,6 +2629,10 @@ export function createServer(): Server {
           }
         }
         eventSubscribers.delete(ws)
+        for (const [sessionId, sessionWs] of swarmDialogueSessions.entries()) {
+          if (sessionWs === ws) swarmDialogueSessions.delete(sessionId)
+        }
+        if (path.startsWith('/hivelearn-agent-chat')) closeAgentChatWS(ws)
       },
     },
   }

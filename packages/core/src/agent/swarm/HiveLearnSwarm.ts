@@ -16,7 +16,18 @@ import { DAGScheduler, type DAGResult, type NodeSummary } from '../scheduler/dag
 import { buildFullDAG } from '../presets/HiveLearnPreset'
 import { buildLessonProgram, buildNodosBase } from '../orchestrator'
 import { HiveLearnExecutor } from '../executor'
+import {
+  createGenerationRun,
+  saveRunBlueprint,
+  heartbeatRun,
+  completeGenerationRun,
+  failGenerationRun,
+  getGenerationRun,
+} from '../run-store'
 import { actualizarPromptAgenteTool, buscarEnHiveLearnTool, planificarProgramaTool, repararNodoCompletoTool, revisarProgramaTool } from '../../tools'
+
+/** Heartbeat del lease del run de generación (patrón Hive run-store) */
+const RUN_HEARTBEAT_MS = 15_000
 
 const log = logger.child('hl-swarm')
 
@@ -108,11 +119,40 @@ export class HiveLearnSwarm {
     })
   }
 
-  async run(perfil: StudentProfile, meta: string): Promise<LessonProgram> {
+  async run(perfil: StudentProfile, meta: string, opts?: { resumeSessionId?: string }): Promise<LessonProgram> {
+    // ── Run durable: reanudar uno existente o crear uno nuevo ────────────
+    const existingRun = opts?.resumeSessionId ? await getGenerationRun(opts.resumeSessionId) : null
+
     const ts = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14)
     const nombreSlug = perfil.nombre.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 20)
-    const sessionId = `${nombreSlug}_${ts}`
+    const sessionId = existingRun?.sessionId ?? `${nombreSlug}_${ts}`
     this.currentSessionId = sessionId
+
+    if (!existingRun) {
+      await createGenerationRun(sessionId, perfil, meta)
+    }
+    // Heartbeat del lease mientras dure la generación (si el proceso muere,
+    // el lease expira y reconcileGenerationRuns() marca el run como interrupted)
+    const heartbeat = setInterval(() => {
+      heartbeatRun(sessionId).catch(() => { /* non-critical */ })
+    }, RUN_HEARTBEAT_MS)
+
+    try {
+      return await this.runGeneration(perfil, meta, sessionId, existingRun?.blueprint_json ?? null)
+    } catch (err) {
+      await failGenerationRun(sessionId, (err as Error).message).catch(() => { /* non-critical */ })
+      throw err
+    } finally {
+      clearInterval(heartbeat)
+    }
+  }
+
+  private async runGeneration(
+    perfil: StudentProfile,
+    meta: string,
+    sessionId: string,
+    resumedBlueprintJson: string | null,
+  ): Promise<LessonProgram> {
 
     const perfilAdaptacion: PerfilAdaptacion = {
       rangoEdad:         perfil.rangoEdad,
@@ -138,7 +178,7 @@ export class HiveLearnSwarm {
     let efectividadCtx = ''
     try {
       const intentSlug = meta.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 30)
-      const efectividad = persistence.getTopicEffectiveness(intentSlug)
+      const efectividad = await persistence.getTopicEffectiveness(intentSlug)
       if (efectividad.nodosConMasFallas.length > 0) {
         efectividadCtx = `\nDATOS PREVIOS sobre este tema: aprobación ${efectividad.nivelPromedioAprobacion}%. Nodos difíciles: ${efectividad.nodosConMasFallas.join(', ')}.`
       }
@@ -182,37 +222,62 @@ export class HiveLearnSwarm {
       `Para rangoEdad = ${perfilAdaptacion.rangoEdad}, selecciona tipos visuales simples y apropiados.`,
     ].join('\n')
 
-    this.emit('tier0', 'HiveLearnCoordinator', 8, 'Coordinador planificando la estructura del programa...')
-    hlSwarmEmitter.emit('coordinator:phase_changed', {
-      sessionId,
-      status: 'delegating',
-      phase: 'tier0',
-      label: 'Coordinador planificando el programa base',
-      progress: 8,
-      timestamp: Date.now(),
-    })
+    let structureResult: string
 
-    const planningRaw = await runHiveLearnAgent({
-      agentId: AGENT_IDS.coordinator,
-      taskDescription,
-      systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
-      tools: [planificarProgramaTool],
-      threadId: sessionId,
-    })
+    if (resumedBlueprintJson) {
+      // ── Reanudación: blueprint ya checkpointeado, saltar Tier 0 ────────
+      log.info(`[coordinator-flow] resuming run ${sessionId} from blueprint checkpoint`)
+      structureResult = resumedBlueprintJson
+    } else {
+      this.emit('tier0', 'HiveLearnCoordinator', 8, 'Coordinador planificando la estructura del programa...')
+      hlSwarmEmitter.emit('coordinator:phase_changed', {
+        sessionId,
+        status: 'delegating',
+        phase: 'tier0',
+        label: 'Coordinador planificando el programa base',
+        progress: 8,
+        timestamp: Date.now(),
+      })
 
-    const blueprint = parseAgentOutput<{ tema?: string; topic_slug?: string | null; nodos?: unknown[] }>(planningRaw, {})
-    if (!Array.isArray(blueprint.nodos) || blueprint.nodos.length === 0) {
-      throw new Error('El coordinador no pudo planificar un blueprint válido del programa')
+      const planningRaw = await runHiveLearnAgent({
+        agentId: AGENT_IDS.coordinator,
+        taskDescription,
+        systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
+        tools: [planificarProgramaTool],
+        threadId: sessionId,
+      })
+
+      const blueprint = parseAgentOutput<{ tema?: string; topic_slug?: string | null; nodos?: unknown[] }>(planningRaw, {})
+      if (!Array.isArray(blueprint.nodos) || blueprint.nodos.length === 0) {
+        throw new Error('El coordinador no pudo planificar un blueprint válido del programa')
+      }
+
+      structureResult = JSON.stringify({
+        tema: blueprint.tema ?? meta,
+        topic_slug: blueprint.topic_slug ?? null,
+        nodos: blueprint.nodos,
+      })
+
+      // Checkpoint del blueprint: si el proceso muere durante Tier 1,
+      // la reanudación no repite la planificación
+      await saveRunBlueprint(sessionId, structureResult)
     }
 
-    const structureResult = JSON.stringify({
-      tema: blueprint.tema ?? meta,
-      topic_slug: blueprint.topic_slug ?? null,
-      nodos: blueprint.nodos,
-    })
-
     const nodosBase = buildNodosBase(structureResult, perfilAdaptacion)
-    const executor = new HiveLearnExecutor()
+
+    // Outputs de nodos ya generados en un run anterior (reanudación):
+    // el executor los reutiliza en lugar de volver a llamar al LLM
+    let priorOutputs: Map<string, string> | undefined
+    if (resumedBlueprintJson) {
+      priorOutputs = new Map()
+      try {
+        for (const out of await persistence.getAgentOutputs(sessionId)) {
+          if (out.status === 'ok' && out.output_json) priorOutputs.set(out.task_id, out.output_json)
+        }
+        log.info(`[coordinator-flow] resume: ${priorOutputs.size} outputs de nodos reutilizados`)
+      } catch { /* non-critical */ }
+    }
+    const executor = new HiveLearnExecutor(priorOutputs)
 
     this.emit('tier1', 'HiveLearnCoordinator', 15, `Coordinador despachando ${nodosBase.length} nodos al enjambre reducido...`)
     hlSwarmEmitter.emit('coordinator:phase_changed', {
@@ -267,7 +332,7 @@ export class HiveLearnSwarm {
 
     // Guardar outputs de agentes en la BD para trazabilidad
     for (const [agentId, output] of rawOutputs.entries()) {
-      persistence.saveAgentOutput(sessionId, agentId, `task-${agentId}`, output, 0, 'ok')
+      await persistence.saveAgentOutput(sessionId, agentId, `task-${agentId}`, output, 0, 'ok')
     }
 
     this.emit('review', 'Coordinator', 93, 'Coordinador revisando coherencia pedagógica...')
@@ -310,6 +375,7 @@ export class HiveLearnSwarm {
       progress: 100,
       timestamp: Date.now(),
     })
+    await completeGenerationRun(sessionId).catch(() => { /* non-critical */ })
     return reviewed
   }
 

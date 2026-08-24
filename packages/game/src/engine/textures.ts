@@ -3,6 +3,9 @@
  * Sin assets binarios: cada sprite se "dibuja" con una grilla de caracteres,
  * lo que mantiene el bundle 100% offline. Cuando lleguen spritesheets reales
  * (pixscii/Kenney), basta reemplazar este módulo manteniendo las claves.
+ *
+ * Estética: colmena / panal / abeja — todos los temas son variantes del
+ * interior y alrededores de una colmena.
  */
 
 import { Texture } from 'pixi.js'
@@ -12,7 +15,7 @@ import { Tile } from './tilemap'
 type Palette = Record<string, string>
 
 /** Convierte una grilla ASCII + paleta en una Texture pixel-art */
-function pixelTexture(rows: string[], palette: Palette, scale = 1): Texture {
+export function pixelTexture(rows: string[], palette: Palette, scale = 1): Texture {
   const h = rows.length
   const w = rows[0].length
   const canvas = document.createElement('canvas')
@@ -32,10 +35,49 @@ function pixelTexture(rows: string[], palette: Palette, scale = 1): Texture {
   return tex
 }
 
-// ─── Abeja jugador (16×16, frames idle / run1 / run2 / jump) ─────────────────
+// ─── Paleta base de colmena ─────────────────────────────────────────────────
+
+const HONEY_PAL: Palette = {
+  k: '#1a1208', // contorno / cera muy oscura
+  K: '#3d2817', // sombra cera
+  c: '#6b4423', // cera marrón
+  C: '#8b5a2b', // cera
+  w: '#fff8e1', // cera clara / ala
+  W: '#ffffff', // brillo
+  y: '#ffd700', // dorado
+  Y: '#ffb300', // ámbar
+  h: '#ffecb3', // miel clara
+  H: '#ffc107', // miel
+  o: '#ffab40', // naranja suave
+  O: '#e65100', // naranja oscuro
+  r: '#d84315', // rojo/corazón oscuro
+  R: '#ff7043', // coral
+  p: '#ff8fb3', // rosa flor
+  P: '#f06292', // rosa fuerte
+  g: '#9e7c3c', // tallo cera-marrón
+  G: '#c9a227', // cera dorada
+  b: '#5e3c1c', // marrón oscuro
+  B: '#3e2714', // marrón muy oscuro
+  a: '#7b1fa2', // púrpura real
+  A: '#9c27b0', // púrpura
+  d: '#5d4037', // tierra oscura
+  D: '#8d6e63', // tierra
+  s: '#b39ddb', // cielo sala real
+  S: '#9575cd', // púrpura claro
+  n: '#ff9800', // néctar
+  N: '#ff6f00', // néctar oscuro
+}
+
+// ─── Abeja jugadora (16×16, frames idle / run1 / run2 / jump) ────────────────
 
 const BEE_PAL: Palette = {
-  k: '#1a1a24', y: '#ffcc00', o: '#ff9933', w: '#cfe8ff', W: '#ffffff', e: '#1a1a24', r: '#ff6b6b',
+  k: '#1a1208',
+  y: '#ffd700',
+  Y: '#ffb300',
+  w: '#fff8e1',
+  W: '#ffffff',
+  e: '#1a1208',
+  r: '#d84315',
 }
 
 const BEE_IDLE = [
@@ -135,7 +177,7 @@ const MAYA = [
   '......gg........',
 ]
 
-const MAYA_PAL: Palette = { ...BEE_PAL, p: '#ff8fb3', g: '#3aa655' }
+const MAYA_PAL: Palette = { ...BEE_PAL, p: '#ff8fb3', g: '#9e7c3c' }
 
 // ─── Enemigo avispón ─────────────────────────────────────────────────────────
 
@@ -158,7 +200,7 @@ const WASP = [
   '.......k........',
 ]
 
-const WASP_PAL: Palette = { k: '#1a1a24', R: '#e25822', r: '#a33b12', w: '#cfe8ff', W: '#ffffff', e: '#fff36b' }
+const WASP_PAL: Palette = { k: '#1a1208', R: '#e25822', r: '#a33b12', w: '#fff8e1', W: '#ffffff', e: '#fff36b' }
 
 // ─── Jefe (avispón grande se renderiza escalando esta base) ──────────────────
 
@@ -181,76 +223,75 @@ const BOSS = [
   '.....k.....k....',
 ]
 
-// ─── Moneda de polen / corazón / estrella / bandera ──────────────────────────
+// ─── Gota de néctar / corazón de abeja / estrella de colmena / banderín ───────
 
 const COIN = [
   '................',
-  '......gggg......',
-  '....gghhhhgg....',
-  '...gyhyyyyhyg...',
-  '...gyyyhhyyyg...',
-  '..gyhyhyyhyhyg..',
-  '..gyyyhyyhyyyg..',
-  '..gyyhyyyyhyyg..',
-  '..gyyhyyyyhyyg..',
-  '..gyyyhyyhyyyg..',
-  '..gyhyhyyhyhyg..',
-  '...gyyyhhyyyg...',
-  '...gyhyyyyhyg...',
-  '....gghhhhgg....',
-  '......gggg......',
+  '......YYYY......',
+  '....YYhhhhYY....',
+  '...YhhYYYYhhY...',
+  '..YhYYYYYYYYhY..',
+  '..YhYYYYYYYYhY..',
+  '..YhYYYYWWYYhY..',
+  '..YhYYYYYYYYhY..',
+  '..YhYYYYYYYYhY..',
+  '...YhhYYYYhhY...',
+  '....YYhhhhYY....',
+  '......YYYY......',
+  '................',
+  '................',
+  '................',
   '................',
 ]
-const COIN_PAL: Palette = { g: '#b8860b', y: '#ffd700', h: '#fff1a8' }
+const COIN_PAL: Palette = { Y: '#ffd700', h: '#ffab40', W: '#ffffff' }
 
 const HEART = [
   '................',
-  '..rrr....rrr....',
-  '.rRRRr..rRRRr...',
-  'rRRWRRrrRRRRRr..',
-  'rRWRRRRRRRRRRr..',
-  'rRRRRRRRRRRRRr..',
-  'rRRRRRRRRRRRRr..',
-  '.rRRRRRRRRRRr...',
-  '..rRRRRRRRRr....',
-  '...rRRRRRRr.....',
-  '....rRRRRr......',
-  '.....rRRr.......',
-  '......rr........',
+  '..kkk....kkk....',
+  '.kYYYk..kYYYk...',
+  'kYkYkYkkYkYkYk..',
+  'kYYYYYYYYYYYYk..',
+  'kYkYkYYYYYkYkY..',
+  'kYYYYYYYYYYYYk..',
+  '.kYYYYYYYYYYk...',
+  '..kYYYYYYYYk....',
+  '...kYYYYYYk.....',
+  '....kYYYYk......',
+  '.....kYYk.......',
+  '......kk........',
   '................',
   '................',
   '................',
 ]
-const HEART_PAL: Palette = { r: '#8b1a2b', R: '#e8334a', W: '#ffb3c0' }
+const HEART_PAL: Palette = { k: '#1a1208', Y: '#ffd700', W: '#ffffff' }
 
 const STAR = [
   '................',
-  '.......yy.......',
-  '.......yy.......',
-  '......yhhy......',
-  '......yhhy......',
-  '.yyyyyhhhhyyyyy.',
-  '..yhhhhhhhhhhy..',
-  '...yhhhhhhhhy...',
-  '....yhhhhhhy....',
-  '....yhhhhhhy....',
-  '...yhhy..yhhy...',
-  '...yhy....yhy...',
-  '..yy........yy..',
-  '................',
-  '................',
+  '.......YY.......',
+  '.......YY.......',
+  '......YYYY......',
+  '.Y...YYYYYY...Y.',
+  '..Y.YYYYYYYY.Y..',
+  '...YYYYYYYYYY...',
+  '.YYYYYYYYYYYYYY.',
+  '.YYYYYYYYYYYYYY.',
+  '...YYYYYYYYYY...',
+  '..Y.YYYYYYYY.Y..',
+  '.Y...YYYYYY...Y.',
+  '......YYYY......',
+  '.......YY.......',
+  '.......YY.......',
   '................',
 ]
-const STAR_PAL: Palette = { y: '#cc9900', h: '#ffe066' }
+const STAR_PAL: Palette = { Y: '#ffb300', y: '#ffd700' }
 
 const FLAG = [
   '....k...........',
-  '....kgggggg.....',
-  '....kgyyyyg.....',
-  '....kgyhhyg.....',
-  '....kgyhhyg.....',
-  '....kgyyyyg.....',
-  '....kgggggg.....',
+  '....kYYYYYYk....',
+  '....kYYYYYYYYk..',
+  '....kYYYYYYk....',
+  '....k...........',
+  '....k...........',
   '....k...........',
   '....k...........',
   '....k...........',
@@ -260,50 +301,51 @@ const FLAG = [
   '....k...........',
   '...kkk..........',
   '..kkkkk.........',
+  '................',
 ]
-const FLAG_PAL: Palette = { k: '#5b4632', g: '#3aa655', y: '#ffd700', h: '#fff1a8' }
+const FLAG_PAL: Palette = { k: '#5e3c1c', Y: '#ffd700' }
 
 // ─── Bloques ─────────────────────────────────────────────────────────────────
 
 const QBLOCK = [
-  'oooooooooooooooo',
-  'oyyyyyyyyyyyyyyB',
-  'oyByyyyyyyyyyByB',
-  'oyyyyykkkkyyyyyB',
-  'oyyyykkykkkyyyyB',
-  'oyyyykk..kkyyyyB',
-  'oyyyy....kkyyyyB',
-  'oyyyyy..kkkyyyyB',
-  'oyyyyy.kkyyyyyyB',
-  'oyyyyy.kkyyyyyyB',
-  'oyyyyyy..yyyyyyB',
-  'oyyyyy.kk.yyyyyB',
-  'oyyyyy.kk.yyyyyB',
-  'oyByyyy..yyyyByB',
-  'oyyyyyyyyyyyyyyB',
-  'oBBBBBBBBBBBBBBB',
+  'CCCCCCCCCCCCCCCC',
+  'CHHHHHHHHHHHHHHC',
+  'CHH..HHHHH..HHHC',
+  'CHH..HYYHH..HHHC',
+  'CHH..HYHHH..HHHC',
+  'CHH..HYYHH..HHHC',
+  'CHH..HHHHH..HHHC',
+  'CHHHHHHHHHHHHHHC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
 ]
-const QBLOCK_PAL: Palette = { o: '#fff1a8', y: '#ffb300', B: '#8a5a00', k: '#5b3a00' }
+const QBLOCK_PAL: Palette = { C: '#6b4423', H: '#ffecb3', Y: '#ff9800' }
 
 const QBLOCK_USED = [
-  'oooooooooooooooo',
-  'obbbbbbbbbbbbbbB',
-  'obBbbbbbbbbbbBbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obbbbbbbbbbbbbbB',
-  'obBbbbbbbbbbbBbB',
-  'obbbbbbbbbbbbbbB',
-  'oBBBBBBBBBBBBBBB',
+  'CCCCCCCCCCCCCCCC',
+  'CHHHHHHHHHHHHHHC',
+  'CHH..HHHHH..HHHC',
+  'CHH..H..H..HHHHC',
+  'CHH..H..H..HHHHC',
+  'CHH..HHHHH..HHHC',
+  'CHHHHHHHHHHHHHHC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
+  'CCCCCCCCCCCCCCCC',
 ]
-const QBLOCK_USED_PAL: Palette = { o: '#c9b18a', b: '#a98c5f', B: '#6e5232' }
+const QBLOCK_USED_PAL: Palette = { C: '#5e3c1c', H: '#c9b18a' }
 
 // ─── Tiles de terreno por tema ───────────────────────────────────────────────
 
@@ -318,31 +360,31 @@ interface ThemePalette {
 }
 
 export const THEME_COLORS: Record<WorldTheme, ThemePalette> = {
-  prado:   { sky: 0x8ecae6, groundTop: '#6dbf4b', ground: '#8a5a2b', groundDark: '#5e3c1c', platform: '#b07f43', hazard: '#7a8b99', decor: '#ff8fb3' },
-  bosque:  { sky: 0x4a7c59, groundTop: '#3e8948', ground: '#4d3826', groundDark: '#332417', platform: '#6e5232', hazard: '#5e7261', decor: '#e8334a' },
-  montana: { sky: 0xa3b8cc, groundTop: '#b9c4cc', ground: '#7d8a96', groundDark: '#525c66', platform: '#94a3ae', hazard: '#dfe8ee', decor: '#7ec8e3' },
-  colmena: { sky: 0xffb300, groundTop: '#ffd966', ground: '#c98a1b', groundDark: '#8a5a00', platform: '#e0a832', hazard: '#a33b12', decor: '#fff1a8' },
+  jardin:    { sky: 0xffe082, groundTop: '#ffd54f', ground: '#d4a017', groundDark: '#8b6914', platform: '#c68e17', hazard: '#b86d29', decor: '#ff8a65' },
+  almacen:   { sky: 0xffc107, groundTop: '#ffb300', ground: '#c7831d', groundDark: '#8b5a1a', platform: '#e09200', hazard: '#a0522d', decor: '#ffd54f' },
+  criadero:  { sky: 0xffcc80, groundTop: '#ffab40', ground: '#c97b1b', groundDark: '#8b4513', platform: '#d98c2a', hazard: '#a83e1d', decor: '#ff7043' },
+  sala_real: { sky: 0xd1b3ff, groundTop: '#e1c699', ground: '#9c7c3c', groundDark: '#5d4037', platform: '#b8860b', hazard: '#7b1fa2', decor: '#ffd700' },
 }
 
 function groundTexture(theme: WorldTheme): Texture {
   const p = THEME_COLORS[theme]
-  const pal: Palette = { t: p.groundTop, g: p.ground, d: p.groundDark }
+  const pal: Palette = { t: shadeColor(p.groundTop), g: shadeColor(p.ground), d: shadeColor(p.groundDark) }
   const rows = [
     'tttttttttttttttt',
-    'tttttttttttttttt',
-    'ggggdgggggggdggg',
+    'tggttggttggttggt',
+    'tggttggttggttggt',
     'gggggggggggggggg',
-    'ggdgggggdggggggg',
+    'ggttggttggttgggg',
+    'ggttggttggttgggg',
     'gggggggggggggggg',
-    'ggggggdggggggdgg',
-    'gdgggggggggggggg',
-    'gggggggdgggggggg',
-    'ggggdggggggggggg',
-    'gggggggggggdgggg',
-    'ggdggggggggggggg',
-    'gggggggdgggggggg',
-    'gggggggggggggdgg',
-    'gdgggggggggggggg',
+    'ggttggttggttgggg',
+    'ggttggttggttgggg',
+    'gggggggggggggggg',
+    'ggttggttggttgggg',
+    'ggttggttggttgggg',
+    'gggggggggggggggg',
+    'ggttggttggttgggg',
+    'ggttggttggttgggg',
     'gggggggggggggggg',
   ]
   return pixelTexture(rows, pal)
@@ -350,13 +392,16 @@ function groundTexture(theme: WorldTheme): Texture {
 
 function platformTexture(theme: WorldTheme): Texture {
   const p = THEME_COLORS[theme]
-  const pal: Palette = { p: p.platform, d: p.groundDark }
+  const pal: Palette = { p: shadeColor(p.platform), d: shadeColor(p.groundDark), h: '#ffc107', H: '#ffecb3' }
   const rows = [
     'pppppppppppppppp',
-    'pdppppdppppdpppp',
+    'pppppppppppppppp',
     'dddddddddddddddd',
-    '................',
-    '................', '................', '................', '................',
+    '.......HH.......',
+    '......HHHH......',
+    '......HHHH......',
+    '......HHHH......',
+    '.......HH.......',
     '................', '................', '................', '................',
     '................', '................', '................', '................',
   ]
@@ -365,61 +410,64 @@ function platformTexture(theme: WorldTheme): Texture {
 
 function hazardTexture(theme: WorldTheme): Texture {
   const p = THEME_COLORS[theme]
-  const pal: Palette = { h: p.hazard, d: p.groundDark }
+  const pal: Palette = { h: shadeColor(p.hazard), H: '#ffc107', W: '#ffffff' }
   const rows = [
-    '................', '................', '................', '................',
-    '................', '................', '................', '................',
-    '...h....h....h..',
-    '..hh...hhh...hh.',
-    '..hhh..hhh..hhh.',
-    '.hhhh.hhhhh.hhhh',
-    '.hhhhhhhhhhhhhhh',
-    'hhhhhhhhhhhhhhhh',
-    'dddddddddddddddd',
-    'dddddddddddddddd',
+    '................', '................',
+    '.......HH.......',
+    '......HHHH......',
+    '.....HHHHHH.....',
+    '....HHHHWWHH....',
+    '...HHHHHHHHHH...',
+    '..HHHHHHHHHHHH..',
+    '..HHHHHHHHHHHH..',
+    '...HHHHHHHHHH...',
+    '....HHHHHHHH....',
+    '.....HHHHHH.....',
+    '......HHHH......',
+    '.......HH.......',
+    '................', '................',
   ]
   return pixelTexture(rows, pal)
 }
 
 function decorTexture(theme: WorldTheme): Texture {
   const p = THEME_COLORS[theme]
-  const pal: Palette = { f: p.decor, g: '#3aa655', y: '#ffd700' }
+  const pal: Palette = { f: shadeColor(p.decor), F: '#f06292', g: '#9e7c3c', y: '#ffd700' }
   const rows = [
-    '................', '................', '................', '................',
     '................', '................',
-    '......f.f.......',
-    '.....fyfyf......',
-    '......fff.......',
-    '.......g........',
-    '.......g........',
-    '....g..g........',
-    '.....g.g........',
-    '......gg........',
-    '.......g........',
-    '.......g........',
+    '.......f.f......',
+    '......fFfFf.....',
+    '.......fff......',
+    '.......ggg......',
+    '.......ggg......',
+    '......ggggg.....',
+    '.......ggg......',
+    '.......ggg......',
+    '.......ggg......',
+    '................', '................', '................', '................', '................',
   ]
   return pixelTexture(rows, pal)
 }
 
 function doorTexture(): Texture {
-  const pal: Palette = { d: '#5b3a00', D: '#8a5a00', y: '#ffd700', k: '#1a1a24' }
+  const pal: Palette = { d: '#6b4423', D: '#8b5a2b', Y: '#ffd700', h: '#ffecb3', H: '#ffc107' }
   const rows = [
-    '....DDDDDDDD....',
-    '...DddddddddD...',
-    '..DddddddddddD..',
-    '..DddddddddddD..',
-    '..DddkkkkkkddD..',
-    '..DddkyyyykddD..',
-    '..DddkyyyykddD..',
-    '..DddkkkkkkddD..',
-    '..DddddddddddD..',
-    '..DddddyddddD...',
-    '..DddddyyddddD..',
-    '..DddddydddddD..',
-    '..DddddddddddD..',
-    '..DddddddddddD..',
-    '..DddddddddddD..',
-    '..DDDDDDDDDDDD..',
+    'DDDDDDDDDDDDDDDD',
+    'DhhhhhhhhhhhhhhD',
+    'Dh............hD',
+    'Dh..YYYYYYYY..hD',
+    'Dh..YHHHHHHY..hD',
+    'Dh..YHHYYHHY..hD',
+    'Dh..YHHHHHHY..hD',
+    'Dh..YYYYYYYY..hD',
+    'Dh............hD',
+    'Dh............hD',
+    'Dh............hD',
+    'DhhhhhhhhhhhhhhD',
+    'DDDDDDDDDDDDDDDD',
+    'DDDDDDDDDDDDDDDD',
+    'DDDDDDDDDDDDDDDD',
+    'DDDDDDDDDDDDDDDD',
   ]
   return pixelTexture(rows, pal)
 }
@@ -442,9 +490,40 @@ export interface GameTextures {
 
 let cached: GameTextures | null = null
 
+// ── Tema "Panal de Cuentos": shade global de tiles ──────────────────────────
+// Solo los tiles del mundo se tiñen; los personajes conservan color vivo
+// para destacar contra escenarios más oscuros/claros según el alumno.
+
+let tileShade = 0
+const tileCacheByShade = new Map<string, Map<WorldTheme, Partial<Record<Tile, Texture>>>>()
+
+/** Ajusta la luminosidad de los tilesets (k ∈ [-1,1]). Regenera bajo demanda. */
+export function setTexturesShade(k: number): void {
+  const clamped = Math.max(-1, Math.min(1, Math.round(k * 100) / 100))
+  if (clamped === tileShade) return
+  tileShade = clamped
+  cached = null // fuerza regeneración con el nuevo shade
+}
+
+/** Aplica el shade activo a un color de paleta '#rrggbb' */
+function shadeColor(hex: string): string {
+  if (tileShade === 0) return hex
+  const n = parseInt(hex.slice(1), 16)
+  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff
+  const t = tileShade > 0 ? 255 : 0
+  const a = Math.abs(tileShade) * 0.6 // moderado: el mundo nunca se pierde
+  const mix = (c: number) => Math.round(c + (t - c) * a)
+    .toString(16).padStart(2, '0')
+  return `#${mix(r)}${mix(g)}${mix(b)}`
+}
+
 export function loadTextures(): GameTextures {
   if (cached) return cached
-  const tileCache = new Map<WorldTheme, Partial<Record<Tile, Texture>>>()
+  const shadeKey = String(tileShade)
+  if (!tileCacheByShade.has(shadeKey)) {
+    tileCacheByShade.set(shadeKey, new Map())
+  }
+  const tileCache = tileCacheByShade.get(shadeKey)!
   cached = {
     bee: {
       idle: pixelTexture(BEE_IDLE, BEE_PAL),

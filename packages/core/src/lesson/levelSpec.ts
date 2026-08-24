@@ -8,9 +8,9 @@
 
 import type { LessonProgram, NodoLesson, PreguntaEvaluacion } from '../types'
 
-export type WorldTheme = 'prado' | 'bosque' | 'montana' | 'colmena'
+export type WorldTheme = 'jardin' | 'almacen' | 'criadero' | 'sala_real'
 
-export const WORLD_THEMES: WorldTheme[] = ['prado', 'bosque', 'montana', 'colmena']
+export const WORLD_THEMES: WorldTheme[] = ['jardin', 'almacen', 'criadero', 'sala_real']
 
 /** Un concepto de la lección → un bloque '?' dentro del nivel */
 export interface ConceptBlock {

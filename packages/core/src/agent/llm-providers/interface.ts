@@ -27,7 +27,8 @@ export const OPENAI_COMPAT_BASE_URLS: Record<string, string> = {
   kimi: "https://api.moonshot.ai/v1",
   "local-llama": "http://localhost:8080/v1",
   nvidia: "https://integrate.api.nvidia.com/v1",
-  qwen: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+  qwen: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  hiveagents: "https://llm.hiveagents.io/v1",
 }
 
 // ─── Provider profiles ────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ export const PROVIDER_PROFILES: Record<string, ProviderProfile> = {
   nvidia: { ...DEFAULT_PROFILE, normalizeToolNames: true },
   qwen: { ...DEFAULT_PROFILE, normalizeToolNames: true, retryWithoutToolsOnCodes: [400, 422] },
   "local-llama": { ...DEFAULT_PROFILE },
+  hiveagents: { ...DEFAULT_PROFILE, normalizeToolNames: true },
 }
 
 export function getProviderProfile(provider: string): ProviderProfile {

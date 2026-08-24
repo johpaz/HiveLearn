@@ -81,8 +81,8 @@ function normalizeToLocalModelId(modelId: string | null | undefined): ModelId | 
   return supported.has(normalized as ModelId) ? normalized as ModelId : null
 }
 
-function getConfiguredLocalModel(): ModelId | null {
-  const providerModel = new LessonPersistence().getHiveLearnProviderModel()
+async function getConfiguredLocalModel(): Promise<ModelId | null> {
+  const providerModel = await new LessonPersistence().getHiveLearnProviderModel()
   if (!providerModel || providerModel.providerId !== "local-llama") return null
   return normalizeToLocalModelId(providerModel.modelId)
 }
@@ -142,7 +142,7 @@ function onProcessExit(proc: Bun.Subprocess<"ignore", "pipe", "pipe">, model: Mo
 }
 
 export async function startLocalLLMServer(options?: { manual?: boolean; forceRestart?: boolean }): Promise<RuntimeStatus> {
-  const modelId = getConfiguredLocalModel()
+  const modelId = await getConfiguredLocalModel()
   if (!modelId) {
     throw new Error("No hay modelo local aplicado al enjambre")
   }
@@ -239,7 +239,7 @@ export async function maybeAutoStartLocalLLMServer(): Promise<void> {
   const config = readRuntimeConfig()
   if (!config.autoStart) return
 
-  const modelId = getConfiguredLocalModel()
+  const modelId = await getConfiguredLocalModel()
   if (!modelId) return
 
   const binaryPath = await findInstalledLlamaCppCLI()
@@ -254,7 +254,7 @@ export async function maybeAutoStartLocalLLMServer(): Promise<void> {
 }
 
 export async function getLocalLLMRuntimeStatus(): Promise<RuntimeStatus> {
-  const modelId = getConfiguredLocalModel()
+  const modelId = await getConfiguredLocalModel()
   const binaryPath = await findInstalledLlamaCppCLI()
   const serverRunning = await isHealthReady()
 

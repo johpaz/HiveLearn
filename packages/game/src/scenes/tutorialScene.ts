@@ -18,6 +18,7 @@ import { DialogBox } from '../ui/dialog'
 import type { OnboardingMessage } from '../bridge/gameBridge'
 import type { Game } from '../game'
 import { WorldMapScene } from './worldMapScene'
+import { HiveHubScene } from './hiveHubScene'
 
 const COLS = 60
 const ROWS = 18
@@ -46,10 +47,11 @@ export class TutorialScene extends Scene {
 
   enter() {
     const g = this.game
-    g.app.renderer.background.color = 0x8ecae6
-    g.audio.playMusic('prado')
+    g.app.renderer.background.color = g.themedSky(0xffe082)
+    g.audio.playMusic('jardin')
+    g.audio.setMusicTempo(g.theme.musicTempo)
 
-    // mapa fijo del tutorial: prado con un tronco (muro bajo) para saltar
+    // mapa fijo del tutorial: jardín con un muro de cera para saltar
     this.map = new Tilemap(COLS, ROWS)
     for (let c = 0; c < COLS; c++) {
       for (let r = GROUND; r < ROWS; r++) this.map.set(c, r, Tile.Ground)
@@ -63,7 +65,7 @@ export class TutorialScene extends Scene {
 
     this.camera = new Camera(g.viewW, g.viewH, this.map.widthPx, this.map.heightPx)
     this.root.addChild(this.world)
-    this.world.addChild(buildTilemapView(this.map, g.textures.tiles('prado')))
+    this.world.addChild(buildTilemapView(this.map, g.textures.tiles('jardin')))
 
     this.maya = new Npc(30 * TILE, GROUND * TILE, g.textures)
     this.world.addChild(this.maya.view)
@@ -95,9 +97,10 @@ export class TutorialScene extends Scene {
         this.genStatus.text = `🐝 Las abejas trabajan: ${mensaje} (${Math.round(porcentaje)}%)\nMientras tanto, ¡recoge polen!`
       }
     }))
-    this.unsubs.push(g.bridge.on('program:loaded', () => {
-      // el Game ya guardó world/progress; pasar al mapa
-      void g.goTo(new WorldMapScene(g))
+    this.unsubs.push(g.bridge.on('program:loaded', ({ reveal }) => {
+      // el Game ya guardó world/progress; con reveal la Reina presenta el mundo primero
+      if (reveal) void g.goTo(new HiveHubScene(g, 'reveal', reveal))
+      else void g.goTo(new WorldMapScene(g))
     }))
 
     void this.runControlsTutorial()
@@ -119,8 +122,8 @@ export class TutorialScene extends Scene {
   private async startConversation() {
     this.phase = 'conversation'
     await this.say('¡Lo lograste! Ya sabes moverte como toda una abeja. 🎉')
-    // avisar a React que estamos listos para el onboarding del pipeline
-    this.game.bridge.emit('game:ready', {})
+    // avisar a React que el tutorial está listo para recibir mensajes del onboarding
+    this.game.bridge.emit('tutorial:ready', {})
     // si no llega ningún mensaje del pipeline (modo demo), conversación local
     setTimeout(() => {
       if (!this.pendingMessage && this.phase === 'conversation' && !this.inDialog) {

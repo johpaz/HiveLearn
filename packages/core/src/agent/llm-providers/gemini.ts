@@ -77,7 +77,8 @@ export class GeminiProvider implements LLMProvider {
   }
 
   async call(options: LLMCallOptions): Promise<LLMResponse> {
-    const { GoogleGenAI } = await import("@google/genai")
+    const genai = await import("@google/genai")
+    const GoogleGenAI = (genai as any).GoogleGenAI ?? (genai as any).default
 
     const clientOpts: any = { apiKey: options.apiKey }
     if (options.baseUrl?.trim()) clientOpts.httpOptions = { baseUrl: options.baseUrl.trim() }
@@ -267,7 +268,7 @@ export class GeminiProvider implements LLMProvider {
         if (finishReason === 'MALFORMED_FUNCTION_CALL' && options.tools?.length === 1) {
           const firstTool = options.tools[0]
           try {
-            log.warn(`[llm-client] Gemini MALFORMED_FUNCTION_CALL — retrying as JSON for tool=${firstTool.name}`)
+            log.warn(`[llm-client] Gemini MALFORMED_FUNCTION_CALL — retrying as JSON for tool=${firstTool.function.name}`)
             const fallbackResp = await ai.models.generateContent({
               model: options.model || 'gemini-2.5-flash',
               contents: [
@@ -275,7 +276,7 @@ export class GeminiProvider implements LLMProvider {
                 {
                   role: 'user',
                   parts: [{
-                    text: `Tu llamada a función fue malformada. Responde SOLO con JSON válido con los argumentos para "${firstTool.name}". Esquema requerido: ${JSON.stringify(firstTool.parameters)}`,
+                    text: `Tu llamada a función fue malformada. Responde SOLO con JSON válido con los argumentos para "${firstTool.function.name}". Esquema requerido: ${JSON.stringify(firstTool.function.parameters)}`,
                   }],
                 },
               ],
@@ -284,14 +285,14 @@ export class GeminiProvider implements LLMProvider {
             const jsonText = fallbackResp.text?.trim() ?? ''
             if (jsonText) {
               JSON.parse(jsonText)
-              log.info(`[llm-client] Gemini MALFORMED fallback succeeded for tool=${firstTool.name}`)
+              log.info(`[llm-client] Gemini MALFORMED fallback succeeded for tool=${firstTool.function.name}`)
               return {
                 content: '',
                 stop_reason: 'tool_calls',
                 tool_calls: [{
                   id: `gemini-fallback-${Date.now()}`,
                   type: 'function' as const,
-                  function: { name: firstTool.name, arguments: jsonText },
+                  function: { name: firstTool.function.name, arguments: jsonText },
                 }],
                 usage: undefined,
               }

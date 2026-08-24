@@ -10,10 +10,14 @@
  * @see https://bun.com/docs/runtime/secrets
  */
 
-import { getDb } from '../storage/sqlite'
+import { getDb } from '../storage/hivedb'
 import { logger } from '../utils/logger'
 
 const log = logger.child('provider-secrets')
+
+interface ProviderActiveDoc {
+  active: number
+}
 
 interface SecretId {
   service: string  // Nombre de la aplicación
@@ -63,8 +67,11 @@ export async function storeProviderApiKey(
     })
 
     // Marcar en BD que tiene key (sin guardar el valor)
-    const db = getDb()
-    db.run('UPDATE providers SET active = 1 WHERE id = ?', [providerId])
+    const providers = getDb().collection<ProviderActiveDoc>('providers')
+    const existing = await providers.get(providerId)
+    if (existing) {
+      await providers.put(providerId, { ...existing.doc, active: 1 })
+    }
     
     log.debug('[store] Database updated', { providerId })
   } catch (error) {
@@ -187,11 +194,11 @@ export async function deleteProviderApiKey(
     })
 
     // Limpiar en BD
-    const db = getDb()
-    db.run(
-      'UPDATE providers SET active = 0 WHERE id = ?',
-      [providerId]
-    )
+    const providers = getDb().collection<ProviderActiveDoc>('providers')
+    const existing = await providers.get(providerId)
+    if (existing) {
+      await providers.put(providerId, { ...existing.doc, active: 0 })
+    }
     
     log.debug('[delete] Database updated', { providerId })
   } catch (error) {
@@ -215,8 +222,8 @@ export async function listProvidersWithKeys(): Promise<string[]> {
   log.debug('[list] Listing providers with keys')
 
   try {
-    const db = getDb()
-    const rows = db.query('SELECT id FROM providers WHERE active = 1').all() as Array<{ id: string }>
+    const providers = getDb().collection<ProviderActiveDoc>('providers')
+    const rows = (await providers.scan()).filter(e => e.doc.active === 1)
     const providersWithKeys: string[] = []
 
     for (const row of rows) {

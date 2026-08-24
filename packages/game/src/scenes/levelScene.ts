@@ -20,6 +20,8 @@ import { ContentPanel } from '../ui/contentPanel'
 import type { Game } from '../game'
 import { BossScene } from './bossScene'
 import { WorldMapScene } from './worldMapScene'
+import { buildLevelScene3D } from '../engine/three/builders'
+import type { Scene3D } from '../engine/three/worldRenderer'
 
 export class LevelScene extends Scene {
   private world = new Container()
@@ -33,6 +35,7 @@ export class LevelScene extends Scene {
   private blocks: QuestionBlock[] = []
   private coins: Coin[] = []
   private wasps: Wasp[] = []
+  private scene3d: Scene3D | null = null
   private coinsCollected = 0
   private hearts = 3
   private checkpoint: { x: number; y: number } | null = null
@@ -47,7 +50,7 @@ export class LevelScene extends Scene {
   enter() {
     const g = this.game
     const colors = THEME_COLORS[this.spec.theme]
-    g.app.renderer.background.color = colors.sky
+    g.app.renderer.background.color = g.themedSky(colors.sky)
 
     this.level = generateLevel(this.spec)
     this.camera = new Camera(g.viewW, g.viewH, this.level.map.widthPx, this.level.map.heightPx)
@@ -117,11 +120,26 @@ export class LevelScene extends Scene {
     this.ttsUnsub = g.bridge.on('tts:ready', ({ url }) => this.panel.setTtsUrl(url))
 
     g.audio.playMusic(this.spec.theme)
+    g.audio.setMusicTempo(g.theme.musicTempo)
+
+    // 3D background behind Pixi (sky + polen ambiental)
+    if (g.worldRenderer.isAlive) {
+      this.scene3d = buildLevelScene3D()
+      g.worldRenderer.setScene(this.scene3d)
+      // fondo Pixi transparente para dejar ver el cielo 3D
+      // (clear negro: RGB con alpha 0 se compone aditivo en contexto PMA)
+      g.app.renderer.background.color = 0x000000
+      g.app.renderer.background.alpha = 0
+    }
   }
 
   exit() {
     this.ttsUnsub?.()
     this.game.audio.stopVoice()
+    this.scene3d?.dispose?.()
+    this.scene3d = null
+    this.game.worldRenderer.setScene(null)
+    this.game.app.renderer.background.alpha = 1
   }
 
   private openedCount(): number {
@@ -226,6 +244,7 @@ export class LevelScene extends Scene {
     this.hud.update(dt)
     this.camera.follow(this.player.centerX, this.player.centerY, this.player.body.vx, dt)
     this.camera.apply(this.world)
+    this.game.worldRenderer.setCameraFocus(this.player.centerX, this.player.centerY)
   }
 
   private checkBlockHits() {

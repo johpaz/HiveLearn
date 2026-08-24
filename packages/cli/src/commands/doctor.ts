@@ -2,7 +2,7 @@ import * as p from "@clack/prompts";
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
-import { loadConfig, getHiveDir, initializeDatabase } from "@hivelearn/core";
+import { loadConfig, getHiveDir, getDbPath } from "@hivelearn/core";
 import {
   detectAdapter,
   detectAllAdapters,
@@ -12,7 +12,7 @@ import {
 
 const getHiveDirConst = () => getHiveDir();
 const getPidFile = () => path.join(getHiveDirConst(), "gateway.pid");
-const getDbFile = () => path.join(getHiveDirConst(), "data", "hive.db");
+const getDbDir = () => getDbPath();
 
 function checkBun(): { ok: boolean; version: string } {
   try {
@@ -135,11 +135,11 @@ export async function doctor(): Promise<void> {
     checks.push({ category: "Sistema", name: "Directorio Hive", status: "error", message: "no existe", hint: "Ejecuta 'hive onboard'" });
   }
 
-  // Base de Datos
-  if (fs.existsSync(getDbFile())) {
-    checks.push({ category: "Sistema", name: "Base de Datos", status: "ok", message: "hive.db presente" });
+  // Base de Datos (HiveDB — directorio redb, no sqlite)
+  if (fs.existsSync(getDbDir())) {
+    checks.push({ category: "Sistema", name: "Base de Datos", status: "ok", message: "hivedb presente" });
   } else {
-    checks.push({ category: "Sistema", name: "Base de Datos", status: "warn", message: "hive.db no existe" });
+    checks.push({ category: "Sistema", name: "Base de Datos", status: "warn", message: "hivedb no existe" });
   }
 
   // Configuración (In-memory/Env)
@@ -167,7 +167,7 @@ export async function doctor(): Promise<void> {
   let workspacePath: string | null = null;
   try {
     const { initializeDatabase, getDb } = await import("@hivelearn/core");
-    initializeDatabase();
+    await initializeDatabase();
     const db = getDb();
     // Try to get workspace from config or environment
     workspacePath = process.env.HIVE_WORKSPACE || path.join(getHiveDirConst(), "workspace");
@@ -189,38 +189,32 @@ export async function doctor(): Promise<void> {
   const running = isGatewayRunning();
   checks.push({ category: "Gateway", name: "Estado", status: running ? "ok" : "warn", message: running ? "corriendo" : "detenido" });
 
-  // HiveLearn — verificar tablas y Ollama
+  // HiveLearn — verificar colecciones y Ollama
   try {
     const { getDb } = await import("@hivelearn/core");
     const db = getDb();
 
-    // Verificar si el schema de HiveLearn está aplicado
-    const hlTables = ["hl_topics", "hl_sessions", "hl_student_profiles"];
-    const missingTables: string[] = [];
-    for (const table of hlTables) {
-      const exists = db.query(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name=?`
-      ).get(table);
-      if (!exists) missingTables.push(table);
+    // En HiveDB las "tablas" son colecciones: existen si tienen documentos
+    const hlCollections = ["hl_topics", "hl_sessions", "hl_student_profiles"];
+    const counts: Record<string, number> = {};
+    for (const name of hlCollections) {
+      counts[name] = await db.collection(name).count();
     }
 
-    if (missingTables.length === 0) {
-      // Contar temas cargados
-      const topicsRow = db.query("SELECT COUNT(*) as n FROM hl_topics").get() as { n: number } | null;
-      const nTopics = topicsRow?.n ?? 0;
+    if (counts["hl_topics"] > 0) {
       checks.push({
         category: "HiveLearn",
         name: "Schema",
         status: "ok",
-        message: `tablas presentes, ${nTopics} temas en catálogo`,
+        message: `colecciones presentes, ${counts["hl_topics"]} temas en catálogo`,
       });
     } else {
       checks.push({
         category: "HiveLearn",
         name: "Schema",
         status: "warn",
-        message: `tablas faltantes: ${missingTables.join(", ")}`,
-        hint: "El schema se aplica al arrancar el gateway. Ejecuta 'hive start' una vez.",
+        message: "catálogo de temas vacío (seed no aplicado)",
+        hint: "El seed se aplica al arrancar el gateway. Ejecuta 'hivelearn start' una vez.",
       });
     }
   } catch {

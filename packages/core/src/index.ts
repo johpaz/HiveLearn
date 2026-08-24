@@ -56,6 +56,13 @@ export { calificarEvaluacionTool, calificarRespuestaTool } from './tools/evaluat
 export { AGENT_IDS, updateHiveLearnAgentsProviderModel } from './agent/registry'
 export { AGENT_PROMPTS } from './agent/prompts'
 export { runHiveLearnAgent } from './agent/runner'
+export {
+  createGenerationRun,
+  getGenerationRun,
+  listGenerationRuns,
+  reconcileGenerationRuns,
+} from './agent/run-store'
+export type { GenerationRun, GenerationRunStatus } from './agent/run-store'
 export { runHiveLearnConversation } from './agent/conversation'
 export type { ConversationResult } from './agent/conversation'
 
@@ -71,7 +78,7 @@ export { initHiveLearnStorage } from './storage/init'
 export { initHiveLearnStorage as initHiveLearn } from './storage/init'
 
 // ─── Database ─────────────────────────────────────────────────────────────────
-export { getDb, initializeDatabase, getDbPath } from './storage/sqlite'
+export { getDb, initializeDatabase, getDbPath } from './storage/hivedb'
 export { seedAllData } from './storage/seed'
 
 // ─── Logger ───────────────────────────────────────────────────────────────────

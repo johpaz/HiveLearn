@@ -13,6 +13,8 @@ import type { StudentProfile, LessonProgram } from '../../types'
 
 export interface RunSessionOptions {
   onProgress?: ProgressCallback
+  /** Reanuda un run de generación interrumpido (checkpoint de blueprint + outputs por nodo) */
+  resumeSessionId?: string
 }
 
 export async function runHiveLearnSession(
@@ -23,24 +25,27 @@ export async function runHiveLearnSession(
   const persistence = new LessonPersistence()
 
   // 1. Persistir perfil
-  const persistedProfile = persistence.ensureStudentProfile(perfil)
+  const persistedProfile = await persistence.ensureStudentProfile(perfil)
 
   // 2. Correr enjambre
   const swarm = new HiveLearnSwarm({ onProgress: opts.onProgress })
-  const program = await swarm.run(persistedProfile, meta)
+  const program = await swarm.run(persistedProfile, meta, { resumeSessionId: opts.resumeSessionId })
 
-  // 3. Persistir currículum
-  const curriculoId = persistence.saveCurriculum(
-    program.sessionId,
-    meta,
-    JSON.stringify(program.nodos),
-    program.nodos.length,
-    program.rangoEdad,
-    program.topicSlug,
-  )
+  // 3. Persistir currículum (skip si la sesión ya tiene uno — reanudación)
+  const existingSession = await persistence.getSessionWithCurriculum(program.sessionId)
+  if (!existingSession) {
+    const curriculoId = await persistence.saveCurriculum(
+      program.sessionId,
+      meta,
+      JSON.stringify(program.nodos),
+      program.nodos.length,
+      program.rangoEdad,
+      program.topicSlug,
+    )
 
-  // 4. Crear sesión en BD
-  persistence.createSession(program.sessionId, persistedProfile.alumnoId, curriculoId, program.rangoEdad)
+    // 4. Crear sesión en BD
+    await persistence.createSession(program.sessionId, persistedProfile.alumnoId, curriculoId, program.rangoEdad)
+  }
 
   return program
 }

@@ -18,6 +18,7 @@ import { NvidiaProvider } from "./nvidia"
 import { QwenProvider } from "./qwen"
 import { AnthropicProvider } from "./anthropic"
 import { GeminiProvider } from "./gemini"
+import { HiveAgentsProvider } from "./hiveagents"
 
 const providerFactories: Record<string, () => LLMProvider> = {
   ollama:      () => new OllamaProvider(),
@@ -32,6 +33,7 @@ const providerFactories: Record<string, () => LLMProvider> = {
   qwen:        () => new QwenProvider(),
   anthropic:   () => new AnthropicProvider(),
   gemini:      () => new GeminiProvider(),
+  hiveagents:  () => new HiveAgentsProvider(),
 }
 
 export function getProvider(providerId: string): LLMProvider {

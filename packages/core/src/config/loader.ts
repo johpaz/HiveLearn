@@ -7,7 +7,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { logger } from '../utils/logger'
-import { getDbPath } from '../storage/sqlite'
 
 const log = logger.child('config')
 

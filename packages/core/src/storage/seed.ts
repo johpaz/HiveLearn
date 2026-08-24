@@ -1,4 +1,5 @@
-import { getDb } from "./sqlite"
+import type { IndexDoc } from "@johpaz/hive-db"
+import { getDb, nowIso } from "./hivedb"
 import { logger } from "../utils/logger"
 import * as toolCatalog from "../tools"
 import * as skillCatalog from "../skills"
@@ -8,6 +9,9 @@ import type { Tool } from "../types/tool"
  * Seed de datos predeterminados para Hive
  * Las tools se crean con enabled=1 (disponibles) y active=1 (activas por defecto)
  * El usuario puede desactivarlas desde la UI si no las necesita
+ *
+ * Motor: @johpaz/hive-db. El seed es idempotente: los catálogos se reescriben
+ * en cada arranque (put-overwrite) para que los cambios de código tomen efecto.
  */
 
 export interface SeedData {
@@ -26,6 +30,67 @@ interface SearchSkill {
   steps?: Array<{ name: string; description?: string }>
 }
 
+export interface ProviderDoc {
+  name: string
+  api_key_encrypted: string | null
+  api_key_iv: string | null
+  headers_encrypted: string | null
+  headers_iv: string | null
+  base_url: string | null
+  category: string
+  num_ctx: number | null
+  num_gpu: number
+  enabled: number
+  active: number
+  created_at: number
+}
+
+export interface ModelDoc {
+  provider_id: string
+  name: string
+  model_type: string
+  context_window: number
+  capabilities: string | null
+  enabled: number
+  active: number
+}
+
+interface TopicDoc {
+  titulo: string
+  descripcion: string | null
+  nivel: string | null
+  categoria: string | null
+  keywords: string
+  activo: number
+  created_at: string
+}
+
+export interface SearchIndexDoc {
+  entidad_tipo: string
+  entidad_id: string
+  contenido_texto: string
+  metadata_json: string | null
+  created_at: string
+}
+
+/** Catálogo inicial de temas (antes seed SQL v1, INSERT OR IGNORE) */
+const SEED_TOPICS: Array<{ slug: string; titulo: string; nivel: string; categoria: string; keywords: string }> = [
+  { slug: 'javascript-basico', titulo: 'JavaScript básico', nivel: 'principiante', categoria: 'programacion', keywords: '["javascript","js","variables","funciones","arrays"]' },
+  { slug: 'python-cero', titulo: 'Python desde cero', nivel: 'principiante', categoria: 'programacion', keywords: '["python","variables","bucles","funciones"]' },
+  { slug: 'html-css', titulo: 'HTML y CSS para principiantes', nivel: 'principiante', categoria: 'programacion', keywords: '["html","css","web","diseño"]' },
+  { slug: 'typescript-intermedio', titulo: 'TypeScript intermedio', nivel: 'intermedio', categoria: 'programacion', keywords: '["typescript","tipos","interfaces","generics"]' },
+  { slug: 'nodejs-apis', titulo: 'Node.js y APIs REST', nivel: 'intermedio', categoria: 'programacion', keywords: '["nodejs","api","rest","express","bun","elysia"]' },
+  { slug: 'algoritmos', titulo: 'Algoritmos y estructuras de datos', nivel: 'avanzado', categoria: 'programacion', keywords: '["algoritmos","arrays","arboles","grafos"]' },
+  { slug: 'ia-basica', titulo: 'Inteligencia artificial básica', nivel: 'principiante', categoria: 'ia', keywords: '["ia","machine learning","modelos","datos"]' },
+  { slug: 'prompt-engineering', titulo: 'Prompt engineering práctico', nivel: 'principiante', categoria: 'ia', keywords: '["prompts","llm","claude","gemma","chatgpt"]' },
+  { slug: 'ml-python', titulo: 'Machine learning con Python', nivel: 'intermedio', categoria: 'ia', keywords: '["sklearn","regresion","clasificacion","datos"]' },
+  { slug: 'agentes-hive', titulo: 'Agentes de IA con Hive', nivel: 'intermedio', categoria: 'ia', keywords: '["agentes","hive","enjambre","tools","skills"]' },
+  { slug: 'sql-basico', titulo: 'SQL para principiantes', nivel: 'principiante', categoria: 'datos', keywords: '["sql","bases de datos","consultas","tablas"]' },
+  { slug: 'analisis-datos', titulo: 'Análisis de datos con Python', nivel: 'intermedio', categoria: 'datos', keywords: '["pandas","numpy","matplotlib","datos"]' },
+  { slug: 'diseno-ui', titulo: 'Diseño UI básico', nivel: 'principiante', categoria: 'diseno', keywords: '["ui","ux","colores","tipografia","componentes"]' },
+  { slug: 'figma-cero', titulo: 'Figma desde cero', nivel: 'principiante', categoria: 'diseno', keywords: '["figma","prototipo","wireframe","diseño"]' },
+]
+
 export const SEED_DATA: SeedData = {
   providers: [
     { id: "anthropic", name: "Anthropic", baseUrl: "https://api.anthropic.com" },
@@ -42,6 +107,7 @@ export const SEED_DATA: SeedData = {
     { id: "qwen", name: "Qwen (Alibaba)", baseUrl: "https://dashscope.aliyuncs.com/api/v1" },
     { id: "nvidia", name: "NVIDIA NIM", baseUrl: "https://integrate.api.nvidia.com/v1" },
     { id: "local-tts", name: "TTS Local (Piper)", baseUrl: "http://localhost:5500", category: "tts" },
+    { id: "hiveagents", name: "HiveAgents", baseUrl: "https://llm.hiveagents.io/v1", category: "llm" },
   ],
 
   models: [
@@ -73,7 +139,6 @@ export const SEED_DATA: SeedData = {
     { id: "gemini-2.5-flash", providerId: "gemini", name: "Gemini 2.5 Flash", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming", "reasoning"]) },
     { id: "gemini-2.0-flash", providerId: "gemini", name: "Gemini 2.0 Flash", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
     { id: "gemini-2.0-flash-lite", providerId: "gemini", name: "Gemini 2.0 Flash Lite", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
-    { id: "gemini-3-flash-preview", providerId: "gemini", name: "Gemini 3 Flash Preview", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
 
 
     // TTS
@@ -116,7 +181,6 @@ export const SEED_DATA: SeedData = {
     { id: "google/gemini-3.1-flash-lite-preview", providerId: "openrouter", name: "Gemini 3.1 Flash Lite (OR)", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
     { id: "google/gemini-3-flash-preview", providerId: "openrouter", name: "Gemini 3 Flash (OR)", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
     { id: "google/gemini-2.5-flash", providerId: "openrouter", name: "Gemini 2.5 Flash (OR)", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
-    { id: "google/gemini-3-flash-preview", providerId: "openrouter", name: "Gemini 3 Flash (OR)", modelType: "llm", contextWindow: 1048576, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
     // Meta Llama
     { id: "meta-llama/llama-3.3-70b-instruct", providerId: "openrouter", name: "Llama 3.3 70B", modelType: "llm", contextWindow: 128000, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming"]) },
     { id: "meta-llama/llama-4-maverick", providerId: "openrouter", name: "Llama 4 Maverick", modelType: "llm", contextWindow: 524288, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
@@ -127,8 +191,8 @@ export const SEED_DATA: SeedData = {
     { id: "moonshotai/kimi-k2.5", providerId: "openrouter", name: "Kimi K2.5 (OR)", modelType: "llm", contextWindow: 262144, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming", "code"]) },
     // Qwen
     { id: "qwen/qwen3.5-plus-02-15", providerId: "openrouter", name: "Qwen3.5 Plus", modelType: "llm", contextWindow: 1000000, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming", "reasoning"]) },
-    { id: "qwen/qwen3.5-flash-02-23", providerId: "openrouter", name: "Qwen3.5 Flash", modelType: "llm", contextWindow: 1000000, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming"]) },
-    { id: "qwen/qwen3-next-80b-a3b-instruct:free", providerId: "openrouter", name: "Qwen3 Next 80B", modelType: "llm", contextWindow: 1000000, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming"]) },
+    { id: "qwen/qwen3.5-flash-02-23", providerId: "openrouter", name: "Qwen3.5 Flash", modelType: "llm", contextWindow: 1000000, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
+    { id: "qwen/qwen3-next-80b-a3b-instruct:free", providerId: "openrouter", name: "Qwen3 Next 80B", modelType: "llm", contextWindow: 1000000, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
     { id: "qwen/qwen3-coder:free", providerId: "openrouter", name: "Qwen3 Coder", modelType: "llm", contextWindow: 1000000, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming"]) },
 
 
@@ -176,8 +240,19 @@ export const SEED_DATA: SeedData = {
     { id: "moonshotai/kimi-k2-thinking", providerId: "nvidia", name: "Kimi K2 Thinking (NVIDIA)", modelType: "llm", contextWindow: 262144, capabilities: JSON.stringify(["chat", "reasoning", "function_calling", "streaming"]) },
     { id: "mistralai/mistral-large-3-675b-instruct-2512", providerId: "nvidia", name: "Mistral Large 3 (NVIDIA)", modelType: "llm", contextWindow: 131072, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming"]) },
     { id: "google/gemma-4-31b-it", providerId: "nvidia", name: "Gemma 4 31B (NVIDIA)", modelType: "llm", contextWindow: 262144, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
-    { id: "google/gemma-3-27b-it", providerId: "nvidia", name: "Gemma 3 27B (NVIDIA)", modelType: "llm", contextWindow: 131072, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
+    { id: "google/gemma-3-27b-it", providerId: "nvidia", name: "Gemma 3 27B (NVIDIA)", modelType: "llm", contextWindow: 262144, capabilities: JSON.stringify(["chat", "vision", "json_mode", "function_calling", "streaming"]) },
     { id: "z-ai/glm-5.1", providerId: "nvidia", name: "GLM 5.1 (NVIDIA)", modelType: "llm", contextWindow: 131072, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming"]) },
+
+    // ── HiveAgents (backend GGUF propio) ──
+    { id: "Qwen3.6-35B-A3B-UD-Q6_K.gguf",    providerId: "hiveagents", name: "Qwen3.6 35B MoE (Recomendado)", modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
+    { id: "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",   providerId: "hiveagents", name: "Qwen3.6 35B MoE Q4_K_M",        modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
+    { id: "Qwen3.6-27B-UD-Q4_K_XL.gguf",      providerId: "hiveagents", name: "Qwen3.6 27B + MTP",             modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
+    { id: "Qwen3-Coder-Next-UD-Q4_K_M.gguf",  providerId: "hiveagents", name: "Qwen3 Coder Next",              modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "code"]) },
+    { id: "Qwopus3.6-27B-v2-MTP-Q6_K.gguf",   providerId: "hiveagents", name: "Qwopus 3.6 27B MTP Q6_K",       modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
+    { id: "Qwopus3.6-27B-v2-MTP-Q4_K_S.gguf", providerId: "hiveagents", name: "Qwopus 3.6 27B MTP Q4_K_S",     modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
+    { id: "gemma-4-31B-it-UD-Q4_K_XL.gguf",   providerId: "hiveagents", name: "Gemma 4 31B Dense",             modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming"]) },
+    { id: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf", providerId: "hiveagents", name: "Gemma 4 26B MoE",               modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming"]) },
+    { id: "gemma-4-12b-it-UD-Q4_K_XL.gguf",   providerId: "hiveagents", name: "Gemma 4 12B Dense",             modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming"]) },
   ],
 
 
@@ -226,105 +301,167 @@ function buildSkillSearchText(skill: SearchSkill): string {
   ].filter(Boolean).join("\n")
 }
 
-function seedSearchIndex(): void {
+async function seedSearchIndex(): Promise<void> {
   const db = getDb()
   const tools = Object.values(toolCatalog).filter(isToolCandidate)
   const skills = Object.values(skillCatalog).filter(isSkillCandidate)
+  const searchCol = db.collection<SearchIndexDoc>("hl_search_index")
 
-  const deleteIndex = db.prepare(`DELETE FROM hl_search_index WHERE entidad_tipo = ?`)
-  const deleteFts = db.prepare(`DELETE FROM hl_search_fts WHERE entidad_tipo = ?`)
-  const insertIndex = db.prepare(`
-    INSERT INTO hl_search_index (entidad_tipo, entidad_id, contenido_texto, metadata_json)
-    VALUES (?, ?, ?, ?)
-  `)
-  const insertFts = db.prepare(`
-    INSERT INTO hl_search_fts (contenido_texto, entidad_tipo, entidad_id, metadata_json)
-    VALUES (?, ?, ?, ?)
-  `)
-
-  const tx = db.transaction(() => {
-    for (const entityType of ["tool", "skill"] as const) {
-      deleteIndex.run(entityType)
-      deleteFts.run(entityType)
+  // Limpiar entradas previas del índice (tool/skill) en ambos motores
+  const previous = await searchCol.scan()
+  for (const entry of previous) {
+    if (entry.doc.entidad_tipo === "tool" || entry.doc.entidad_tipo === "skill") {
+      await searchCol.delete(entry.id)
     }
+  }
+  await db.deleteByFilter({ field: "type", value: "tool" })
+  await db.deleteByFilter({ field: "type", value: "skill" })
 
-    for (const tool of tools) {
-      const metadata = JSON.stringify({
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-        source: "seed",
-      })
-      const content = buildToolSearchText(tool)
-      insertIndex.run("tool", tool.name, content, metadata)
-      insertFts.run(content, "tool", tool.name, metadata)
-    }
+  const indexDocs: IndexDoc[] = []
 
-    for (const skill of skills) {
-      const metadata = JSON.stringify({
-        name: skill.name,
-        version: skill.version ?? null,
-        description: skill.description,
-        category: skill.category ?? null,
-        icon: skill.icon ?? null,
-        tools: skill.tools ?? [],
-        triggers: skill.triggers ?? [],
-        steps: skill.steps ?? [],
-        source: "seed",
-      })
-      const content = buildSkillSearchText(skill)
-      insertIndex.run("skill", skill.name, content, metadata)
-      insertFts.run(content, "skill", skill.name, metadata)
-    }
-  })
+  for (const tool of tools) {
+    const metadata = JSON.stringify({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      source: "seed",
+    })
+    const content = buildToolSearchText(tool)
+    await searchCol.put(`tool:${tool.name}`, {
+      entidad_tipo: "tool",
+      entidad_id: tool.name,
+      contenido_texto: content,
+      metadata_json: metadata,
+      created_at: nowIso(),
+    })
+    indexDocs.push({
+      id: `tool:${tool.name}`,
+      name: tool.name,
+      body: content,
+      tags: `tool ${tool.name.replace(/_/g, " ")}`,
+      filters: [{ field: "type", value: "tool" }],
+    })
+  }
 
-  tx()
-  log.info(`[seed] ✅ Índice FTS5 actualizado con ${tools.length} tools y ${skills.length} skills`)
+  for (const skill of skills) {
+    const metadata = JSON.stringify({
+      name: skill.name,
+      version: skill.version ?? null,
+      description: skill.description,
+      category: skill.category ?? null,
+      icon: skill.icon ?? null,
+      tools: skill.tools ?? [],
+      triggers: skill.triggers ?? [],
+      steps: skill.steps ?? [],
+      source: "seed",
+    })
+    const content = buildSkillSearchText(skill)
+    await searchCol.put(`skill:${skill.name}`, {
+      entidad_tipo: "skill",
+      entidad_id: skill.name,
+      contenido_texto: content,
+      metadata_json: metadata,
+      created_at: nowIso(),
+    })
+    indexDocs.push({
+      id: `skill:${skill.name}`,
+      name: skill.name,
+      body: content,
+      tags: ["skill", skill.category ?? "", ...(skill.triggers ?? [])].filter(Boolean).join(" "),
+      filters: [{ field: "type", value: "skill" }],
+    })
+  }
+
+  if (indexDocs.length > 0) {
+    await db.upsertBatch(indexDocs)
+  }
+  log.info(`[seed] ✅ Índice semántico actualizado con ${tools.length} tools y ${skills.length} skills`)
 }
 
-// Initial playbook rules for ACE (Agentic Context Engineering)
+/** Seed del catálogo de temas (INSERT OR IGNORE — no pisa cambios manuales) */
+async function seedTopics(): Promise<void> {
+  const topics = getDb().collection<TopicDoc>("hl_topics")
+  for (const topic of SEED_TOPICS) {
+    const existing = await topics.get(topic.slug)
+    if (existing) continue
+    await topics.put(topic.slug, {
+      titulo: topic.titulo,
+      descripcion: null,
+      nivel: topic.nivel,
+      categoria: topic.categoria,
+      keywords: topic.keywords,
+      activo: 1,
+      created_at: nowIso(),
+    })
+  }
+}
 
-
-
-
-
-export function seedAllData(): void {
+export async function seedAllData(): Promise<void> {
   const db = getDb()
 
   log.info("[seed] 🌱 Iniciando seed de datos predeterminados...")
   log.info(`[seed] SEED_DATA.models.length = ${SEED_DATA.models.length}`)
 
   try {
-    // 1️⃣ Providers
+    // 0️⃣ Topics educativos
+    await seedTopics()
+
+    // 1️⃣ Providers (INSERT OR IGNORE — no pisa API keys ni base_url del usuario)
+    const providers = db.collection<ProviderDoc>("providers")
     let providerCount = 0;
     for (const provider of SEED_DATA.providers) {
-      db.query(`
-        INSERT OR IGNORE INTO providers (id, name, base_url, category, enabled, active)
-        VALUES (?, ?, ?, ?, 1, 0)
-      `).run(provider.id, provider.name, provider.baseUrl || null, provider.category || 'llm')
+      const existing = await providers.get(provider.id)
+      if (!existing) {
+        await providers.put(provider.id, {
+          name: provider.name,
+          api_key_encrypted: null,
+          api_key_iv: null,
+          headers_encrypted: null,
+          headers_iv: null,
+          base_url: provider.baseUrl || null,
+          category: provider.category || 'llm',
+          num_ctx: null,
+          num_gpu: -1,
+          enabled: 1,
+          active: 0,
+          created_at: Math.floor(Date.now() / 1000),
+        })
+      }
       providerCount++;
     }
     // If OLLAMA_HOST is set (e.g. Docker pointing to host machine), always update Ollama's base_url
     const ollamaHost = process.env.OLLAMA_HOST;
     if (ollamaHost) {
-      db.query(`UPDATE providers SET base_url = ? WHERE id = 'ollama'`).run(ollamaHost);
+      const ollama = await providers.get('ollama')
+      if (ollama) {
+        await providers.put('ollama', { ...ollama.doc, base_url: ollamaHost })
+      }
       log.info(`[seed] ✅ Ollama base_url set to ${ollamaHost} (from OLLAMA_HOST env)`);
     }
     log.info(`[seed] ✅ ${providerCount} providers procesados`);
 
-    // 2️⃣ Models
+    // 2️⃣ Models (INSERT OR IGNORE)
+    const models = db.collection<ModelDoc>("models")
     let modelCount = 0;
     const insertedModels: string[] = [];
     const skippedModels: string[] = [];
     for (const model of SEED_DATA.models) {
       try {
-        db.query(`
-          INSERT OR IGNORE INTO models (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
-          VALUES (?, ?, ?, ?, ?, ?, 1, 0)
-        `).run(model.id, model.providerId, model.name, model.modelType, model.contextWindow ?? 20000, model.capabilities ?? null)
+        const existing = await models.get(model.id)
+        if (!existing) {
+          await models.put(model.id, {
+            provider_id: model.providerId,
+            name: model.name,
+            model_type: model.modelType,
+            context_window: model.contextWindow ?? 20000,
+            capabilities: model.capabilities ?? null,
+            enabled: 1,
+            active: 0,
+          })
+        }
         modelCount++;
         // Verificar si el modelo existe después del insert
-        const exists = db.query('SELECT 1 FROM models WHERE id = ?').get(model.id);
+        const exists = await models.get(model.id);
         if (exists) insertedModels.push(model.id);
         else skippedModels.push(model.id);
       } catch (err) {
@@ -337,7 +474,7 @@ export function seedAllData(): void {
       log.warn(`[seed] ⚠️  ${skippedModels.length} models saltados: ${skippedModels.join(', ')}`);
     }
     log.info(`[seed] ✅ ${modelCount} models procesados, ${insertedModels.length} insertados`);
-    seedSearchIndex()
+    await seedSearchIndex()
 
 
   } catch (err) {
@@ -345,52 +482,59 @@ export function seedAllData(): void {
   }
 }
 
-export function seedToolsAndSkills(): void {
-  seedAllData()
+export async function seedToolsAndSkills(): Promise<void> {
+  await seedAllData()
 }
 
 /**
  * Activa un elemento específico (los datos son globales, solo actualizamos active)
  */
-export function activateElement(
+export async function activateElement(
   table: "providers" | "models",
   elementId: string
-): void {
+): Promise<void> {
   const db = getDb()
-  db.query(`UPDATE ${table} SET active = 1, enabled = 1 WHERE id = ?`).run(elementId)
+  const col = db.collection<Record<string, any>>(table)
+  const existing = await col.get(elementId)
+  if (existing) {
+    await col.put(elementId, { ...existing.doc, active: 1, enabled: 1 })
+  }
   log.info(`[seed] ✅ Activado ${elementId} en ${table}`)
 }
 
 /**
  * Desactiva un elemento específico
  */
-export function deactivateElement(
+export async function deactivateElement(
   table: "providers" | "models" | "tools" | "skills" | "mcp_servers" | "channels",
   elementId: string
-): void {
+): Promise<void> {
   const db = getDb()
-  db.query(`UPDATE ${table} SET active = 0, enabled = 0 WHERE id = ?`).run(elementId)
+  const col = db.collection<Record<string, any>>(table)
+  const existing = await col.get(elementId)
+  if (existing) {
+    await col.put(elementId, { ...existing.doc, active: 0, enabled: 0 })
+  }
   log.warn(`[seed] ⚠️  Desactivado ${elementId} en ${table}`)
 }
 
 /**
  * Obtiene todos los elementos disponibles (activos e inactivos)
  */
-export function getAllElements<T extends Record<string, any>>(
+export async function getAllElements<T extends Record<string, any>>(
   table: string
-): T[] {
+): Promise<T[]> {
   const db = getDb()
-  const results = db.query<T, []>(`SELECT * FROM ${table}`).all()
-  return results
+  const entries = await db.collection<T>(table).scan()
+  return entries.map(e => ({ id: e.id, ...e.doc }) as T)
 }
 
 /**
  * Obtiene todos los elementos activos
  */
-export function getActiveElements<T extends Record<string, any>>(
+export async function getActiveElements<T extends Record<string, any>>(
   table: string
-): T[] {
-  const db = getDb()
-  const results = db.query<T, []>(`SELECT * FROM ${table} WHERE active = 1`).all()
-  return results
+): Promise<T[]> {
+  const all = await getAllElements<T & { active?: number }>(table)
+  return all.filter(el => el.active === 1) as T[]
 }

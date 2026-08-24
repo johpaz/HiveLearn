@@ -1,9 +1,16 @@
 import type { Tool } from '../../types/tool'
-import { getDb } from '../../storage/sqlite'
+import { getDb } from '../../storage/hivedb'
+
+interface CurriculaDoc {
+  topic_slug: string | null
+  rango_edad: string | null
+  created_at?: string
+  [key: string]: unknown
+}
 
 export const buscarCurriculoExistenteTool: Tool = {
   name: 'buscar_curriculo_existente',
-  description: 'Busca un currículo cacheado en SQLite por topic_slug y rango_edad',
+  description: 'Busca un currículo cacheado en HiveDB por topic_slug y rango_edad',
   parameters: {
     type: 'object',
     properties: {
@@ -15,9 +22,12 @@ export const buscarCurriculoExistenteTool: Tool = {
   execute: async (params) => {
     try {
       const db = getDb()
-      const curriculo = db.query(
-        `SELECT * FROM hl_curricula WHERE topic_slug = ? AND rango_edad = ? ORDER BY created_at DESC LIMIT 1`
-      ).get(params.topic_slug as string, params.rango_edad as string) as any
+      const matches = await db.collection<CurriculaDoc>('hl_curricula')
+        .findBy('topic_slug', params.topic_slug as string)
+      const curriculo = matches
+        .map(m => ({ id: m.id, ...m.doc }))
+        .filter(c => c.rango_edad === (params.rango_edad as string))
+        .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))[0]
       if (!curriculo) return { ok: true, encontrado: false }
       return { ok: true, encontrado: true, curriculo }
     } catch {

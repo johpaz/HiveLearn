@@ -23,6 +23,8 @@ export class TouchControls {
     this.addButton('▶', 'right', (_w) => MARGIN + BTN_RADIUS * 3.4, (h) => h - MARGIN - BTN_RADIUS)
     this.addButton('A', 'jump', (w) => w - MARGIN - BTN_RADIUS, (h) => h - MARGIN - BTN_RADIUS * 1.8)
     this.addButton('B', 'interact', (w) => w - MARGIN - BTN_RADIUS * 3.2, (h) => h - MARGIN - BTN_RADIUS)
+    // Botón 🎤 — push-to-talk de voz (mismo mapeo que la tecla V)
+    this.addButton('🎤', 'talk', (w) => w - MARGIN - BTN_RADIUS * 5.4, (h) => h - MARGIN - BTN_RADIUS)
   }
 
   private addButton(label: string, action: GameAction, x: (w: number) => number, y: (h: number) => number) {
@@ -61,5 +63,16 @@ export class TouchControls {
       b.g.x = b.x(w)
       b.g.y = b.y(h)
     }
+  }
+
+  /** Oculta los controles (modo cinemático Three.js) recordando el estado táctil */
+  hide() {
+    this.view.visible = false
+  }
+
+  /** Restaura la visibilidad según si el dispositivo es táctil */
+  show() {
+    const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+    this.view.visible = isTouch
   }
 }

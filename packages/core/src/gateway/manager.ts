@@ -4,7 +4,7 @@
  * Provides functions to start, stop, and manage the HiveLearn gateway server.
  */
 
-import { initializeDatabase, getDb } from '../storage/sqlite'
+import { initializeDatabase, getDb } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
 import { logger } from '../utils/logger'
 import { createServer, setBunServer } from '../gateway/server'
@@ -34,12 +34,17 @@ export async function startGateway(config: HiveLearnConfig): Promise<void> {
 
   try {
     // Initialize database
-    const db = initializeDatabase()
+    await initializeDatabase()
     log.info('✅ Database initialized')
 
     // Initialize schemas
-    initHiveLearnStorage(db)
+    await initHiveLearnStorage()
     log.info('✅ Database schemas initialized')
+
+    // Reconcile de runs de generación huérfanos (larga duración)
+    const { reconcileGenerationRuns } = await import('../agent/run-store')
+    const interrupted = await reconcileGenerationRuns()
+    if (interrupted > 0) log.info(`♻️  ${interrupted} run(s) de generación marcados como interrupted`)
   } catch (error) {
     log.error('❌ Database initialization failed', { error: (error as Error).message })
     throw error

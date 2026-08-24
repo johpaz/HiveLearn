@@ -12,5 +12,5 @@ export { StatusMessage } from "./StatusMessage";
 export { ApiKeyManager } from "./ApiKeyManager";
 export { OllamaImporter } from "./OllamaImporter";
 export { SwarmVisualizer } from "./SwarmVisualizer";
-export { LocalLLMManager } from "./LocalLLMManager";
 export { TTSManager } from "./TTSManager";
+export { STTManager } from "./STTManager";

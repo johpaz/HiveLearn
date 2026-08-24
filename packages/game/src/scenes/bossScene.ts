@@ -13,6 +13,8 @@ import { THEME_COLORS } from '../engine/textures'
 import type { Game } from '../game'
 import { ResultScene } from './resultScene'
 import { WorldMapScene } from './worldMapScene'
+import { buildBossScene3D } from '../engine/three/builders'
+import type { Scene3D } from '../engine/three/worldRenderer'
 
 const Q_STYLE = { fontFamily: 'monospace', fontSize: 17, fill: 0xffffff, wordWrap: true, lineHeight: 24, fontWeight: 'bold' as const }
 const OPT_STYLE = { fontFamily: 'monospace', fontSize: 15, fill: 0xffffff }
@@ -36,6 +38,7 @@ export class BossScene extends Scene {
   private locked = false
   private bossBaseX = 0
   private t = 0
+  private scene3d: Scene3D | null = null
 
   constructor(game: Game, private spec: LevelSpec, private coinsCollected: number) {
     super(game)
@@ -47,8 +50,16 @@ export class BossScene extends Scene {
     const g = this.game
     const colors = THEME_COLORS[this.spec.theme]
     // cielo más oscuro: ambiente de pelea
-    g.app.renderer.background.color = darken(colors.sky, 0.5)
+    g.app.renderer.background.color = g.themedSky(darken(colors.sky, 0.5))
     g.audio.playMusic('boss')
+
+    // 3D background: arena tensa con ondas de choque
+    if (g.worldRenderer.isAlive) {
+      this.scene3d = buildBossScene3D()
+      g.worldRenderer.setScene(this.scene3d)
+      g.app.renderer.background.color = 0x000000
+      g.app.renderer.background.alpha = 0
+    }
 
     const w = g.viewW
     const h = g.viewH
@@ -185,7 +196,7 @@ export class BossScene extends Scene {
       this.boss.tint = 0xff8888
       setTimeout(() => { this.boss.tint = 0xffffff }, 200)
       this.drawBossHp()
-      if (this.bossHp <= this.bossMaxHp * 0.34) g.audio.setMusicTempo(1.3)
+      if (this.bossHp <= this.bossMaxHp * 0.34) g.audio.setMusicTempo(g.theme.musicTempo * 1.25)
     } else {
       this.hearts--
       g.audio.play('wrong')
@@ -230,7 +241,7 @@ export class BossScene extends Scene {
     const stars = ratio >= 0.9 ? 3 : ratio >= 0.6 ? 2 : ratio > 0 ? 1 : 0
     const xp = this.correctas * 20 + this.coinsCollected * 2 + stars * 15
 
-    g.audio.setMusicTempo(1)
+    g.audio.setMusicTempo(g.theme.musicTempo)
     if (stars > 0) g.audio.play('victory')
 
     // persistir
@@ -250,6 +261,13 @@ export class BossScene extends Scene {
     })
 
     await g.goTo(new ResultScene(g, this.spec))
+  }
+
+  exit() {
+    this.scene3d?.dispose?.()
+    this.scene3d = null
+    this.game.worldRenderer.setScene(null)
+    this.game.app.renderer.background.alpha = 1
   }
 
   update(dt: number) {

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { apiClient } from "@/lib/api";
-import { Settings2, Brain, GitBranch, Zap, Database, Bot, KeyRound, Cloud, Hexagon, Server, Mic } from "lucide-react";
+import { Settings2, Brain, GitBranch, Zap, Database, Bot, KeyRound, Cloud, Hexagon, Mic, AudioWaveform } from "lucide-react";
 import {
   ProviderSelector,
   ModelSelector,
@@ -11,12 +11,12 @@ import {
   ApiKeyManager,
   OllamaImporter,
   SwarmVisualizer,
-  LocalLLMManager,
   TTSManager,
+  STTManager,
 } from "@/modules/hivelearn/config";
 import type { ProviderOption, ModelOption } from "@/modules/hivelearn/config";
 
-type ConfigTab = "swarm" | "api-keys" | "import" | "local-llm" | "tts" | "visualizar";
+type ConfigTab = "swarm" | "api-keys" | "import" | "stt" | "tts" | "visualizar";
 
 interface HiveLearnConfig {
   configured: boolean;
@@ -67,19 +67,9 @@ export function HiveLearnConfigPage() {
       ]);
 
       const isEnabled = (val: any) => val === 1 || val === true || val === "1" || val === "true";
-      const hasApiKeyCheck = (p: any) => {
-        if (p.id === "ollama" || p.id === "localllm") return true;
-        const baseUrl = p.base_url || p.baseUrl || "";
-        if (baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1")) return true;
-        return !!(p.hasApiKey || p.has_api_key);
-      };
 
       const allProviders: ProviderOption[] = (providersData.providers ?? [])
-        .filter((p: any) => {
-          const isEnabledAndActive = isEnabled(p.enabled) && isEnabled(p.active);
-          const isSpecialLocal = p.id === "ollama" || p.id === "localllm";
-          return (isEnabledAndActive || isSpecialLocal) && hasApiKeyCheck(p);
-        })
+        .filter((p: any) => isEnabled(p.enabled) && isEnabled(p.active))
         .sort((a: Provider, b: Provider) => a.name.localeCompare(b.name))
         .map((p: Provider) => ({
           id: p.id,
@@ -92,11 +82,7 @@ export function HiveLearnConfigPage() {
       setProviderCards((providersData.providers ?? []).sort((a: Provider, b: Provider) => a.name.localeCompare(b.name)));
 
       const activeModels: ModelOption[] = (modelsData.models ?? [])
-        .filter((m: any) => {
-          const isModelEnabledAndActive = isEnabled(m.enabled) && isEnabled(m.active);
-          const isSpecialLocal = m.provider_id === "ollama" || m.provider_id === "localllm" || m.providerId === "ollama" || m.providerId === "localllm";
-          return isModelEnabledAndActive || isSpecialLocal;
-        })
+        .filter((m: any) => isEnabled(m.enabled) && isEnabled(m.active))
         .map((m: any) => ({
           id: m.id,
           name: m.name,
@@ -240,15 +226,15 @@ export function HiveLearnConfigPage() {
                 Importar
               </button>
               <button
-                onClick={() => setActiveTab("local-llm")}
+                onClick={() => setActiveTab("stt")}
                 className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
-                  activeTab === "local-llm"
+                  activeTab === "stt"
                     ? "bg-background border border-border border-b-0 text-hive-amber"
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 }`}
               >
-                <Server className="h-4 w-4" />
-                LLM Local
+                <AudioWaveform className="h-4 w-4" />
+                STT
               </button>
               <button
                 onClick={() => setActiveTab("tts")}
@@ -430,9 +416,9 @@ export function HiveLearnConfigPage() {
               </div>
             )}
 
-            {activeTab === "local-llm" && (
+            {activeTab === "stt" && (
               <div className="rounded-2xl border border-border bg-background/80 backdrop-blur-xl p-8 shadow-honey">
-                <LocalLLMManager />
+                <STTManager />
               </div>
             )}
 

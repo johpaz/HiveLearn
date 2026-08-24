@@ -27,6 +27,12 @@ export abstract class OpenAICompatBase implements LLMProvider {
    */
   protected injectToolsIntoPrompt(_body: any, _preparedTools: any[]): void {}
 
+  /** Override to customize the OpenAI client (e.g. strip unwanted headers, add custom fetch). */
+  protected async resolveOpenAIClient(apiKey: string, baseURL: string | undefined): Promise<any> {
+    const { default: OpenAI } = await import("openai")
+    return new OpenAI({ apiKey, baseURL })
+  }
+
   private _convertContentPart(part: ContentPart): any {
     switch (part.type) {
       case "text":
@@ -51,8 +57,6 @@ export abstract class OpenAICompatBase implements LLMProvider {
   }
 
   async call(options: LLMCallOptions): Promise<LLMResponse> {
-    const { default: OpenAI } = await import("openai")
-
     const baseURL = options.baseUrl?.trim() || OPENAI_COMPAT_BASE_URLS[this.providerName] || undefined
     const isLocal = this.isLocalProvider()
 
@@ -63,7 +67,7 @@ export abstract class OpenAICompatBase implements LLMProvider {
       throw new Error(`API key missing for provider: ${this.providerName}. Configure it in Settings → Providers.`)
     }
 
-    const client = new OpenAI({ apiKey, baseURL })
+    const client = await this.resolveOpenAIClient(apiKey, baseURL)
 
     const sanitized = sanitizeMessages(options.messages ?? [])
     const rawMessages = this.needsReasoningRoundtrip()

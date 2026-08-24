@@ -55,8 +55,8 @@ function BrandPanel({ count, completed, inProgress }: {
         {/* Top branding */}
         <div className="space-y-6">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-hive-amber/10 border border-hive-amber/20 flex items-center justify-center text-2xl shadow-sm">
-              🐝
+            <div className="h-12 w-12 rounded-2xl bg-white/95 border border-white/20 flex items-center justify-center shadow-sm p-1">
+              <img src="/logocolor-dark.png" alt="HiveLearn" className="h-full w-full object-contain" />
             </div>
             <div>
               <span className="text-xl font-bold text-foreground tracking-tight">HiveLearn</span>

@@ -171,7 +171,7 @@ export function demoLevelSpec(): LevelSpec {
     sessionId: 'demo',
     titulo: 'El Prado de Prueba',
     seed: 'demo:0',
-    theme: 'prado',
+    theme: 'jardin',
     difficulty: 1,
     concepts: [
       {

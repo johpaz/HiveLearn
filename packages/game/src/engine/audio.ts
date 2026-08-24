@@ -13,7 +13,7 @@ export type SfxName =
   | 'jump' | 'coin' | 'block' | 'hurt' | 'bossHit' | 'victory'
   | 'blip' | 'stomp' | 'checkpoint' | 'wrong' | 'correct' | 'unlock'
 
-export type MusicTrack = 'prado' | 'bosque' | 'montana' | 'colmena' | 'boss' | 'map' | 'none'
+export type MusicTrack = 'jardin' | 'almacen' | 'criadero' | 'sala_real' | 'boss' | 'map' | 'none'
 
 interface NoteEvent {
   /** semitono relativo a A4 (0 = 440Hz), null = silencio */
@@ -24,22 +24,22 @@ interface NoteEvent {
 
 // Melodías cortas en loop por pista (estilo chiptune, 8 pasos por compás)
 const MELODIES: Record<Exclude<MusicTrack, 'none'>, { bpm: number; lead: NoteEvent[]; bass: NoteEvent[] }> = {
-  prado: {
+  jardin: {
     bpm: 112,
     lead: [{ n: 0 }, { n: 4 }, { n: 7 }, { n: 12 }, { n: 7 }, { n: 4 }, { n: 5 }, { n: 2 }],
     bass: [{ n: -24, d: 2 }, { n: -17, d: 2 }, { n: -19, d: 2 }, { n: -22, d: 2 }],
   },
-  bosque: {
+  almacen: {
     bpm: 96,
     lead: [{ n: -3 }, { n: 0 }, { n: 2 }, { n: 5 }, { n: 2 }, { n: 0 }, { n: -1 }, { n: null }],
     bass: [{ n: -27, d: 2 }, { n: -22, d: 2 }, { n: -24, d: 2 }, { n: -20, d: 2 }],
   },
-  montana: {
+  criadero: {
     bpm: 104,
     lead: [{ n: 2 }, { n: 5 }, { n: 9 }, { n: 14 }, { n: 9 }, { n: 7 }, { n: 5 }, { n: 4 }],
     bass: [{ n: -22, d: 2 }, { n: -15, d: 2 }, { n: -17, d: 2 }, { n: -19, d: 2 }],
   },
-  colmena: {
+  sala_real: {
     bpm: 120,
     lead: [{ n: 0 }, { n: 3 }, { n: 7 }, { n: 10 }, { n: 12 }, { n: 10 }, { n: 7 }, { n: 3 }],
     bass: [{ n: -24, d: 2 }, { n: -21, d: 2 }, { n: -17, d: 2 }, { n: -14, d: 2 }],
@@ -70,6 +70,13 @@ export class AudioManager {
   private currentTrack: MusicTrack = 'none'
   private tempoScale = 1
   private voiceSource: AudioBufferSourceNode | HTMLAudioElement | null = null
+  /** Nodos WebAudio activos de la voz (ruta moderna). */
+  private voiceAnalyser: AnalyserNode | null = null
+  private voiceGainNode: GainNode | null = null
+  private voicePannerNode: StereoPannerNode | null = null
+  private voiceSpectrumBuf: Uint8Array | null = null
+  /** Callback que las escenas enganchan para karaoke (recibe duración del audio). */
+  onVoiceStart: ((durationSec: number) => void) | null = null
 
   muted = false
 
@@ -228,18 +235,98 @@ export class AudioManager {
 
   // ─── Voz (TTS Piper pre-generado) ─────────────────────────────────────────
 
-  /** Reproduce una URL de audio TTS con ducking de la música. */
-  async playVoice(url: string): Promise<void> {
+  /**
+   * Reproduce una URL de audio TTS con ducking de la música.
+   *
+   * Ruta moderna: fetch → decodeAudioData → source → gain → analyser → panner → master.
+   * Esto habilita:
+   *   - `opts.volume` / `opts.pan` para sonido posicional por distancia al NPC.
+   *   - `getVoiceSpectrum()` para visualizador FFT (32 bandas) mientras habla.
+   *   - `onVoiceStart(duration)` para karaoke de subtítulos sincronizado.
+   *
+   * Devuelve una Promise que se resuelve al terminar con `{ duration }` en segundos.
+   * Fallback: si decode falla, cae a HTMLAudioElement (ruta antigua).
+   */
+  async playVoice(
+    url: string,
+    opts: { volume?: number; pan?: number } = {},
+  ): Promise<{ duration: number }> {
     this.stopVoice()
     const ctx = this.ensureContext()
+    if (!ctx || !this.master) {
+      return await this.playVoiceFallback(url)
+    }
+    if (this.musicGain) this.musicGain.gain.setTargetAtTime(0.08, ctx.currentTime, 0.1)
+
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const raw = await res.arrayBuffer()
+      const buffer = await ctx.decodeAudioData(raw)
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+
+      // Gain
+      const gain = ctx.createGain()
+      gain.gain.value = opts.volume ?? 1
+
+      // Analyser (FFT)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 64 // 32 bins
+      analyser.smoothingTimeConstant = 0.7
+      this.voiceSpectrumBuf = new Uint8Array(analyser.frequencyBinCount)
+
+      // Conectar: source → gain → analyser → (panner?) → master
+      source.connect(gain)
+      gain.connect(analyser)
+      let out: AudioNode = analyser
+      if (typeof StereoPannerNode !== 'undefined' && typeof opts.pan === 'number') {
+        const panner = ctx.createStereoPanner()
+        panner.pan.value = Math.max(-1, Math.min(1, opts.pan))
+        analyser.connect(panner)
+        out = panner
+        this.voicePannerNode = panner
+      }
+      out.connect(this.master)
+
+      this.voiceSource = source
+      this.voiceAnalyser = analyser
+      this.voiceGainNode = gain
+
+      const duration = buffer.duration
+      this.onVoiceStart?.(duration)
+
+      return await new Promise<{ duration: number }>((resolve) => {
+        const done = () => {
+          this.restoreVoiceDucking()
+          if (this.voiceSource === source) this.voiceSource = null
+          this.voiceAnalyser = null
+          this.voiceGainNode = null
+          this.voicePannerNode = null
+          this.voiceSpectrumBuf = null
+          resolve({ duration })
+        }
+        source.onended = done
+        try { source.start() } catch { done() }
+      })
+    } catch {
+      // Ruta fallback (decode no disponible, o fetch falló): HTMLAudioElement
+      return await this.playVoiceFallback(url)
+    }
+  }
+
+  /** Ruta fallback con HTMLAudioElement (sin analyser/pan). */
+  private async playVoiceFallback(url: string): Promise<{ duration: number }> {
+    const ctx = this.ensureContext()
     if (this.musicGain && ctx) this.musicGain.gain.setTargetAtTime(0.08, ctx.currentTime, 0.1)
-    return new Promise((resolve) => {
+    return await new Promise((resolve) => {
       const audio = new Audio(url)
       this.voiceSource = audio
       const done = () => {
-        if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(0.35, this.ctx.currentTime, 0.3)
+        this.restoreVoiceDucking()
         if (this.voiceSource === audio) this.voiceSource = null
-        resolve()
+        this.onVoiceStart?.(audio.duration || 0)
+        resolve({ duration: audio.duration || 0 })
       }
       audio.onended = done
       audio.onerror = done
@@ -247,11 +334,116 @@ export class AudioManager {
     })
   }
 
+  /** Devuelve el espectro FFT actual de la voz (32 bandas) o null si no hay voz. */
+  getVoiceSpectrum(): Uint8Array | null {
+    if (!this.voiceAnalyser || !this.voiceSpectrumBuf) return null
+    this.voiceAnalyser.getByteFrequencyData(this.voiceSpectrumBuf as Uint8Array<ArrayBuffer>)
+    return this.voiceSpectrumBuf
+  }
+
+  /** Restaura el nivel de música tras ducking de voz. */
+  private restoreVoiceDucking(): void {
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(0.35, this.ctx.currentTime, 0.3)
+  }
+
   stopVoice() {
     if (this.voiceSource instanceof HTMLAudioElement) {
       this.voiceSource.pause()
       this.voiceSource = null
-      if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(0.35, this.ctx.currentTime, 0.2)
+      this.restoreVoiceDucking()
+    } else if (this.voiceSource instanceof AudioBufferSourceNode) {
+      try { this.voiceSource.stop() } catch { /* already stopped */ }
+      this.voiceSource = null
+      this.restoreVoiceDucking()
+    }
+    this.voiceAnalyser = null
+    this.voiceGainNode = null
+    this.voicePannerNode = null
+    this.voiceSpectrumBuf = null
+  }
+
+  // ─── Leitmotivs por personaje (identidad sonora de la colmena) ────────────
+
+  /**
+   * Identidad melódica de cada abeja. Espejo offline del seed en
+   * `packages/core/src/storage/voices.ts` (hl_agent_voices); el backend puede
+   * sobreescribirla en caliente vía `setAgentLeitmotif()` cuando React trae
+   * `/api/tts-local/voices` (hiveDB = fuente de verdad).
+   */
+  private static LEITMOTIFS: Record<string, { notas: number[]; bpm: number }> = {
+    coordinator:  { notas: [0, 3, 7, 12], bpm: 96 },
+    onboarding:   { notas: [7, 4, 0, 4], bpm: 108 },
+    content:      { notas: [0, 4, 9], bpm: 120 },
+    practice:     { notas: [-5, 0, 0, 5], bpm: 104 },
+    assessment:   { notas: [0, -2, -5], bpm: 84 },
+    image:        { notas: [4, 9, 11], bpm: 112 },
+    infographic:  { notas: [0, 5, 9, 5], bpm: 100 },
+    audio:        { notas: [12, 9, 5, 9], bpm: 90 },
+    gamification: { notas: [0, 4, 7, 12, 7, 12], bpm: 132 },
+  }
+
+  /** Alias aceptados → agentId canónico (mismos que resolveCharacter del core) */
+  private static normalizeAgentId(agentId: string): string {
+    const id = agentId.trim().toLowerCase()
+    if (id === 'maya' || id.includes('onboarding')) return 'onboarding'
+    if (id.includes('coordinator') || id === 'reina' || id === 'reina_miel') return 'coordinator'
+    if (id.includes('content') || id.includes('explanation') || id === 'polen') return 'content'
+    if (id.includes('practice') || id.includes('exercise') || id === 'cera') return 'practice'
+    if (id.includes('assessment') || id.includes('evaluation') || id === 'guardia') return 'assessment'
+    if (id.includes('image') || id === 'pigmento') return 'image'
+    if (id.includes('infographic') || id === 'mapa') return 'infographic'
+    if (id.includes('audio') || id === 'melodia') return 'audio'
+    if (id.includes('gamification') || id === 'festiva') return 'gamification'
+    return id
+  }
+
+  /** Sobrescribe el leitmotiv de un agente con la identidad de hiveDB */
+  setAgentLeitmotif(agentId: string, leitmotiv: { notas: number[]; bpm: number }) {
+    const id = AudioManager.normalizeAgentId(agentId)
+    if (!id || !Array.isArray(leitmotiv.notas) || leitmotiv.notas.length === 0) return
+    AudioManager.LEITMOTIFS[id] = { notas: leitmotiv.notas.slice(0, 8), bpm: leitmotiv.bpm || 100 }
+  }
+
+  /** Carga masiva desde GET /api/tts-local/voices (hiveDB) */
+  loadAgentVoices(voices: Array<{ agentId: string; leitmotiv?: { notas: number[]; bpm: number } }>) {
+    for (const v of voices) {
+      if (v.leitmotiv?.notas?.length) this.setAgentLeitmotif(v.agentId, v.leitmotiv)
+    }
+  }
+
+  /**
+   * Reproduce la frase melódica única de un personaje (una vez, no en loop).
+   * Usar al entrar un agente a escena, al hablar o al celebrar.
+   */
+  playLeitmotiv(agentId: string, opts: { volume?: number } = {}) {
+    const ctx = this.ensureContext()
+    const motif = AudioManager.LEITMOTIFS[AudioManager.normalizeAgentId(agentId)]
+    if (!ctx || !this.sfxGain || this.muted || !motif) return
+
+    const stepDur = 60 / motif.bpm / 2
+    let t = ctx.currentTime + 0.02
+    for (const semitone of motif.notas) {
+      this.tone(t, 'triangle', freq(semitone), stepDur * 0.95, opts.volume ?? 0.28)
+      t += stepDur
+    }
+  }
+
+  /** Stingers de ceremonia: entrada solemne, graduación y fanfarria del enjambre */
+  playStinger(kind: 'entrance' | 'graduacion' | 'ceremonia') {
+    const ctx = this.ensureContext()
+    if (!ctx || !this.sfxGain || this.muted) return
+    const t = ctx.currentTime
+    switch (kind) {
+      case 'entrance':
+        this.sweep(t, 'triangle', 392, 784, 0.35, 0.22)
+        this.tone(t + 0.36, 'triangle', 784, 0.25, 0.2)
+        break
+      case 'graduacion':
+        [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(t + i * 0.14, 'square', f, 0.22, 0.2))
+        break
+      case 'ceremonia':
+        [262, 330, 392].forEach((f, i) => this.tone(t + i * 0.08, 'triangle', f, 0.4, 0.16))
+        break
     }
   }
 

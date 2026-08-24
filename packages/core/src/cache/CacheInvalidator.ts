@@ -1,43 +1,78 @@
-import { getDb } from '../storage/sqlite'
+import { getDb, nowIso } from '../storage/hivedb'
+
+interface NodeCacheDoc {
+  agente_tipo: string
+  concepto_slug: string
+  expires_at: string
+}
+
+interface NodeEffectivenessDoc {
+  agente_tipo: string
+  nodo_content_hash: string
+  tasa_abandono: number
+}
 
 export class CacheInvalidator {
   /** Elimina entradas expiradas de hl_node_cache */
-  invalidateExpired(): number {
+  async invalidateExpired(): Promise<number> {
     try {
-      const db = getDb()
-      const result = db.run(`DELETE FROM hl_node_cache WHERE expires_at < datetime('now')`)
-      return result.changes
+      const col = getDb().collection<NodeCacheDoc>('hl_node_cache')
+      const now = nowIso()
+      const entries = await col.scan()
+      let deleted = 0
+      for (const entry of entries) {
+        if (entry.doc.expires_at < now) {
+          await col.delete(entry.id)
+          deleted++
+        }
+      }
+      return deleted
     } catch {
       return 0
     }
   }
 
   /** Invalida todas las entradas de un agente específico */
-  invalidateByAgent(agenteTipo: string): number {
+  async invalidateByAgent(agenteTipo: string): Promise<number> {
     try {
-      const db = getDb()
-      const result = db.run(`DELETE FROM hl_node_cache WHERE agente_tipo = ?`, [agenteTipo])
-      return result.changes
+      const col = getDb().collection<NodeCacheDoc>('hl_node_cache')
+      const entries = await col.findBy('agente_tipo', agenteTipo)
+      for (const entry of entries) {
+        await col.delete(entry.id)
+      }
+      return entries.length
     } catch {
       return 0
     }
   }
 
   /** Invalida entradas con tasa de abandono alta (ciclo de mejora continua) */
-  invalidateIneffective(umbralTasaAbandono = 0.4): number {
+  async invalidateIneffective(umbralTasaAbandono = 0.4): Promise<number> {
     try {
       const db = getDb()
-      const ineficaces = db.query(
-        `SELECT DISTINCT agente_tipo, concepto_slug FROM hl_node_effectiveness WHERE tasa_abandono > ?`
-      ).all(umbralTasaAbandono) as any[]
+      const effectiveness = await db.collection<NodeEffectivenessDoc>('hl_node_effectiveness').scan()
 
+      // DISTINCT agente_tipo + concepto_slug (el concepto es el content hash del nodo)
+      const ineficaces = new Map<string, { agente_tipo: string; concepto_slug: string }>()
+      for (const entry of effectiveness) {
+        if (entry.doc.tasa_abandono > umbralTasaAbandono) {
+          ineficaces.set(`${entry.doc.agente_tipo}|${entry.doc.nodo_content_hash}`, {
+            agente_tipo: entry.doc.agente_tipo,
+            concepto_slug: entry.doc.nodo_content_hash,
+          })
+        }
+      }
+
+      const cache = db.collection<NodeCacheDoc>('hl_node_cache')
       let deleted = 0
-      for (const row of ineficaces) {
-        const result = db.run(
-          `DELETE FROM hl_node_cache WHERE agente_tipo = ? AND concepto_slug = ?`,
-          [row.agente_tipo, row.concepto_slug]
-        )
-        deleted += result.changes
+      for (const row of ineficaces.values()) {
+        const entries = await cache.findBy('agente_tipo', row.agente_tipo)
+        for (const entry of entries) {
+          if ((entry.doc as { concepto_slug?: string }).concepto_slug === row.concepto_slug) {
+            await cache.delete(entry.id)
+            deleted++
+          }
+        }
       }
       return deleted
     } catch {

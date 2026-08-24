@@ -1,74 +1,67 @@
 /**
- * Migrate Command — Fuerza la migración de schema y re-seed de datos
+ * Migrate Command — Re-seed idempotente del almacenamiento HiveDB
  *
- * Útil cuando:
+ * HiveLearn ya no usa SQLite: el motor es @johpaz/hive-db (colecciones de
+ * documentos + índice semántico). No hay DDL ni migraciones de schema —
+ * este comando fuerza el bootstrap idempotente (índices + seed), útil cuando:
  * - Se actualizó el paquete pero el seed no se aplicó
  * - Se agregaron nuevas tools/models/providers al seed
- * - Se necesitan crear columnas nuevas en tablas existentes
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
-import { getHiveDir } from "@hivelearn/core";
+import { getHiveDir, getDbPath } from "@hivelearn/core";
 
 export async function migrate(): Promise<void> {
-  console.log("\n🔄 Migrando base de datos de Hive...\n");
+  console.log("\n🔄 Aplicando bootstrap de HiveDB (HiveLearn)...\n");
 
-  const dbPath = path.join(getHiveDir(), "data", "hive.db");
+  const dbPath = getDbPath();
 
   if (!fs.existsSync(dbPath)) {
     console.log("⚠️  No se encontró base de datos existente.");
-    console.log("   Ejecuta 'hive start' o 'hive onboard' para crear una nueva.\n");
+    console.log("   Ejecuta 'hivelearn start' para crear una nueva.\n");
     return;
   }
 
   try {
-    const { initializeDatabase, getDb } = await import("@hivelearn/core");
+    const { initializeDatabase, getDb, initHiveLearnStorage } = await import("@hivelearn/core");
 
-    // 1. Inicializar BD y aplicar sync de schema
-    console.log("📐 Verificando schema...");
-    initializeDatabase();
-    console.log("   ✅ Schema sincronizado");
+    console.log("📐 Inicializando HiveDB...");
+    await initializeDatabase();
+    console.log("   ✅ HiveDB lista");
 
     const db = getDb();
+    const count = async (name: string) => db.collection(name).count();
 
-    // 2. Contar datos actuales
-    const toolsBefore = (db.query("SELECT COUNT(*) as n FROM tools").get() as { n: number })?.n ?? 0;
-    const modelsBefore = (db.query("SELECT COUNT(*) as n FROM models").get() as { n: number })?.n ?? 0;
-    const providersBefore = (db.query("SELECT COUNT(*) as n FROM providers").get() as { n: number })?.n ?? 0;
-    const skillsBefore = (db.query("SELECT COUNT(*) as n FROM skills").get() as { n: number })?.n ?? 0;
-    const playbookBefore = (db.query("SELECT COUNT(*) as n FROM playbook").get() as { n: number })?.n ?? 0;
+    const before = {
+      models: await count("models"),
+      providers: await count("providers"),
+      agents: await count("hl_agents"),
+      searchIndex: await count("hl_search_index"),
+    };
 
-    // 3. Ejecutar re-seed (idempotente)
-    //    IMPORTANTE: NO llamar initHiveLearnStorage aquí — HiveLearn es opt-in.
-    //    Los agentes hl_* solo se crean si el usuario los activó en setup o dashboard.
-    console.log("\n🌱 Aplicando seed de datos...");
-    const { seedAllData } = await import("@hivelearn/core");
-    seedAllData();
+    console.log("\n🌱 Aplicando seed e índices (idempotente)...");
+    await initHiveLearnStorage();
 
-    // 4. Contar datos después
-    const toolsAfter = (db.query("SELECT COUNT(*) as n FROM tools").get() as { n: number })?.n ?? 0;
-    const modelsAfter = (db.query("SELECT COUNT(*) as n FROM models").get() as { n: number })?.n ?? 0;
-    const providersAfter = (db.query("SELECT COUNT(*) as n FROM providers").get() as { n: number })?.n ?? 0;
-    const skillsAfter = (db.query("SELECT COUNT(*) as n FROM skills").get() as { n: number })?.n ?? 0;
-    const playbookAfter = (db.query("SELECT COUNT(*) as n FROM playbook").get() as { n: number })?.n ?? 0;
+    const after = {
+      models: await count("models"),
+      providers: await count("providers"),
+      agents: await count("hl_agents"),
+      searchIndex: await count("hl_search_index"),
+    };
 
-    // 5. Reportar cambios
     console.log("\n📊 Resumen de cambios:");
-
-    const changes: Array<{ name: string; before: number; after: number }> = [
-      { name: "Tools", before: toolsBefore, after: toolsAfter },
-      { name: "Models", before: modelsBefore, after: modelsAfter },
-      { name: "Providers", before: providersBefore, after: providersAfter },
-      { name: "Skills", before: skillsBefore, after: skillsAfter },
-      { name: "Playbook Rules", before: playbookBefore, after: playbookAfter },
+    const rows: Array<{ name: string; before: number; after: number }> = [
+      { name: "Models", before: before.models, after: after.models },
+      { name: "Providers", before: before.providers, after: after.providers },
+      { name: "Agentes hl_*", before: before.agents, after: after.agents },
+      { name: "Índice de búsqueda", before: before.searchIndex, after: after.searchIndex },
     ];
 
     let hadChanges = false;
-    for (const c of changes) {
-      const diff = c.after - c.before;
+    for (const r of rows) {
+      const diff = r.after - r.before;
       if (diff > 0) {
-        console.log(`   ✅ +${diff} ${c.name.toLowerCase()}`);
+        console.log(`   ✅ +${diff} ${r.name.toLowerCase()}`);
         hadChanges = true;
       }
     }
@@ -77,16 +70,10 @@ export async function migrate(): Promise<void> {
       console.log("   ✅ Todo actualizado, sin cambios nuevos");
     }
 
-    // 6. Sugerir reload si gateway está corriendo
-    const pidFile = path.join(getHiveDir(), "gateway.pid");
-    if (fs.existsSync(pidFile)) {
-      console.log("\n   💡 El gateway está corriendo. Ejecuta 'hive reload' para aplicar cambios.");
-    }
-
-    console.log("\n✅ Migración completada.\n");
+    console.log("\n✅ Bootstrap completado.\n");
   } catch (err) {
-    console.error(`\n❌ Error durante la migración: ${(err as Error).message}`);
-    console.error("   💡 Ejecuta 'hive doctor' para más diagnóstico.\n");
+    console.error(`\n❌ Error durante el bootstrap: ${(err as Error).message}`);
+    console.error("   💡 Ejecuta 'hivelearn doctor' para más diagnóstico.\n");
     process.exit(1);
   }
 }

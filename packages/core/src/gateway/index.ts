@@ -4,7 +4,7 @@
  * Servidor HTTP + WebSocket en Bun
  * Sin dependencias del repositorio principal de Hive
  */
-import { initializeDatabase, getDb } from '../storage/sqlite'
+import { initializeDatabase, getDb } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
 import { logger } from '../utils/logger'
 import { createServer, setBunServer } from './server'
@@ -21,12 +21,17 @@ async function main() {
 
   // Inicializar base de datos
   try {
-    const db = initializeDatabase()
+    await initializeDatabase()
     log.info('✅ Database initialized')
 
     // Inicializar schemas
-    initHiveLearnStorage(db)
+    await initHiveLearnStorage()
     log.info('✅ Database schemas initialized')
+
+    // Reconcile de runs de generación huérfanos (larga duración)
+    const { reconcileGenerationRuns } = await import('../agent/run-store')
+    const interrupted = await reconcileGenerationRuns()
+    if (interrupted > 0) log.info(`♻️  ${interrupted} run(s) de generación marcados como interrupted`)
   } catch (error) {
     log.error('❌ Database initialization failed', { error: (error as Error).message })
     process.exit(1)

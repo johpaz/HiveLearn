@@ -138,37 +138,32 @@ async function updateFromGlobalPackage(): Promise<void> {
  */
 async function applyDatabaseUpdates(): Promise<void> {
   const { existsSync } = await import("node:fs");
-  const { getHiveDir, initializeDatabase, getDb } = await import("@hivelearn/core");
+  const { getHiveDir, getDbPath, initializeDatabase, initHiveLearnStorage } = await import("@hivelearn/core");
   const path = await import("node:path");
 
-  const dbPath = path.join(getHiveDir(), "data", "hive.db");
+  const dbPath = getDbPath();
 
   if (!existsSync(dbPath)) {
-    console.log(`   ℹ️  No se encontró base de datos existente. Se creará en el próximo 'hive start'.`);
+    console.log(`   ℹ️  No se encontró base de datos existente. Se creará en el próximo 'hivelearn start'.`);
     return;
   }
 
-  console.log(`\n🔄 Verificando base de datos...`);
+  console.log(`\n🔄 Verificando base de datos (HiveDB)...`);
 
   try {
-    // Initialize database
-    initializeDatabase();
-    console.log(`   ✅ Schema verificado`);
-
-    const db = getDb();
-
-    // HiveLearn Core no usa SEED_DATA como Hive Agents
-    // Las tablas y datos se crean dinámicamente
-    console.log(`   ✅ Base de datos lista`);
+    // Initialize database + bootstrap idempotente (índices + seed)
+    await initializeDatabase();
+    await initHiveLearnStorage();
+    console.log(`   ✅ Base de datos lista (seed e índices aplicados)`);
 
     // Verificar si el gateway está corriendo para sugerir reload
     const hiveDir = getHiveDir();
     const pidFile = path.join(hiveDir, "gateway.pid");
     if (existsSync(pidFile)) {
-      console.log(`\n   💡 El gateway está corriendo. Ejecuta 'hive reload' para aplicar cambios.`);
+      console.log(`\n   💡 El gateway está corriendo. Ejecuta 'hivelearn reload' para aplicar cambios.`);
     }
   } catch (err) {
     console.log(`   ⚠️  No se pudo verificar la base de datos: ${(err as Error).message}`);
-    console.log(`   💡 Ejecuta 'hive start' para inicializar la base de datos.`);
+    console.log(`   💡 Ejecuta 'hivelearn start' para inicializar la base de datos.`);
   }
 }

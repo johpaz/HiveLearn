@@ -83,8 +83,27 @@ export class OllamaProvider implements LLMProvider {
     const runtimeOptions: Record<string, unknown> = {
       num_ctx: options.numCtx ?? 4096,
     }
+    // Cap de generación: sin él los locales divagan y bloquean la cola de
+    // Ollama durante minutos (crítico para diálogos multi-agente secuenciales)
+    if (options.maxTokens !== undefined) runtimeOptions.num_predict = options.maxTokens
     if (options.numGpu !== undefined) runtimeOptions.num_gpu = options.numGpu
     if (options.temperature !== undefined) runtimeOptions.temperature = options.temperature
+
+    // Los Gemma/Qwen "thinking" gastan el presupuesto de tokens razonando antes
+    // de escribir la respuesta; para turnos cortos conviene apagarlo.
+    const wantThink = (options as { think?: boolean }).think
+
+    async function chatOnce(extra: Record<string, unknown>, signal?: AbortSignal) {
+      return await client.chat({
+        model: modelName,
+        messages,
+        tools: tools?.length ? tools : undefined,
+        options: Object.keys(runtimeOptions).length ? runtimeOptions : undefined,
+        stream: true,
+        signal,
+        ...extra,
+      } as any)
+    }
 
     try {
 
@@ -94,25 +113,39 @@ export class OllamaProvider implements LLMProvider {
         ` num_ctx=${runtimeOptions.num_ctx}`
       )
 
-      const stream = await client.chat({
-        model: modelName,
-        messages,
-        tools: tools?.length ? tools : undefined,
-        options: Object.keys(runtimeOptions).length ? runtimeOptions : undefined,
-        stream: true,
-      })
+      // think:false en modelos que lo soportan; si Ollama rechaza el parámetro
+      // (modelo sin thinking), reintenta una vez sin él.
+      let stream: AsyncIterable<any>
+      try {
+        stream = await chatOnce(wantThink === false ? { think: false } : {}, options.signal)
+      } catch (e) {
+        if (wantThink === false && /think/i.test(String((e as Error).message))) {
+          stream = await chatOnce({}, options.signal)
+        } else {
+          throw e
+        }
+      }
+      let retryDone = false
 
       let content = ""
+      let thinkingContent = ""
       let promptEvalCount = 0
       let evalCount = 0
       const tool_calls: LLMToolCall[] = []
 
-      for await (const part of stream) {
+      const collect = (part: any): boolean => {
+        // Ollama avisa "does not support thinking" con error en el stream
+        const errMsg = (part as any).error ?? part.message?.error
+        if (!retryDone && wantThink === false && typeof errMsg === 'string' && errMsg.includes('does not support')) {
+          return false
+        }
         const delta = part.message?.content ?? ""
         if (delta) {
           content += delta
           if (options.onToken) options.onToken(delta)
         }
+        const thinkDelta = part.message?.thinking
+        if (thinkDelta) thinkingContent += thinkDelta
 
         if (part.message?.tool_calls?.length) {
           for (const tc of part.message.tool_calls) {
@@ -129,6 +162,38 @@ export class OllamaProvider implements LLMProvider {
 
         if (part.prompt_eval_count !== undefined) promptEvalCount = part.prompt_eval_count
         if (part.eval_count !== undefined) evalCount = part.eval_count
+        return true
+      }
+
+      // Si Ollama rechaza "think" con HTTP 400 (modelo sin thinking), reintenta sin él
+      try {
+        stream = await chatOnce(wantThink === false ? { think: false } : {}, options.signal)
+      } catch (e) {
+        if (wantThink === false && String((e as Error).message).match(/think/i)) {
+          stream = await chatOnce({}, options.signal)
+        } else {
+          throw e
+        }
+      }
+
+      for await (const part of stream) {
+        if (!collect(part)) {
+          // Reintenta sin el parámetro think (error llegó dentro del stream)
+          retryDone = true
+          content = ""
+          thinkingContent = ""
+          stream = await chatOnce({}, options.signal)
+          continue
+        }
+      }
+
+      // Último recurso: si el modelo gastó todo el presupuesto en thinking y
+      // content quedó vacío, rescata la última oración útil del razonamiento
+      if (!content.trim() && thinkingContent.trim()) {
+        const sentences = thinkingContent.split(/(?<=[.!?…])\s+/).filter(s => s.trim().length > 12 && !/^\s*[*#`-]/.test(s))
+        const last = sentences[sentences.length - 1]?.trim()
+        if (last) content = last.replace(/^["“]|["”]$/g, '')
+        log.warn(`[llm-client] ollama: presupuesto agotado en thinking — rescatando oración (${content.length} chars)`)
       }
 
       // ── Tool-call extraction fallback ─────────────────────────────────────────
@@ -178,6 +243,7 @@ export class OllamaProvider implements LLMProvider {
 
       return {
         content,
+        thinking_content: thinkingContent || undefined,
         tool_calls: tool_calls.length ? tool_calls : undefined,
         stop_reason: tool_calls.length > 0 ? "tool_calls" : "stop",
         usage:

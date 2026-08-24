@@ -22,8 +22,19 @@ import {
   stopLocalLLMServer,
   LOCAL_LLM_BASE_URL,
 } from "./runtime"
-import { getDb } from "../../storage/sqlite"
+import { getDb } from "../../storage/hivedb"
 import { LessonPersistence } from "../../storage/LessonPersistence"
+import { updateHiveLearnAgentsProviderModel } from "../../agent/registry"
+
+interface LocalModelDoc {
+  provider_id: string
+  name: string
+  model_type: string
+  context_window: number
+  capabilities: string
+  enabled: number
+  active: number
+}
 
 interface WSData {
   sessionId: string
@@ -45,33 +56,37 @@ interface DownloadRequest {
 
 export type LLMMessage = GenerateRequest | DownloadRequest
 
-export function registerModelInDB(modelId: ModelId): void {
+export async function registerModelInDB(modelId: ModelId): Promise<void> {
   try {
     const db = getDb()
     const entry = MODEL_CATALOG[modelId]
     if (!entry) return
 
+    const providers = db.collection<{ active: number; enabled: number } & Record<string, unknown>>('providers')
+    const localProvider = await providers.get('local-llama')
+    if (localProvider) {
+      await providers.put('local-llama', { ...localProvider.doc, active: 1, enabled: 1 })
+    }
+
     const dbId = `local-llama-${modelId}`
-    db.query(`UPDATE providers SET active = 1, enabled = 1 WHERE id = 'local-llama'`).run()
-    db.query(`
-      INSERT OR REPLACE INTO models
-        (id, provider_id, name, model_type, context_window, capabilities, enabled, active)
-      VALUES (?, 'local-llama', ?, 'llm', 32768, '["chat","vision","function_calling","streaming","local"]', 1, 1)
-    `).run(dbId, entry.displayName)
+    await db.collection<LocalModelDoc>('models').put(dbId, {
+      provider_id: 'local-llama',
+      name: entry.displayName,
+      model_type: 'llm',
+      context_window: 32768,
+      capabilities: '["chat","vision","function_calling","streaming","local"]',
+      enabled: 1,
+      active: 1,
+    })
   } catch (err) {
     console.error(`[hive-local] Error registrando modelo en BD:`, err)
   }
 }
 
-function ensureConfiguredLocalModel(modelId: ModelId): void {
-  const configured = new LessonPersistence().getHiveLearnProviderModel()
+async function ensureConfiguredLocalModel(modelId: ModelId): Promise<void> {
+  const configured = await new LessonPersistence().getHiveLearnProviderModel()
   if (configured?.providerId === "local-llama") return
-  const db = getDb()
-  db.query(`
-    UPDATE hl_agents
-    SET provider_id = 'local-llama', model_id = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id IN (SELECT id FROM hl_agents)
-  `).run(`local-llama-${modelId}`)
+  await updateHiveLearnAgentsProviderModel('local-llama', `local-llama-${modelId}`)
 }
 
 async function buildCompletionPayload(req: GenerateRequest): Promise<Record<string, unknown>> {
@@ -107,7 +122,7 @@ async function buildCompletionPayload(req: GenerateRequest): Promise<Record<stri
 
 async function handleDownload(ws: ServerWebSocket<WSData>, req: DownloadRequest): Promise<void> {
   if (isModelDownloaded(req.model)) {
-    registerModelInDB(req.model)
+    await registerModelInDB(req.model)
     ws.send(JSON.stringify({ type: "download_progress", model: req.model, percent: 100, done: true }))
     return
   }
@@ -124,8 +139,8 @@ async function handleDownload(ws: ServerWebSocket<WSData>, req: DownloadRequest)
         done: false,
       }))
     })
-    registerModelInDB(req.model)
-    ensureConfiguredLocalModel(req.model)
+    await registerModelInDB(req.model)
+    await ensureConfiguredLocalModel(req.model)
     ws.send(JSON.stringify({ type: "download_progress", model: req.model, percent: 100, done: true }))
   } catch (err) {
     ws.send(JSON.stringify({ type: "error", message: err instanceof Error ? err.message : "Error descargando modelo" }))
@@ -134,7 +149,7 @@ async function handleDownload(ws: ServerWebSocket<WSData>, req: DownloadRequest)
 
 async function handleGenerate(ws: ServerWebSocket<WSData>, req: GenerateRequest): Promise<void> {
   try {
-    ensureConfiguredLocalModel(req.model)
+    await ensureConfiguredLocalModel(req.model)
     await startLocalLLMServer()
     ws.send(JSON.stringify({ type: "status", message: "Generando con LocalLLM..." }))
 
@@ -180,7 +195,7 @@ export async function handleLLMStatus(): Promise<Response> {
   const gpu = await detectGPU()
   const models = listLocalModels()
   for (const m of models) {
-    if (m.downloaded) registerModelInDB(m.id)
+    if (m.downloaded) await registerModelInDB(m.id)
   }
 
   const runtime = await getLocalLLMRuntimeStatus()
@@ -214,8 +229,8 @@ export async function handleStartLocalLLM(): Promise<Response> {
   const models = listLocalModels()
   const downloaded = models.find((m) => m.downloaded)?.id ?? null
   if (downloaded) {
-    registerModelInDB(downloaded)
-    ensureConfiguredLocalModel(downloaded)
+    await registerModelInDB(downloaded)
+    await ensureConfiguredLocalModel(downloaded)
   }
 
   const status = await startLocalLLMServer({ manual: true })

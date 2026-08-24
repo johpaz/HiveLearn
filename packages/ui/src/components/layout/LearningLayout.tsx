@@ -17,8 +17,8 @@ export function LearningLayout({ children, title, progress }: LearningLayoutProp
       {/* Learning Header */}
       <header className="h-16 border-b border-border bg-background/80 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="h-8 w-8 rounded-lg bg-hive-amber/10 flex items-center justify-center text-xl shadow-honey">
-            🐝
+          <div className="h-10 w-10 rounded-lg bg-white/95 border border-white/20 flex items-center justify-center shadow-honey p-1">
+            <img src="/logocolor-dark.png" alt="HiveLearn" className="h-full w-full object-contain" />
           </div>
           <div>
             <h1 className="text-sm font-bold text-foreground truncate max-w-[200px] md:max-w-md">

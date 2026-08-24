@@ -7,7 +7,8 @@
  */
 import { resolveProviderConfig, callLLM } from './llm-client'
 import type { LLMMessage, LLMToolDef, LLMToolCall } from './llm-client'
-import { getDb } from '../storage/sqlite'
+import { getDb } from '../storage/hivedb'
+import type { AgentDoc } from './registry'
 import { logger } from '../utils/logger'
 
 export type { LLMMessage }
@@ -33,7 +34,8 @@ export async function runHiveLearnConversation(opts: {
   temperature?: number
 }): Promise<ConversationResult> {
   const db = getDb()
-  const agent = db.query<any, [string]>('SELECT provider_id, model_id, system_prompt FROM hl_agents WHERE id = ?').get(opts.agentId)
+  const agentEntry = await db.collection<AgentDoc>('hl_agents').get(opts.agentId)
+  const agent = agentEntry?.doc
   if (!agent) throw new Error(`HiveLearn agent not found: ${opts.agentId}`)
 
   const providerConfig = await resolveProviderConfig(
