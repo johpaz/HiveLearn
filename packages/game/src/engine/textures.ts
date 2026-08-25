@@ -369,24 +369,37 @@ export const THEME_COLORS: Record<WorldTheme, ThemePalette> = {
 function groundTexture(theme: WorldTheme): Texture {
   const p = THEME_COLORS[theme]
   const pal: Palette = { t: shadeColor(p.groundTop), g: shadeColor(p.ground), d: shadeColor(p.groundDark) }
-  const rows = [
-    'tttttttttttttttt',
-    'tggttggttggttggt',
-    'tggttggttggttggt',
-    'gggggggggggggggg',
-    'ggttggttggttgggg',
-    'ggttggttggttgggg',
-    'gggggggggggggggg',
-    'ggttggttggttgggg',
-    'ggttggttggttgggg',
-    'gggggggggggggggg',
-    'ggttggttggttgggg',
-    'ggttggttggttgggg',
-    'gggggggggggggggg',
-    'ggttggttggttgggg',
-    'ggttggttggttgggg',
-    'gggggggggggggggg',
+  // Panal de cera: celdas hexagonales en bands offset (identidad "Panal de Cuentos")
+  const grid: string[][] = Array.from({ length: 16 }, () => Array<string>(16).fill('g'))
+  const hexCell = (cx: number, cy: number) => {
+    // contorno hexagonal 6x6
+    const outline: Array<[number, number]> = [
+      [1, 0], [2, 0], [3, 0], [4, 0],
+      [0, 1], [5, 1], [0, 2], [5, 2], [0, 3], [5, 3], [0, 4], [5, 4],
+      [1, 5], [2, 5], [3, 5], [4, 5],
+    ]
+    for (const [dx, dy] of outline) {
+      const x = cx + dx, y = cy + dy
+      if (y >= 0 && y < 16 && x >= 0 && x < 16) grid[y]![x] = 'd'
+    }
+    // relleno con brillo superior
+    for (let dy = 1; dy < 5; dy++) {
+      for (let dx = 1; dx < 5; dx++) {
+        const x = cx + dx, y = cy + dy
+        if (y >= 0 && y < 16 && x >= 0 && x < 16) grid[y]![x] = dy === 1 ? 't' : 'g'
+      }
+    }
+  }
+  // fila superior = superficie iluminada
+  for (let x = 0; x < 16; x++) grid[0]![x] = 't'
+  // bands de celdas: offsets alternos para el patrón honeycomb
+  const bands: Array<{ y: number; xs: number[] }> = [
+    { y: 1, xs: [1, 9] },
+    { y: 7, xs: [5, 13] },
+    { y: 13, xs: [1, 9] },
   ]
+  for (const { y, xs } of bands) for (const x of xs) hexCell(x, y)
+  const rows = grid.map(r => r.join(''))
   return pixelTexture(rows, pal)
 }
 

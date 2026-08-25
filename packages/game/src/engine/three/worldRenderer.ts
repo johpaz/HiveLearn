@@ -36,6 +36,8 @@ export class WorldRenderer {
   readonly renderer: THREE.WebGLRenderer | null
   readonly scene: THREE.Scene
   readonly camera: THREE.OrthographicCamera | THREE.PerspectiveCamera
+  /** Cámara de mundo (Panal isométrico): si está activa, reemplaza a la de píxeles en el render */
+  private worldCamera: THREE.Camera | null = null
   readonly uniforms: HiveUniforms
   private scaler: QualityScaler
   private container: HTMLElement | null = null
@@ -151,6 +153,15 @@ export class WorldRenderer {
     if (scene3d && this.renderer) this.scene.add(scene3d.root)
   }
 
+  /** Activa/desactiva la cámara de mundo (los fondos shader la ignoran: NDC passthrough) */
+  setWorldCamera(cam: THREE.Camera | null): void {
+    this.worldCamera = cam
+  }
+
+  get activeCamera(): THREE.Camera {
+    return this.worldCamera ?? this.camera
+  }
+
   /** Las escenas llaman esto para informar de dónde está el foco del mundo. */
   setCameraFocus(worldX: number, worldY: number): void {
     this.cameraTarget.set(worldX, worldY)
@@ -177,7 +188,7 @@ export class WorldRenderer {
     this.uniforms.uQuality.value = q.tier === 'high' ? 1 : q.tier === 'mid' ? 0.6 : q.tier === 'low' ? 0.3 : 0
 
     this.current?.update?.(dt, this.uniforms)
-    this.renderer.render(this.scene, this.camera)
+    this.renderer.render(this.scene, this.activeCamera)
   }
 
   dispose(): void {

@@ -270,10 +270,21 @@ export class WorldMapScene extends Scene {
     const base = new Graphics()
     // sombra del propio nodo
     base.ellipse(0, R * 0.35, R * 1.05, R * 0.9).fill({ color: 0x1a1a24, alpha: 0.22 })
-    // anillo exterior + relleno + highlight
-    base.circle(0, 0, R + 4 * S).fill(0x1a1a24)
-    base.circle(0, 0, R).fill(node.unlocked ? 0xffb300 : 0x555566)
-    base.ellipse(0, -R * 0.45, R * 0.55, R * 0.3).fill({ color: 0xffffff, alpha: node.unlocked ? 0.35 : 0.12 })
+    // celda hexagonal (identidad panal): anillo exterior + relleno + brillo
+    const hexPts = (r: number): number[] => {
+      const pts: number[] = []
+      for (let k = 0; k < 6; k++) {
+        const a = (Math.PI / 3) * k - Math.PI / 6 // flat-top como las celdas reales
+        pts.push(Math.cos(a) * r, Math.sin(a) * r)
+      }
+      return pts
+    }
+    base.poly(hexPts(R + 4 * S)).fill(0x1a1a24)
+    base.poly(hexPts(R)).fill(node.unlocked ? 0xffb300 : 0x555566)
+    // brillo superior tipo cera
+    base.poly([
+      -R * 0.55, -R * 0.62, R * 0.55, -R * 0.62, R * 0.38, -R * 0.18, -R * 0.38, -R * 0.18,
+    ]).fill({ color: 0xffffff, alpha: node.unlocked ? 0.35 : 0.12 })
     c.addChild(base)
 
     const num = new Text({
@@ -315,11 +326,19 @@ export class WorldMapScene extends Scene {
     c.x = node.x
     c.y = node.y
 
-    // anillo de pulso dorado en el siguiente nivel jugable
+    // anillo de pulso dorado (hexagonal) en el siguiente nivel jugable
     if (node.unlocked && node.stars === 0) {
       const ring = new Graphics()
-      ring.circle(0, 0, R + 8 * S).stroke({ color: 0xffd700, width: 3 * S, alpha: 0.9 })
-      ring.circle(0, 0, R + 14 * S).stroke({ color: 0xffd700, width: 1.5 * S, alpha: 0.5 })
+      const hexPts = (r: number): number[] => {
+        const pts: number[] = []
+        for (let k = 0; k < 6; k++) {
+          const a = (Math.PI / 3) * k - Math.PI / 6
+          pts.push(Math.cos(a) * r, Math.sin(a) * r)
+        }
+        return pts
+      }
+      ring.poly(hexPts(R + 8 * S)).stroke({ color: 0xffd700, width: 3 * S, alpha: 0.9 })
+      ring.poly(hexPts(R + 14 * S)).stroke({ color: 0xffd700, width: 1.5 * S, alpha: 0.5 })
       ring.x = node.x
       ring.y = node.y
       this.pulseRings.push(ring)

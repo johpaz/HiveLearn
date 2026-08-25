@@ -2,7 +2,7 @@
  * BootScene — punto de entrada: muestra carga, espera los datos de sesión
  * por el bridge y enruta a la escena correcta:
  *  - ?devLevel=1            → LevelScene con nivel demo
- *  - programa cargado       → WorldMapScene
+ *  - programa cargado       → PanalScene (El Panal Viviente, Three.js)
  *  - sin programa           → TutorialScene (onboarding)
  */
 
@@ -10,9 +10,9 @@ import { Sprite, Text } from 'pixi.js'
 import { Scene } from '../engine/scene'
 import { demoLevelSpec } from '../levels/generator'
 import { LevelScene } from './levelScene'
-import { WorldMapScene } from './worldMapScene'
 import { HiveHubScene } from './hiveHubScene'
 import { CeremonyScene } from './ceremonyScene'
+import { PanalScene } from './panalScene'
 
 export class BootScene extends Scene {
   private bee!: Sprite
@@ -57,7 +57,9 @@ export class BootScene extends Scene {
     this.unsubs.push(g.bridge.on('program:loaded', ({ world, progress }) => {
       g.world = world
       if (progress) g.progress = progress
-      void this.route(new WorldMapScene(g))
+      // "El Panal Viviente": el programa ES el mundo (Three.js nativo).
+      // Las escenas Pixi (mapa/niveles) quedan archivadas como mini-reto futuro.
+      void this.route(new PanalScene(g))
     }))
     this.unsubs.push(g.bridge.on('program:none', () => {
       // Sin programa: "La Colmena Viva" — ceremonia de onboarding Three.js pura.

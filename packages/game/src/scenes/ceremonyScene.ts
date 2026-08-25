@@ -25,8 +25,7 @@ import { VoiceCapture } from '../engine/voice/voiceCapture'
 import { text, textField, button, buildA2UI } from '../a2ui/build'
 import type { A2UIMessage } from '../bridge/gameBridge'
 import { resolveTheme, DEFAULT_THEME } from '../engine/theme'
-import { HiveHubScene } from './hiveHubScene'
-import { WorldMapScene } from './worldMapScene'
+import { PanalScene } from './panalScene'
 
 type Stage = 'awakening' | 'greeting' | 'conversation' | 'swarm' | 'handoff'
 
@@ -171,9 +170,9 @@ export class CeremonyScene extends Scene {
     this.unsubs.push(g.bridge.on('program:generating', ({ mensaje }) => {
       if (this.stage === 'handoff') this.showStatus(`🐝 Las abejas trabajan: ${mensaje}`)
     }))
-    this.unsubs.push(g.bridge.on('program:loaded', ({ reveal }) => {
-      if (reveal) void g.goTo(new HiveHubScene(g, 'reveal', reveal))
-      else void g.goTo(new WorldMapScene(g))
+    this.unsubs.push(g.bridge.on('program:loaded', () => {
+      // La revelación del programa ES el panal: directo al mundo viviente
+      void g.goTo(new PanalScene(g))
     }))
 
     // Micrófono PTT (si hay STT disponible; se confirma cuando React responde estado)
