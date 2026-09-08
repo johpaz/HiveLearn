@@ -4,6 +4,7 @@
  * Servidor HTTP + WebSocket en Bun
  * Sin dependencias del repositorio principal de Hive
  */
+import { resolvePort } from "../utils/port";
 import { initializeDatabase, getDb } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
 import { logger } from '../utils/logger'
@@ -11,7 +12,7 @@ import { createServer, setBunServer } from './server'
 
 const log = logger.child('server')
 
-const PORT = process.env.HIVELEARN_PORT ? parseInt(process.env.HIVELEARN_PORT) : 8787
+const PORT = resolvePort(process.env.HIVELEARN_PORT, 8787)
 const HOST = process.env.HIVELEARN_HOST || '0.0.0.0'
 const isDev = process.env.NODE_ENV === 'development'
 

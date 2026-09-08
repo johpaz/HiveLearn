@@ -3,9 +3,10 @@
  * Hive TTS Server (Standalone)
  * HTTP server local que expone Piper TTS como API REST
  */
+import { resolvePort } from "../../utils/port";
 import { listVoices, synthesize } from "./logic.js"
 
-const PORT = Number(process.env.TTS_PORT ?? 5500)
+const PORT = resolvePort(process.env.TTS_PORT, 5500)
 const DEFAULT_VOICE = process.env.TTS_VOICE ?? "sorah"
 
 const CORS = {

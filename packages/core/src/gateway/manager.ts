@@ -4,6 +4,7 @@
  * Provides functions to start, stop, and manage the HiveLearn gateway server.
  */
 
+import { resolvePort } from "../utils/port";
 import { initializeDatabase, getDb } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
 import { logger } from '../utils/logger'
@@ -24,7 +25,7 @@ export async function startGateway(config: HiveLearnConfig): Promise<void> {
     return
   }
 
-  const PORT = config.gateway?.port || parseInt(process.env.HIVELEARN_PORT || '8787')
+  const PORT = resolvePort(config.gateway?.port ?? process.env.HIVELEARN_PORT, 8787)
   const HOST = config.gateway?.host || process.env.HIVELEARN_HOST || '0.0.0.0'
   const nodeEnv = process.env.NODE_ENV
   const isDev = nodeEnv === 'development'
@@ -84,7 +85,10 @@ export async function stopGateway(): Promise<void> {
     return
   }
 
-  serverInstance.stop()
+  // `stop()` es grácil desde Bun 1.4: espera las peticiones en vuelo y cierra las
+  // conexiones ociosas. Sin el await, stopGateway() retornaba —y marcaba
+  // isRunning=false— con el apagado todavía en curso.
+  await serverInstance.stop()
   serverInstance = null
   isRunning = false
   log.info('✅ Gateway stopped')

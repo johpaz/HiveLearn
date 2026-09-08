@@ -1,0 +1,49 @@
+name: CI
+
+# Hasta acá el repo no tenía ningún workflow: los tests existían pero nada los
+# corría, así que una regresión sólo se descubría cuando alguien la ejecutaba a
+# mano en su máquina.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck y tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Pin exacto y no `latest`: Bun 1.4.1 traía dos regresiones (renombrado
+          # de `var` en `bun build` y una fuga de AsyncLocalStorage) que sólo
+          # 1.4.2 corrige. El piso también está en engines.bun del package.json.
+          bun-version: "1.4.2"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Tests
+        run: bun test
+
+      - name: Verificar que no quedó ninguna clave dentro del repo
+        shell: bash
+        run: |
+          # crypto/key.ts sólo debe crear .master.key bajo HIVE_HOME o ~/.hivelearn.
+          # Si vuelve a aparecer una acá, es que alguien reintrodujo la ruta
+          # process.cwd()/data como ubicación escribible.
+          if find . -name '.master.key' -not -path './node_modules/*' | grep -q .; then
+            echo "::error::Se creó una .master.key dentro del proyecto"
+            find . -name '.master.key' -not -path './node_modules/*'
+            exit 1
+          fi

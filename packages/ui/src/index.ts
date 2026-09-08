@@ -1,8 +1,0 @@
-export { LessonCanvas } from './pages/LessonCanvas'
-export { useLessonStore } from './store/lessonStore'
-export { useLessonSwarm } from './hooks/useLessonSwarm'
-export { useSwarmCanvas } from './hooks/useSwarmCanvas'
-export { useNodeInteraction } from './hooks/useNodeInteraction'
-export { useGamification } from './hooks/useGamification'
-export { useEvaluation } from './hooks/useEvaluation'
-export { SwarmCanvas } from './canvas/SwarmCanvas'
