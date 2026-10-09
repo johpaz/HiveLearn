@@ -8,13 +8,76 @@
 import { HiveDB } from '@johpaz/hive-db'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { mkdirSync } from 'fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'fs'
 import { logger } from '../utils/logger.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 let db: HiveDB | null = null
 let dbPath: string = ''
+
+const LEGACY_META_BACKUP_SUFFIX = '.v0.3.backup'
+
+/**
+ * Migra únicamente el meta.json escrito por HiveDB <= 0.3.x.
+ *
+ * HiveDB 0.5 introdujo documentos semánticos autoritativos y deshabilita los
+ * vectores cuando no se proporciona una configuración explícita. HiveLearn
+ * usa ese modo de texto y reconstruye su índice durante initHiveLearnStorage.
+ */
+export function migrateLegacyDatabaseMetadata(path: string): boolean {
+  const metaPath = join(path, 'meta.json')
+  if (!existsSync(metaPath)) return false
+
+  let metadata: unknown
+  try {
+    metadata = JSON.parse(readFileSync(metaPath, 'utf8'))
+  } catch {
+    // HiveDB emitirá el error canónico para metadatos dañados o ilegibles.
+    return false
+  }
+
+  if (
+    typeof metadata !== 'object' ||
+    metadata === null ||
+    Array.isArray(metadata)
+  ) return false
+
+  const record = metadata as Record<string, unknown>
+  const keys = Object.keys(record)
+  const isLegacyMetadata =
+    keys.length === 1 &&
+    keys[0] === 'vector_dimension' &&
+    Number.isInteger(record.vector_dimension) &&
+    Number(record.vector_dimension) > 0
+
+  if (!isLegacyMetadata) return false
+
+  const backupPath = `${metaPath}${LEGACY_META_BACKUP_SUFFIX}`
+  if (!existsSync(backupPath)) copyFileSync(metaPath, backupPath)
+
+  const temporaryPath = `${metaPath}.${process.pid}.${crypto.randomUUID()}.tmp`
+  try {
+    writeFileSync(temporaryPath, JSON.stringify({
+      schema_version: 2,
+      metric: 'cosine',
+      vector: null,
+    }, null, 2))
+    renameSync(temporaryPath, metaPath)
+  } finally {
+    if (existsSync(temporaryPath)) unlinkSync(temporaryPath)
+  }
+
+  return true
+}
 
 /**
  * Obtener el path de la base de datos
@@ -63,6 +126,13 @@ export async function initializeDatabase(): Promise<HiveDB> {
     mkdirSync(path, { recursive: true })
   } catch {
     // Directorio ya existe o no se puede crear
+  }
+
+  if (migrateLegacyDatabaseMetadata(path)) {
+    logger.info('Legacy HiveDB metadata migrated from 0.3 to 0.5', {
+      source: 'hivelearn-db',
+      backup: `${join(path, 'meta.json')}${LEGACY_META_BACKUP_SUFFIX}`,
+    })
   }
 
   db = await HiveDB.open(path)

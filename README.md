@@ -1,374 +1,75 @@
-# HiveLearn: Pipeline de 8 Agentes
+# HiveLearn IA
 
-## Objetivo
+Plataforma institucional de formación en inteligencia artificial. La interfaz es un panel de trabajo interactivo, no un juego: grafo Three.js/WebGL, diagnóstico formativo, práctica A2UI y revisión docente.
 
-Este documento define el pipeline objetivo de HiveLearn para generar un programa educativo completo con menor latencia, menos puntos de fallo y mayor coherencia pedagógica.
+## Requisitos y arranque
 
-La meta es dejar atrás el swarm sobredimensionado y operar con un núcleo de 8 agentes:
+- Bun **1.4.2**; HiveDB **0.5.0** instalado por el workspace.
+- UI independiente en `packages/hivelearn-ui`: React, Vite 8 y TypeScript 7.
+- Escritorio independiente en `packages/hivelearn-desktop`: instalador Tauri con UI, gateway y HiveDB incluidos. El usuario final no instala herramientas de desarrollo ni introduce tokens técnicos.
 
-1. `hl-coordinator-agent`
-2. `hl-content-agent`
-3. `hl-practice-agent`
-4. `hl-assessment-agent`
-5. `hl-image-agent`
-6. `hl-infographic-agent`
-7. `hl-audio-agent`
-8. `hl-gamification-agent`
+```bash
+bun install
+bun run build:ui
+HIVELEARN_HOST=127.0.0.1 bun run dev:server
+```
 
-## Principios
+Abre `http://127.0.0.1:8787`. En el primer acceso se configuran la institución y el primer administrador sin tokens ni contraseñas predeterminadas. Después del alta, la ruta de configuración queda cerrada. Para desarrollar la UI: `bun run dev:ui` con el gateway activo.
 
-- El coordinador es dueño del plan, no solo del enrutamiento.
-- Cada worker debe tener solo la tool que necesita.
-- La edad, nivel, tono, meta e intención del alumno deben condicionar toda decisión de contenido.
-- No se entrega un programa con nodos incompletos, placeholders silenciosos o contenido incompatible con la edad.
-- El camino feliz debe ser corto; la reparación solo corre cuando hace falta.
+## Perfiles y recorrido
 
-## Agentes y Responsabilidades
+1. **Administrador:** configura institución/logo, proveedores/modelos y credenciales; crea maestros y consulta alumnos.
+2. **Maestro:** ve solamente sus alumnos; registra uno o importa Excel desde su dashboard. Descarga allí la plantilla real `.xlsx`, revisa la previsualización y confirma la autorización institucional.
+3. **Alumno:** recibe un código de activación, elige su contraseña en el primer acceso y entra con su nickname. Completa el diagnóstico y consulta su ruta.
+4. **Aprendizaje:** el grafo muestra prerrequisitos y dominio acreditado; A2UI presenta material propio del sistema y recoge evidencias. El maestro revisa evidencias para acreditar competencias. El diagnóstico no acredita dominio práctico.
+5. **Complementos de IA:** solicitud explícita, opcional, mediante trabajos persistentes y Bun Workers. No reemplazan el currículo ni acreditan automáticamente competencias.
 
-### 1. `hl-coordinator-agent`
+La plantilla contiene `nickname,nombre,tipo_documento,documento,edad,grupo`. El documento debe ser texto para conservar ceros iniciales. Límite: 200 alumnos y 2 MB por archivo. Los códigos vencen en siete días y pueden reemitirse mientras la cuenta no esté activada. Las contraseñas tienen entre 12 y 128 caracteres.
 
-Responsabilidad:
-- entender el perfil del alumno
-- clasificar intención
-- definir la estructura del programa
-- decidir el tipo pedagógico y visual de cada nodo
-- coordinar repair y review final
+## Compilar y verificar
 
-Tools:
-- `planificar_programa`
-- `buscar_en_hivelearn`
-- `reparar_nodo_completo`
-- `revisar_programa`
-- `actualizar_prompt_agente`
+```bash
+bun run typecheck
+bun test
+bun run build
+bun run build:desktop
+bun run test:webview
+```
 
-Skills esperadas:
-- planificación pedagógica
-- adaptación por edad
-- decisión de medios
-- control de calidad
-- recuperación ante fallos
+`bun test` ejecuta pruebas unitarias e integración con HiveDB temporal. Las pruebas gráficas web son optativas: `test:webview` usa Bun.WebView y requiere Chrome/Chromium en el equipo de desarrollo. El shell Tauri tiene pruebas Rust independientes en `packages/hivelearn-desktop/src-tauri`.
 
-### 2. `hl-content-agent`
+En Fedora, `bun run build:desktop` genera `packages/hivelearn-desktop/src-tauri/target/release/bundle/rpm/HiveLearn-0.1.0-1.x86_64.rpm`. El RPM contiene el shell, el gateway compilado, la UI y el binding de HiveDB; el gestor de paquetes resuelve GTK/WebKitGTK durante la instalación.
 
-Responsabilidad:
-- generar explicación principal por nodo
-- producir contenido conceptual y milestones
+## Configuración y documentación
 
-Tool:
-- `generar_explicacion`
+- [Configuración institucional, seguridad y operación](docs/CONFIGURACION-INSTITUCIONAL.md)
+- [Contrato del grafo y del coordinador](docs/GRAFO-CURRICULAR.md)
+- [Investigación curricular, rutas por edad/nivel y fuentes](docs/INVESTIGACION-CURRICULAR.md)
+- [Resultados y límites de las pruebas](docs/VERIFICACION.md)
 
-Skills esperadas:
-- explicación clara
-- tono motivador
-- ejemplo concreto
-- simplificación por rango de edad
+La ruta predeterminada de datos es `~/.hivelearn/hivedb`; usa `HIVELEARN_DB_PATH` para una ubicación institucional. No reutilices la base de Hive: HiveLearn conserva una base propia.
 
-### 3. `hl-practice-agent`
+### Motor de agentes (`@johpaz/hive-sdk`)
 
-Responsabilidad:
-- generar práctica guiada
-- producir ejercicios o retos según el tipo del nodo
+El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGINE=sdk` los agentes se ejecutan con el loop de `@johpaz/hive-sdk`. Un proveedor que el SDK no soporta (p. ej. `local-llama`) cae solo al loop propio.
 
-Tool:
-- `generar_ejercicio`
+- El SDK usa una base **separada** (`sdk-db` y `sdk-home`, junto a la de HiveLearn). Se puede mover con `HIVELEARN_SDK_DB_PATH` y `HIVELEARN_SDK_HOME`.
+- **Oráculo Kev/Jev:** se activa solo si hay API key del proveedor `hiveagents` (Kev) o `openrouter` (Jev). Se apaga con `oracleEnabled: false` en la configuración institucional, y con `allowRemoteProviders: false` solo se admite un endpoint local o de red privada. Del turno solo viaja el objetivo de la tarea; instrucciones, historial y resultados de tools no se comparten.
+- Con el motor `sdk` el servidor cierra ordenadamente al recibir `SIGINT`/`SIGTERM`.
 
-Skills esperadas:
-- aprendizaje activo
-- pasos guiados
-- ejemplo de respuesta
-- pista y respuesta correcta
+### Edad, política y identidad del alumno
 
-### 4. `hl-assessment-agent`
+- La banda de edad sale de un solo lugar (`institutional/age.ts`). Una edad ausente o inválida cuenta como la banda más restrictiva (`ninez`), nunca como adulto.
+- Toda ejecución de un agente lleva un `RunContext` (alumno y banda). Un proveedor remoto exige `allowRemoteProviders` y, para menores o edad desconocida, `allowRemoteForMinors`. Sin institución instalada, los menores solo lo usan con `HIVELEARN_ALLOW_REMOTE_FOR_MINORS=true`. El oráculo Kev/Jev sigue la misma regla.
+- Con el motor `sdk`, un hook `beforeToolCall` bloquea cualquier herramienta que no sea de la ejecución en curso.
+- `HIVELEARN_MIGRATE_STUDENT_IDS=dry-run|true` enlaza los perfiles antiguos con su cuenta del portal por nickname=username. Solo enlaza coincidencias inequívocas, deja copia en `hl_student_migration_backup` y los alias en `hl_student_aliases`. Úsalo primero en `dry-run`.
 
-Responsabilidad:
-- generar quiz de nodo o evaluación de cierre
+## Alcance verificado y límites
 
-Tool:
-- `generar_evaluacion`
+Implementados: roles, activación, perfil de nombre, inscripción Excel, diagnóstico de diez preguntas, diez competencias con contenido original, revisión docente, A2UI 0.8 (subconjunto del catálogo), WebSocket con alternativa HTTP, configuración institucional y complementos persistentes con dos workers como máximo.
 
-Skills esperadas:
-- evaluación formativa
-- preguntas alineadas al objetivo
-- dificultad adaptada a la edad
+El material es una base curricular versionada, no una certificación ni un instrumento psicométrico validado. Requiere pilotaje y revisión docente local. La configuración de imagen/audio/voz no equivale a un estudio multimedia completo: no se ha verificado generación multimodal de extremo a extremo con proveedores comerciales. La transformación de logos sí usa Bun.Image y tiene pruebas.
 
-### 5. `hl-image-agent`
+No se han verificado proveedores comerciales reales ni el almacén de secretos del sistema en todas las plataformas. No hay SSO, recuperación autónoma de contraseñas activas, gestión legal de consentimientos, instaladores firmados ni auditoría externa de seguridad. La autorización declarada durante la matrícula no demuestra consentimiento del representante legal.
 
-Responsabilidad:
-- generar el apoyo visual principal del nodo
-- resolver internamente la representación más adecuada para el concepto
-
-Tool:
-- `generar_imagen`
-
-Skills esperadas:
-- representación visual simple
-- soporte conceptual
-- adecuación visual para `nino`, `adolescente` o `adulto`
-
-### 6. `hl-infographic-agent`
-
-Responsabilidad:
-- generar infografías cuando el nodo sea de resumen, comparación o cierre
-
-Tool:
-- `generar_infografia`
-
-Skills esperadas:
-- síntesis visual
-- jerarquía de información
-- baja complejidad para niños
-
-### 7. `hl-audio-agent`
-
-Responsabilidad:
-- generar guion de narración educativa
-- producir contenido apto para TTS
-
-Tool:
-- `generar_audio`
-
-Skills esperadas:
-- narración clara
-- tono cálido
-- ritmo simple
-- apoyo auditivo por edad
-
-### 8. `hl-gamification-agent`
-
-Responsabilidad:
-- asignar XP
-- proponer recompensas
-- reforzar progresión y celebración
-
-Tool:
-- `generar_gamificacion`
-
-Skills esperadas:
-- motivación
-- progresión equilibrada
-- refuerzo positivo
-
-## Qué sale del pipeline principal
-
-Estos agentes no deben formar parte del swarm principal de generación:
-
-- `hl-onboarding-agent`
-- `hl-feedback-agent`
-
-Estos flujos siguen existiendo, pero fuera del pipeline de creación del programa.
-
-También salen del camino principal:
-
-- `hl-profile-agent`
-- `hl-intent-agent`
-- `hl-structure-agent`
-- `hl-challenge-agent`
-- `hl-code-agent`
-- `hl-quiz-agent`
-- `hl-svg-agent`
-- `hl-gif-agent`
-
-Sus responsabilidades quedan absorbidas por el coordinador o por agentes más amplios.
-
-## Pipeline Operativo
-
-### Fase 0. Onboarding
-
-Entrada:
-- nickname
-- nombre
-- edad
-- tema
-- objetivo
-- estilo
-
-Salida:
-- perfil persistido del alumno
-- sesión lista para generación
-
-Esta fase no pertenece al swarm de 8 agentes.
-
-### Fase 1. Plan del programa
-
-El coordinador recibe:
-- perfil completo
-- meta
-- contexto del alumno
-
-El coordinador llama:
-- `planificar_programa`
-
-Salida esperada:
-- `LessonBlueprint`
-- tema
-- nodos
-- `tipoPedagogico`
-- `tipoVisual`
-- XP por nodo
-
-### Fase 2. Generación por nodo
-
-Para cada nodo, el sistema crea:
-
-- 1 tarea pedagógica obligatoria
-- 0 o 1 tarea media opcional
-
-Ejemplos:
-- un nodo conceptual usa `hl-content-agent`
-- un nodo práctico usa `hl-practice-agent`
-- un nodo de verificación usa `hl-assessment-agent`
-- un nodo con apoyo visual usa `hl-image-agent`
-- un nodo de resumen usa `hl-infographic-agent`
-- un nodo auditivo usa `hl-audio-agent`
-
-### Fase 3. Gamificación
-
-Cuando los nodos ya están completos:
-- `hl-gamification-agent` distribuye XP, refuerzos y recompensas
-
-### Fase 4. Repair
-
-Si un worker falla:
-- el coordinador revisa el nodo incompleto
-- usa `buscar_en_hivelearn` si necesita contexto adicional
-- llama `reparar_nodo_completo`
-
-Si el nodo sigue incompleto:
-- la generación falla explícitamente
-
-### Fase 5. Review final
-
-El coordinador revisa:
-- coherencia pedagógica
-- progresión
-- adecuación por edad
-- equilibrio de XP
-- completitud real del programa
-
-Tool:
-- `revisar_programa`
-
-Si el proveedor falla en esta etapa:
-- debe existir fallback determinístico local
-- no se debe perder un programa ya reparado
-
-## Contexto que debe recibir cada agent
-
-Todo worker debe recibir en su `taskDescription`, como mínimo:
-
-- `tema`
-- `objetivo`
-- `concepto`
-- `rangoEdad`
-- `nivelPrevio`
-- `tono`
-- `estilo`
-- `duracionSesion`
-- `tipoPedagogico`
-- `tipoVisual`
-- `nodeId`
-
-No basta con declararlo en el `system prompt`. El runtime debe inyectarlo en cada tarea.
-
-## Reglas por edad
-
-### `nino`
-
-Priorizar:
-- `image_ai`
-- `audio_ai`
-
-Usar con cautela:
-- `infographic`
-
-Evitar por defecto:
-- `code_block`
-- visuales densos
-- texto largo
-
-### `adolescente`
-
-Permitir:
-- más detalle conceptual
-- práctica más abierta
-- evaluaciones con mayor dificultad
-
-### `adulto`
-
-Permitir:
-- mayor densidad de contenido
-- explicaciones comparativas
-- estructuras más extensas
-
-## Tiempos Esperados
-
-Objetivo operativo para 5 nodos:
-
-- camino feliz: `45s` a `90s`
-- con algunos retries o repair ligero: `90s` a `150s`
-- por encima de `180s`: degradación que debe revisarse
-
-No es aceptable como baseline:
-- `4` o `5` minutos para 5 nodos
-- más de `10` llamadas críticas en serie
-- generar nodos huecos y luego “taparlos” con fallback
-
-## Ventajas de este pipeline
-
-### 1. Menor latencia
-
-Se eliminan workers base redundantes y saltos innecesarios.
-
-### 2. Menos puntos de fallo
-
-Menos agentes significa:
-- menos retries
-- menos tool-calls
-- menos inconsistencias entre outputs
-
-### 3. Mejor coherencia pedagógica
-
-El coordinador define la estructura con contexto completo del alumno.
-
-### 4. Mejor trazabilidad
-
-Cada worker tiene una sola responsabilidad clara y una sola tool.
-
-### 5. Mejor repair
-
-Cuando algo falla, el coordinador repara el nodo completo en lugar de ensamblar piezas rotas.
-
-## Riesgos a evitar
-
-- dejar prompts legacy en BD activos sobre workers ya refactorizados
-- exponer más de una tool a un worker sin necesidad
-- seguir aceptando texto plano cuando la salida es ambigua
-- permitir que el orquestador cree fallback silencioso
-- usar tipos visuales incompatibles con la edad del alumno
-
-## Estado actual de transición
-
-La implementación ya avanzó en estas áreas:
-
-- el coordinador absorbe `profile`, `intent` y `structure`
-- se eliminó el fallback silencioso de contenido en el orquestador
-- se añadieron guardrails por edad para la selección visual
-- la UI principal ya dejó de mostrar varios agentes legacy
-- tools y skills ya se indexan en FTS para `buscar_en_hivelearn`
-
-Todavía hay consolidaciones pendientes:
-
-- dejar `ImageAgent` como único worker visual real
-- dejar `AssessmentAgent` como único worker de quiz y evaluación
-- terminar de reflejar el modelo de 8 agentes en todos los paneles de configuración
-
-## Criterios de aceptación
-
-El pipeline se considera correcto cuando:
-
-- el coordinador genera el blueprint sin lanzar `profile/intent/structure` como workers
-- cada worker corre con una sola tool
-- no se entrega ningún programa con nodos incompletos
-- la review final corre solo sobre programas completos
-- el tiempo total para 5 nodos se mantiene normalmente por debajo de `90s`
-- la UI, el seed inicial y la documentación muestran el mismo modelo operativo
+El código histórico de lecciones se conserva por compatibilidad; su gamificación no forma parte del nuevo panel ni del conjunto activo de generación.

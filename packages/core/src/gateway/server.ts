@@ -4,6 +4,8 @@
  * Gateway independiente con rutas API, WebSocket y serving de UI
  */
 import { getDb } from '../storage/hivedb'
+import { Portal, checkOrigin, sessionCookie } from '../institutional/portal'
+import { rangoEdadForAge } from '../institutional/age'
 import { LessonDeliverySession, LessonPersistence, runHiveLearnSession, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
 import { getGenerationRun, listGenerationRuns, type GenerationRunStatus } from '../agent/run-store'
 import { logger } from '../utils/logger'
@@ -37,10 +39,13 @@ import {
 } from './agent-chat'
 import type { LLMMessage } from '../agent/llm-client'
 import type { StudentProfile, SwarmTimelineEvent } from '../types'
+import { LEVEL_CATALOG, createDiagnostic, saveStudentIdentity } from '../institutional'
 
 interface WSData {
   path: string
   search?: string
+  portalSession?: string
+  busy?: boolean
 }
 
 interface OnboardingFieldMap {
@@ -99,6 +104,12 @@ function addCorsHeaders(response: Response, req: Request): Response {
     response.headers.set(key, value as string)
   }
   return response
+}
+
+function isAuthorized(req: Request): boolean {
+  const expected = process.env.HIVELEARN_AUTH_TOKEN
+  if (!expected) return false
+  return req.headers.get('Authorization') === `Bearer ${expected}`
 }
 
 function isLocalProviderRecord(provider: Record<string, unknown> | undefined): boolean {
@@ -164,8 +175,10 @@ function normalizeOnboardingFields(fields: OnboardingFieldMap): {
   energia: 'baja' | 'media' | 'alta'
   tiempoDisponible: 15 | 30 | 45
 } {
-  const edad = Number.parseInt(fields.edad ?? '18', 10)
-  const rangoEdad = edad <= 12 ? 'nino' : edad <= 17 ? 'adolescente' : 'adulto'
+  // Sin edad declarada NO se asume adulto: edad 0 → banda restrictiva (ver institutional/age.ts).
+  const parsedEdad = Number.parseInt(fields.edad ?? '', 10)
+  const edad = Number.isFinite(parsedEdad) && parsedEdad > 0 ? parsedEdad : 0
+  const rangoEdad = rangoEdadForAge(edad)
   const estiloRaw = fields.estilo?.toLowerCase() ?? 'balanceado'
   const estilo = estiloRaw.includes('visual')
     ? 'visual'
@@ -183,7 +196,7 @@ function normalizeOnboardingFields(fields: OnboardingFieldMap): {
       alumnoId: `alumno_${nickSlug}_${Date.now()}`,
       nickname: fields.nickname?.trim() ?? '',
       nombre: fields.nombre?.trim() || 'Alumno',
-      edad: Number.isFinite(edad) ? edad : 18,
+      edad,
       rangoEdad,
       tiempoSesion: normalizeTiempoDisponible(fields.tiempo_disponible),
       nivelPrevio: 'principiante',
@@ -655,7 +668,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
         const normalized = normalizeOnboardingFields({
           nickname: fArgs.nickname ?? '',
           nombre:   fArgs.nombre   ?? cached?.nombre ?? '',
-          edad:     fArgs.edad     ?? String(cached?.edad ?? '18'),
+          edad:     fArgs.edad     ?? String(cached?.edad ?? ''),
           tema:     fArgs.tema     ?? await persistedOnboardingTema(persistence, sessionId),
           objetivo: fArgs.objetivo,
           energia:  fArgs.energia,
@@ -682,7 +695,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
       const normalized = normalizeOnboardingFields({
         nickname: args.nickname ?? '',
         nombre:   args.nombre   ?? cached?.nombre ?? '',
-        edad:     args.edad     ?? String(cached?.edad ?? '18'),
+        edad:     args.edad     ?? String(cached?.edad ?? ''),
         tema:     args.tema     ?? await persistedOnboardingTema(persistence, sessionId),
         objetivo: args.objetivo,
         energia:  args.energia,
@@ -798,7 +811,7 @@ async function handleOnboardingWS(ws: ServerWebSocket<WSData>, message: string):
             const normalized2 = normalizeOnboardingFields({
               nickname: fArgs2.nickname ?? nextFields2.nickname ?? '',
               nombre:   fArgs2.nombre   ?? cached2?.nombre ?? nextFields2.nombre ?? '',
-              edad:     fArgs2.edad     ?? String(cached2?.edad ?? nextFields2.edad ?? '18'),
+              edad:     fArgs2.edad     ?? String(cached2?.edad ?? nextFields2.edad ?? ''),
               tema:     fArgs2.tema     ?? nextFields2.tema ?? '',
               objetivo: fArgs2.objetivo ?? nextFields2.objetivo ?? '',
               energia:  fArgs2.energia  ?? nextFields2.energia ?? '',
@@ -923,7 +936,7 @@ async function serveUIFile(pathname: string): Promise<Response | null> {
   // Fallback to disk — try multiple locations
   const projectRoot = join(__dirname, '../../../..')
   const candidates = [
-    join(projectRoot, 'packages/ui/dist'),
+    join(projectRoot, 'packages/hivelearn-ui/dist'),
     join(projectRoot, 'dist/ui'),
     join(process.cwd(), 'dist/ui'),
   ]
@@ -948,9 +961,35 @@ async function serveUIFile(pathname: string): Promise<Response | null> {
 }
 
 export function createServer(): Server {
+  const portal = new Portal(getDb())
+  void portal.supplements.resume().catch(error => log.warn('No se pudieron reanudar complementos', { error: String(error) }))
   return {
     fetch: async (req: Request) => {
       const url = new URL(req.url)
+
+      if (url.pathname === '/api/portal/a2ui/ws' && req.headers.get('upgrade') === 'websocket') {
+        try {
+          checkOrigin(req)
+          const actor = await portal.actor(req)
+          await portal.surface(actor, url.searchParams.get('nodeId') ?? '')
+          if (getBunServer()?.upgrade(req, { data: { path: url.pathname, search: url.search, portalSession: sessionCookie(req) } })) return undefined as any
+          return new Response('WebSocket upgrade failed', { status: 400 })
+        } catch (error) { return portal.error(error) }
+      }
+      if (url.pathname.startsWith('/api/portal/')) return portal.handle(req, getBunServer()?.requestIP(req)?.address ?? 'local')
+
+      // Legacy administrative APIs and sockets are never available to students/teachers.
+      const protectedPath = url.pathname.startsWith('/api/') || req.headers.get('upgrade') === 'websocket'
+      if (protectedPath) {
+        try {
+          checkOrigin(req)
+          if (!isAuthorized(req)) {
+            const actor = await portal.actor(req)
+            if (actor.role !== 'admin') return new Response('Forbidden', { status: 403 })
+          }
+        } catch (error) { return portal.error(error) }
+      }
+      if (['/api/hivelearn/identity', '/api/hivelearn/diagnostic'].includes(url.pathname)) return new Response('Use the authenticated institutional portal', { status: 410 })
       
       // Handle WebSocket upgrades
       const upgradeHeader = req.headers.get('Upgrade')
@@ -977,6 +1016,7 @@ export function createServer(): Server {
         })
       }
 
+
       // ── Health check ───────────────────────────────────────────────────
       if (url.pathname === '/health') {
         return new Response(JSON.stringify({ status: 'ok' }), {
@@ -995,7 +1035,7 @@ export function createServer(): Server {
           // __dirname = packages/core/src/gateway, go up 4 levels to project root
           const projectRoot = join(__dirname, '../../../..')
           const uiDirCandidates = [
-            join(projectRoot, 'packages/ui/dist'),
+            join(projectRoot, 'packages/hivelearn-ui/dist'),
             join(projectRoot, 'dist/ui'),
             join(process.cwd(), 'dist/ui'),
           ]
@@ -1030,6 +1070,46 @@ export function createServer(): Server {
       }
 
       // ── API Routes ─────────────────────────────────────────────────────
+
+      if (url.pathname === '/api/hivelearn/levels' && req.method === 'GET') {
+        return addCorsHeaders(new Response(JSON.stringify({ levels: LEVEL_CATALOG, curriculumVersion: 'unesco-ai-v1' }), { status: 200, headers: { 'Content-Type': 'application/json' } }), req)
+      }
+
+      if (url.pathname === '/api/hivelearn/identity' && req.method === 'POST') {
+        try {
+          const body = await req.json() as Record<string, any>
+          for (const field of ['studentId', 'institutionId', 'accountId', 'nickname', 'displayName', 'legalName', 'documentType', 'documentNumber', 'age']) {
+            if (body[field] === undefined || body[field] === '') throw new Error(`${field} requerido`)
+          }
+          const identity = await saveStudentIdentity({
+            studentId: String(body.studentId),
+            institutionId: String(body.institutionId),
+            accountId: String(body.accountId),
+            nickname: String(body.nickname),
+            displayName: String(body.displayName),
+            legalName: String(body.legalName),
+            documentType: body.documentType,
+            documentNumber: String(body.documentNumber),
+            ageBand: body.ageBand ?? 'adulto',
+            role: 'student',
+          })
+          const { documentFingerprint: _fingerprint, documentCiphertext: _ciphertext, documentIv: _iv, ...publicIdentity } = identity
+          return addCorsHeaders(new Response(JSON.stringify({ ok: true, identity: publicIdentity }), { status: 201, headers: { 'Content-Type': 'application/json' } }), req)
+        } catch (e) {
+          return addCorsHeaders(new Response(JSON.stringify({ error: (e as Error).message }), { status: 400, headers: { 'Content-Type': 'application/json' } }), req)
+        }
+      }
+
+      if (url.pathname === '/api/hivelearn/diagnostic' && req.method === 'POST') {
+        try {
+          const body = await req.json() as { id?: string; studentId?: string; institutionId?: string; age?: number; answers?: any[]; curriculumVersion?: string }
+          if (!body.id || !body.studentId || !body.institutionId || typeof body.age !== 'number' || !Array.isArray(body.answers)) throw new Error('id, studentId, institutionId, age y answers son requeridos')
+          const diagnostic = await createDiagnostic({ id: body.id, studentId: body.studentId, institutionId: body.institutionId, age: body.age, answers: body.answers, curriculumVersion: body.curriculumVersion })
+          return addCorsHeaders(new Response(JSON.stringify({ ok: true, diagnostic }), { status: 201, headers: { 'Content-Type': 'application/json' } }), req)
+        } catch (e) {
+          return addCorsHeaders(new Response(JSON.stringify({ error: (e as Error).message }), { status: 400, headers: { 'Content-Type': 'application/json' } }), req)
+        }
+      }
 
       // GET /api/providers
       if (url.pathname === '/api/providers' && req.method === 'GET') {
@@ -2541,6 +2621,15 @@ export function createServer(): Server {
     websocket: {
       open(ws) {
         const path = ws.data.path
+        if (path === '/api/portal/a2ui/ws') {
+          void (async () => {
+            const actor = await portal.accounts.session(ws.data.portalSession ?? '')
+            if (!actor) { ws.close(1008, 'Sesión vencida'); return }
+            const nodeId = new URLSearchParams(ws.data.search).get('nodeId') ?? ''
+            for (const message of await portal.surface(actor, nodeId)) ws.send(JSON.stringify(message))
+          })().catch(() => ws.close(1011, 'No se pudo abrir la superficie'))
+          return
+        }
         const search = ws.data.search ?? ''
         if (path === '/ws/llm') {
           log.info('[ws] LLM client connected')
@@ -2581,6 +2670,19 @@ export function createServer(): Server {
 
       message(ws, message) {
         const path = ws.data.path
+        if (path === '/api/portal/a2ui/ws') {
+          if ((typeof message === 'string' ? message.length : message.byteLength) > 16384 || ws.data.busy) { ws.send(JSON.stringify({ error: { message: 'Solicitud excesiva o pendiente' } })); return }
+          ws.data.busy = true
+          void (async () => {
+            const actor = await portal.accounts.session(ws.data.portalSession ?? '')
+            if (!actor) { ws.close(1008, 'Sesión vencida'); return }
+            const data = JSON.parse(message.toString())
+            const nodeId = new URLSearchParams(ws.data.search).get('nodeId') ?? ''
+            if (data.userAction?.context?.nodeId !== nodeId) throw new Error('Superficie incorrecta')
+            for (const update of await portal.action(actor, data)) ws.send(JSON.stringify(update))
+          })().catch(() => ws.send(JSON.stringify({ error: { message: 'No se pudo enviar: comprueba la evidencia y los prerrequisitos' } }))).finally(() => { ws.data.busy = false })
+          return
+        }
         if (path === '/ws/llm') {
           handleLLMWebSocket(ws as any, message.toString())
           return
@@ -2610,7 +2712,8 @@ export function createServer(): Server {
 
       close(ws, code, reason) {
         const path = ws.data.path
-        log.info(`[ws] Client disconnected: ${code} ${reason}`, { path })
+        if (path === '/api/portal/a2ui/ws' && (code === 1000 || code === 1005)) log.debug('[ws] Canal de actividad cerrado por el cliente', { path, code })
+        else log.info(`[ws] Client disconnected: ${code} ${reason}`, { path })
         
         for (const [sessionId, sessionWs] of onboardingSessions.entries()) {
           if (sessionWs === ws) {

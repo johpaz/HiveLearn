@@ -46,6 +46,8 @@ export const AGENT_IDS = {
   gamification: 'hl-gamification-agent',
   evaluation: 'hl-evaluation-agent',
   feedback: 'hl-feedback-agent',
+  diagnostic: 'hl-diagnostic-agent',
+  safety: 'hl-safety-policy-agent',
 } as const
 
 interface AgentDef {
@@ -91,6 +93,8 @@ const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.evaluation, name: 'AssessmentAgent', description: 'Único worker de assessment; genera quiz por nodo y evaluación final', systemPrompt: EVALUATION_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.feedback, name: 'FeedbackAgent', description: 'Feedback motivador on-demand por respuesta del alumno', systemPrompt: FEEDBACK_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.audio, name: 'AudioAgent', description: 'Genera script de narración educativa (Web Speech API)', systemPrompt: AUDIO_PROMPT, maxIterations: 3 },
+  { id: AGENT_IDS.diagnostic, name: 'DiagnosticAgent', description: 'Interpreta evidencias de competencias de IA', systemPrompt: 'Clasifica evidencias de IA por competencia y nivel. No inventes resultados; devuelve JSON verificable.', maxIterations: 3 },
+  { id: AGENT_IDS.safety, name: 'SafetyPolicyAgent', description: 'Verifica seguridad, edad, privacidad y consentimiento', systemPrompt: 'Revisa contenido educativo para edad, privacidad, sesgos y consentimiento. Señala bloqueos explícitamente.', maxIterations: 3 },
 ]
 
 const ACTIVE_AGENT_IDS = new Set<string>([
@@ -101,9 +105,10 @@ const ACTIVE_AGENT_IDS = new Set<string>([
   AGENT_IDS.infographic,
   AGENT_IDS.image,
   AGENT_IDS.audio,
-  AGENT_IDS.gamification,
   AGENT_IDS.evaluation,
   AGENT_IDS.feedback,
+  AGENT_IDS.diagnostic,
+  AGENT_IDS.safety,
 ])
 
 function agentsCollection(): Collection<AgentDoc> {

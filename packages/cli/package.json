@@ -16,7 +16,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "bun run scripts/generate-ui-bundle.ts && bun build src/index.ts --outfile dist/hive.js --target bun && bun run scripts/postbuild.ts",
+    "build": "bun run scripts/generate-ui-bundle.ts && bun build src/index.ts --outfile dist/hive.js --target bun --external @johpaz/hive-db && bun run scripts/postbuild.ts",
     "postbuild": "bun run scripts/postbuild.ts",
     "dev": "bun run src/index.ts start",
     "dev:watch": "bun --watch src/index.ts start",
@@ -24,6 +24,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@johpaz/hive-db": "0.6.1",
     "@clack/prompts": "1.1.0",
     "@hivelearn/core": "workspace:*",
     "toon-format-parser": "1.1.3",

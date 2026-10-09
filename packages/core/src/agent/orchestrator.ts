@@ -109,6 +109,8 @@ export function buildNodosBase(structureResult: string, perfil: PerfilAdaptacion
   return estructuraNodos.map((n: any, idx: number) => {
     return {
       id: `nodo-${idx}`,
+      competencyId: n.competencyId,
+      curriculumVersion: parsed.curriculumVersion,
       tipoPedagogico: (n.tipo_pedagogico ?? n.tipoPedagogico ?? 'concept') as TipoPedagogico,
       tipoVisual: normalizeRuntimeVisualType((n.tipo_visual ?? n.tipoVisual ?? 'text_card') as TipoVisual),
       titulo: n.titulo ?? `Nodo ${idx + 1}`,
@@ -116,7 +118,7 @@ export function buildNodosBase(structureResult: string, perfil: PerfilAdaptacion
       nivel: perfil.nivelPrevio as NivelPrevio,
       rangoEdad: perfil.rangoEdad as RangoEdad,
       estado: (idx === 0 ? 'disponible' : 'bloqueado') as EstadoNodo,
-      xpRecompensa: n.xp_recompensa ?? n.xpRecompensa ?? 20,
+      xpRecompensa: 0,
       contenido: {} as NodoContenido,
     }
   })
@@ -236,7 +238,7 @@ export function buildLessonProgram(opts: {
   // Gamificación — puede ser JSON libre (sin tool) o passthrough wrapper
   const gamRaw = resultMap.get('gamification') ?? '{}'
   const gamificacion = unwrap(parseAgentOutput<GamificacionOutput>(gamRaw, {
-    xpRecompensa: 100,
+    xpRecompensa: 0,
     logros: [],
     mensajeCelebracion: '¡Excelente trabajo! Completaste la lección. 🎉',
   })) as GamificacionOutput

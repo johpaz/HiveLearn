@@ -16,6 +16,7 @@
 import type { HiveDB, Collection } from '@johpaz/hive-db'
 import { getDb, nextNumericId, nextSessionSeq, nowIso } from './hivedb'
 import type { StudentProfile, SwarmTimelineEvent } from '../types'
+import { rangoEdadForAge } from '../institutional/age'
 import { logger } from '../utils/logger'
 
 export interface SessionData {
@@ -842,8 +843,9 @@ export class LessonPersistence {
         alumnoId,
         nickname: step === 'nickname' ? fieldValue : perfilParcial?.nickname,
         nombre: step === 'nombre' ? fieldValue : (perfilParcial?.nombre ?? fieldValue),
+        // Edad aún desconocida: banda restrictiva hasta que el alumno la declare.
         edad: 0,
-        rangoEdad: 'adulto',
+        rangoEdad: rangoEdadForAge(0),
         tiempoSesion: 30,
         nivelPrevio: 'principiante',
         estilo: 'balanceado',
@@ -882,7 +884,7 @@ export class LessonPersistence {
       // Actualizar perfil del alumno incrementalmente
       if (step === 'edad') {
         const edad = parseInt(fieldValue, 10)
-        const rangoEdad = edad <= 12 ? 'nino' : edad <= 17 ? 'adolescente' : 'adulto'
+        const rangoEdad = rangoEdadForAge(edad)
         const profiles = this.col<StudentProfileDoc>('hl_student_profiles')
         const profile = await profiles.get(alumnoId)
         if (profile) {

@@ -4,6 +4,7 @@
  */
 import type { TaskNode } from './scheduler/dag'
 import { runHiveLearnAgent } from './runner'
+import type { RunContext } from './policy/age-policy'
 import { AGENT_PROMPTS } from './prompts'
 import { LessonPersistence } from '../storage/LessonPersistence'
 import { nodeCache } from '../cache/NodeCache'
@@ -43,8 +44,12 @@ export class HiveLearnExecutor {
   /** Outputs de nodos de un run anterior (reanudación), keyed por node.id */
   private priorOutputs?: Map<string, string>
 
-  constructor(priorOutputs?: Map<string, string>) {
+  /** Quién ejecuta (edad del alumno). Obligatorio: la política por edad no puede quedar sin sujeto. */
+  private runContext: RunContext
+
+  constructor(runContext: RunContext, priorOutputs?: Map<string, string>) {
     this.persistence = new LessonPersistence()
+    this.runContext = runContext
     this.priorOutputs = priorOutputs
   }
 
@@ -94,6 +99,7 @@ export class HiveLearnExecutor {
         systemPrompt,
         tools,
         threadId,
+        runContext: this.runContext,
         validationContext,
       })
     } catch (err) {

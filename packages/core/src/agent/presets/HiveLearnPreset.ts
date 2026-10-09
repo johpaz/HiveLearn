@@ -133,16 +133,6 @@ export function buildFullDAG(input: HiveLearnDAGInput, nodos: Omit<NodoLesson, '
 
   const tier2: TaskNodeConfig[] = [
     {
-      id: 'gamification',
-      agentId: AGENT_IDS.gamification,
-      name: 'GamificationAgent',
-      taskDescription: `${ctxBase} Rango edad: ${input.perfil.rangoEdad}. Genera XP, logros y celebración.`,
-      deps: contentIds.length > 0 ? contentIds : [],
-      timeout: 30_000,
-      maxRetries: 1,
-      priority: 3,
-    },
-    {
       id: 'evaluation',
       agentId: AGENT_IDS.evaluation,
       name: 'EvaluationAgent',

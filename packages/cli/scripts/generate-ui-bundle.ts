@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Generates src/ui-bundle.generated.ts by embedding all files from packages/ui/dist/
+// Generates src/ui-bundle.generated.ts by embedding all files from packages/hivelearn-ui/dist/
 // Run before compiling the standalone binary: bun scripts/generate-ui-bundle.ts
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -39,7 +39,7 @@ function walk(dir: string, base = dir): Array<{ sub: string; full: string }> {
   return results;
 }
 
-const uiDist = path.join(import.meta.dir, "../../ui/dist");
+const uiDist = path.join(import.meta.dir, "../../hivelearn-ui/dist");
 const outFile = path.join(import.meta.dir, "../src/ui-bundle.generated.ts");
 
 let files: Array<{ sub: string; full: string }>;

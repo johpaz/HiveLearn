@@ -7,6 +7,7 @@
 import { resolvePort } from "../utils/port";
 import { initializeDatabase, getDb } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
+import { closeSdkEngine, installShutdownHandlers, startSdkEngineIfEnabled } from '../agent/sdk/bootstrap'
 import { logger } from '../utils/logger'
 import { createServer, setBunServer } from '../gateway/server'
 import type { HiveLearnConfig } from '../config/loader'
@@ -42,6 +43,9 @@ export async function startGateway(config: HiveLearnConfig): Promise<void> {
     await initHiveLearnStorage()
     log.info('✅ Database schemas initialized')
 
+    // Motor de agentes basado en @johpaz/hive-sdk (opt-in): base propia, separada de hl_*.
+    if (await startSdkEngineIfEnabled()) log.info('✅ SDK agent engine initialized')
+
     // Reconcile de runs de generación huérfanos (larga duración)
     const { reconcileGenerationRuns } = await import('../agent/run-store')
     const interrupted = await reconcileGenerationRuns()
@@ -61,10 +65,12 @@ export async function startGateway(config: HiveLearnConfig): Promise<void> {
     fetch: server.fetch,
     websocket: server.websocket,
     idleTimeout: 120,
+    maxRequestBodySize: 3 * 1024 * 1024,
   })
 
   // Register Bun server so WebSocket upgrades work inside createServer()
   setBunServer(serverInstance)
+  installShutdownHandlers(stopGateway)
 
   isRunning = true
   log.info(`✅ Gateway listening on http://${HOST}:${PORT}`)
@@ -91,6 +97,7 @@ export async function stopGateway(): Promise<void> {
   await serverInstance.stop()
   serverInstance = null
   isRunning = false
+  await closeSdkEngine()
   log.info('✅ Gateway stopped')
 }
 

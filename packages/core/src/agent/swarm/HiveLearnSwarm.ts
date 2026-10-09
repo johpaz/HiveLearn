@@ -5,6 +5,10 @@
  * audio, infografía y gamificación.
  */
 import { runHiveLearnAgent } from '../runner'
+import { runContextFromProfile, type RunContext } from '../policy/age-policy'
+import { curriculumRoute, validateCurricularBlueprint } from '../../institutional/curriculum'
+import { Learning } from '../../institutional/learning'
+import { getDb } from '../../storage/hivedb'
 import { AGENT_IDS } from '../registry'
 import { AGENT_PROMPTS } from '../prompts'
 import { parseAgentOutput } from '../orchestrator'
@@ -19,6 +23,7 @@ import { HiveLearnExecutor } from '../executor'
 import {
   createGenerationRun,
   saveRunBlueprint,
+  saveRunCurriculum,
   heartbeatRun,
   completeGenerationRun,
   failGenerationRun,
@@ -119,7 +124,11 @@ export class HiveLearnSwarm {
     })
   }
 
+  /** Quién ejecuta esta generación (edad del alumno): condiciona proveedores y oráculo. Una instancia = una generación. */
+  private runContext: RunContext = runContextFromProfile(null)
+
   async run(perfil: StudentProfile, meta: string, opts?: { resumeSessionId?: string }): Promise<LessonProgram> {
+    this.runContext = runContextFromProfile(perfil)
     // ── Run durable: reanudar uno existente o crear uno nuevo ────────────
     const existingRun = opts?.resumeSessionId ? await getGenerationRun(opts.resumeSessionId) : null
 
@@ -153,6 +162,11 @@ export class HiveLearnSwarm {
     sessionId: string,
     resumedBlueprintJson: string | null,
   ): Promise<LessonProgram> {
+
+    const learningRecord = await new Learning(getDb()).record(perfil.alumnoId)
+    const run = await getGenerationRun(sessionId)
+    const curriculum = run?.curriculum_json ? JSON.parse(run.curriculum_json) as ReturnType<typeof curriculumRoute> : curriculumRoute(perfil.edad, learningRecord?.level ?? 'fundamentos', learningRecord?.mastered ?? [])
+    await saveRunCurriculum(sessionId, JSON.stringify(curriculum))
 
     const perfilAdaptacion: PerfilAdaptacion = {
       rangoEdad:         perfil.rangoEdad,
@@ -192,6 +206,8 @@ export class HiveLearnSwarm {
       `FECHA Y HORA ACTUAL: ${now.toISOString()} (${now.toLocaleString('es-CO', { timeZone: 'America/Bogota', hour12: true })})`,
       ``,
       `PERFIL DEL ALUMNO:`,
+      `CURRÍCULO FIJADO PARA ESTA EJECUCIÓN: ${JSON.stringify(curriculum)}`,
+      'Incluye curriculumVersion y competencyId en cada actividad. Solo usa competencias available o mastered. No declares dominio sin evidencia validada. No añadas XP ni premios.',
       `- alumnoId: "${perfil.alumnoId}"`,
       `- nombre: ${perfil.nombre}`,
       `- rangoEdad: ${perfilAdaptacion.rangoEdad}`,
@@ -213,7 +229,6 @@ export class HiveLearnSwarm {
       `- ImageAgent: único worker visual general`,
       `- InfographicAgent: resúmenes visuales`,
       `- AudioAgent: narración`,
-      `- GamificationAgent: XP y logros`,
       ``,
       `Debes producir un blueprint con ${perfilAdaptacion.nodosRecomendados} nodos usando SOLO estos tipos pedagógicos: concept | exercise | quiz | milestone.`,
       `NO uses challenge ni code como tipoPedagogico. Evita evaluation como nodo normal; la evaluación final se genera aparte.`,
@@ -245,14 +260,16 @@ export class HiveLearnSwarm {
         systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
         tools: [planificarProgramaTool],
         threadId: sessionId,
+        runContext: this.runContext,
       })
 
-      const blueprint = parseAgentOutput<{ tema?: string; topic_slug?: string | null; nodos?: unknown[] }>(planningRaw, {})
+      const blueprint = parseAgentOutput<{ tema?: string; topic_slug?: string | null; curriculumVersion?: string; nodos?: unknown[] }>(planningRaw, {})
       if (!Array.isArray(blueprint.nodos) || blueprint.nodos.length === 0) {
         throw new Error('El coordinador no pudo planificar un blueprint válido del programa')
       }
 
       structureResult = JSON.stringify({
+        curriculumVersion: blueprint.curriculumVersion,
         tema: blueprint.tema ?? meta,
         topic_slug: blueprint.topic_slug ?? null,
         nodos: blueprint.nodos,
@@ -260,9 +277,11 @@ export class HiveLearnSwarm {
 
       // Checkpoint del blueprint: si el proceso muere durante Tier 1,
       // la reanudación no repite la planificación
+      validateCurricularBlueprint(JSON.parse(structureResult), curriculum)
       await saveRunBlueprint(sessionId, structureResult)
     }
 
+    validateCurricularBlueprint(JSON.parse(structureResult), curriculum)
     const nodosBase = buildNodosBase(structureResult, perfilAdaptacion)
 
     // Outputs de nodos ya generados en un run anterior (reanudación):
@@ -277,7 +296,7 @@ export class HiveLearnSwarm {
         log.info(`[coordinator-flow] resume: ${priorOutputs.size} outputs de nodos reutilizados`)
       } catch { /* non-critical */ }
     }
-    const executor = new HiveLearnExecutor(priorOutputs)
+    const executor = new HiveLearnExecutor(this.runContext, priorOutputs)
 
     this.emit('tier1', 'HiveLearnCoordinator', 15, `Coordinador despachando ${nodosBase.length} nodos al enjambre reducido...`)
     hlSwarmEmitter.emit('coordinator:phase_changed', {
@@ -458,6 +477,7 @@ No devuelvas svg_diagram, gif_guide, code_block, chart ni animated_card.`
         systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
         tools: [buscarEnHiveLearnTool, repararNodoCompletoTool],
         threadId: `${sessionId}-repair-${node.id}`,
+        runContext: this.runContext,
       })
 
       const repaired = parseAgentOutput<{
@@ -566,6 +586,7 @@ Llama actualizar_prompt_agente una vez por cada worker fallido.`,
       systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
       tools: [actualizarPromptAgenteTool],
       threadId: `${sessionId}-prompt-patch`,
+      runContext: this.runContext,
     })
   }
 
@@ -609,6 +630,7 @@ ${JSON.stringify({
         systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
         tools: [revisarProgramaTool],
         threadId: sessionId,
+        runContext: this.runContext,
       })
 
       const revision = parseAgentOutput<{

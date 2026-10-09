@@ -86,6 +86,8 @@ export interface IntentResult {
 
 export interface NodoLesson {
   id: string
+  competencyId?: string
+  curriculumVersion?: string
   tipoPedagogico: TipoPedagogico
   tipoVisual: TipoVisual
   titulo: string

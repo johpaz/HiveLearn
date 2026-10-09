@@ -85,6 +85,8 @@ export { seedAllData } from './storage/seed'
 export { logger, getLogger, Logger, ChildLogger } from './utils/logger'
 export type { LogLevel, LogEntry, LoggerConfig, LogMeta } from './utils/logger'
 
+export * from './institutional'
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 export { loadConfig, getHiveDir, resetConfig } from './config/loader'
 export type { HiveLearnConfig } from './config/loader'

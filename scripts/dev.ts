@@ -19,7 +19,7 @@ async function dev() {
 
   // Start both processes in parallel
   const server = $`NODE_ENV=development bun run --cwd packages/core dev`
-  const ui = $`bun run --cwd packages/ui dev`
+  const ui = $`bun run --cwd packages/hivelearn-ui dev`
 
   // Wait for both
   await Promise.all([server, ui])

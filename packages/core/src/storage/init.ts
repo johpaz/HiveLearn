@@ -18,6 +18,11 @@ const log = logger.child('storage-init')
 
 /** Índices de igualdad requeridos antes de usar findBy(field, value) */
 const COLLECTION_INDEXES: Array<{ collection: string; fields: string[] }> = [
+  { collection: 'hl_institutions', fields: ['country'] },
+  { collection: 'hl_student_identities', fields: ['institutionId', 'documentFingerprint'] },
+  { collection: 'hl_guardian_consents', fields: ['studentId', 'institutionId'] },
+  { collection: 'hl_ai_diagnostics', fields: ['studentId', 'institutionId'] },
+  { collection: 'hl_learning_paths', fields: ['studentId', 'institutionId'] },
   { collection: 'hl_sessions', fields: ['alumno_id'] },
   { collection: 'hl_onboarding_progress', fields: ['alumno_id'] },
   { collection: 'hl_node_effectiveness', fields: ['tema'] },
@@ -61,5 +66,21 @@ export async function initHiveLearnStorage(): Promise<void> {
     await ensureAgentModelsResolve()
   } catch (e) {
     log.warn(`[init] ollama-sync: ${(e as Error).message}`)
+  }
+
+  // 6. Unificación de identidad (opt-in): enlaza perfiles antiguos con su cuenta del portal.
+  //    HIVELEARN_MIGRATE_STUDENT_IDS=dry-run solo informa; =true reescribe (con copia de seguridad).
+  const migrate = process.env.HIVELEARN_MIGRATE_STUDENT_IDS
+  if (migrate === 'true' || migrate === 'dry-run') {
+    try {
+      const installation = await db.collection<{ institutionId: string }>('hl_installation').get('main')
+      if (installation) {
+        const { linkLegacyStudents } = await import('./migrations/student-ids')
+        const report = await linkLegacyStudents(db, { institutionId: installation.doc.institutionId, dryRun: migrate === 'dry-run' })
+        log.info(`[init] student-ids (${report.dryRun ? 'dry-run' : 'aplicado'}): ${report.linked.length} enlazados, ${report.ambiguous.length} ambiguos, ${report.conflicts.length} en conflicto, ${report.unmatched.length} sin cuenta`)
+      }
+    } catch (e) {
+      log.warn(`[init] student-ids: ${(e as Error).message}`)
+    }
   }
 }

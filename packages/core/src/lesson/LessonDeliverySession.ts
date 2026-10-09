@@ -5,6 +5,8 @@
  * por cada paso. El alumno responde, y el coordinador evalúa y decide el siguiente paso.
  */
 import { runHiveLearnAgent } from '../agent/runner'
+import { runContextFromProfile } from '../agent/policy/age-policy'
+import { rangoEdadForAge } from '../institutional/age'
 import { AGENT_IDS } from '../agent/registry'
 import { AGENT_PROMPTS } from '../agent/prompts'
 import { LessonPersistence } from '../storage/LessonPersistence'
@@ -57,8 +59,8 @@ export class LessonDeliverySession {
         ``,
         `ALUMNO:`,
         `- nombre: ${profile?.nombre ?? 'Alumno'}`,
-        `- edad: ${profile?.edad ?? 18}`,
-        `- rango_edad: ${(profile as any)?.rangoEdad ?? 'adulto'}`,
+        `- edad: ${profile?.edad ?? 'no declarada'}`,
+        `- rango_edad: ${(profile as any)?.rangoEdad ?? rangoEdadForAge(profile?.edad)}`,
         `- estilo: ${(profile as any)?.estilo ?? 'balanceado'}`,
         ``,
         `RESUMEN DE SESIÓN:`,
@@ -84,6 +86,7 @@ export class LessonDeliverySession {
         systemPrompt: AGENT_PROMPTS[AGENT_IDS.feedback] ?? '',
         tools: [calificarRespuestaTool],
         threadId: `hl-feedback-final-${this.sessionId}`,
+        runContext: runContextFromProfile(profile ? { alumnoId: full.alumnoId, edad: profile.edad } : { alumnoId: full.alumnoId }),
       })
 
       let parsed: Record<string, unknown> = {}
@@ -165,7 +168,7 @@ export class LessonDeliverySession {
         ``,
         `PERFIL DEL ALUMNO:`,
         `- nombre: ${profile?.nombre ?? 'Alumno'}`,
-        `- rangoEdad: ${full.alumnoId ? (profile as any)?.rangoEdad ?? 'adulto' : 'adulto'}`,
+        `- rangoEdad: ${(profile as any)?.rangoEdad ?? rangoEdadForAge(profile?.edad)}`,
         `- meta: "${full.metaAlumno}"`,
         `- sessionId: "${this.sessionId}"`,
         ``,
@@ -253,6 +256,7 @@ export class LessonDeliverySession {
         systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
         tools: [enviarTool, completarTool, evaluarTool],
         threadId: `hl-lesson-${this.sessionId}`,
+        runContext: runContextFromProfile(profile ? { alumnoId: full.alumnoId, edad: profile.edad } : { alumnoId: full.alumnoId }),
       })
       log.info(`[delivery] coordinator finished sessionId=${this.sessionId}`)
 

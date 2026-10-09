@@ -6,6 +6,7 @@ import { buildLessonProgram } from '../../agent/orchestrator'
 import { AGENT_IDS } from '../../agent/registry'
 import { logger } from '../../utils/logger'
 import type { PerfilAdaptacion, LessonProgram, NodoLesson } from '../../types'
+import { ageBandFromRango } from '../../institutional/age'
 import type { DAGResult } from '../../agent/scheduler/dag'
 
 const log = logger.child('delegar-enjambre')
@@ -95,7 +96,8 @@ export const delegarEnjambreTool: Tool = {
     _lastResult = null
 
     try {
-      const executor = new HiveLearnExecutor()
+      // Aquí solo hay el rango del perfil de adaptación, no la edad: se usa la banda más restrictiva compatible.
+      const executor = new HiveLearnExecutor({ studentId: alumnoId, ageBand: ageBandFromRango(perfil.rangoEdad) })
       const dagInput = { alumnoId, meta, perfil, sessionId }
 
       // Map coordinator blueprint → NodoLesson[]

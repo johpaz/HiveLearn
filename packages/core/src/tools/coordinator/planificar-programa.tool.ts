@@ -7,6 +7,7 @@ export const planificarProgramaTool: Tool = {
     type: 'object',
     properties: {
       tema: { type: 'string', description: 'Tema principal del programa' },
+      curriculumVersion: { type: 'string', description: 'Versión exacta del currículo recibida en el contexto' },
       topic_slug: { type: 'string', description: 'Slug del tema si es conocido' },
       nodos: {
         type: 'array',
@@ -15,6 +16,7 @@ export const planificarProgramaTool: Tool = {
           type: 'object',
           properties: {
             id: { type: 'string' },
+            competencyId: { type: 'string', description: 'Identificador canónico disponible en la ruta del alumno' },
             titulo: { type: 'string' },
             concepto: { type: 'string' },
             tipo_pedagogico: {
@@ -25,13 +27,12 @@ export const planificarProgramaTool: Tool = {
               type: 'string',
               enum: ['text_card', 'svg_diagram', 'gif_guide', 'infographic', 'image_ai', 'audio_ai'],
             },
-            xp_recompensa: { type: 'number' },
           },
-          required: ['id', 'titulo', 'concepto', 'tipo_pedagogico', 'tipo_visual', 'xp_recompensa'],
+          required: ['id', 'competencyId', 'titulo', 'concepto', 'tipo_pedagogico', 'tipo_visual'],
         },
       },
     },
-    required: ['tema', 'nodos'],
+    required: ['tema', 'curriculumVersion', 'nodos'],
   },
   execute: async (params) => ({ ok: true, output: params }),
 }

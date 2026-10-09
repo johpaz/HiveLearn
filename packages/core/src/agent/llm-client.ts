@@ -92,7 +92,9 @@ export async function resolveProviderConfig(
   const row = (await db.collection<ProviderDoc>('providers').get(provider))?.doc
 
   let apiKey: string | undefined
-  if (row?.api_key_encrypted && row?.api_key_iv) {
+  const portalProvider = (await db.collection<{ portal_secret_name?: string }>('providers').get(provider))?.doc
+  if (portalProvider?.portal_secret_name) apiKey = await Bun.secrets.get({ service: 'hivelearn-institution', name: portalProvider.portal_secret_name }) ?? undefined
+  if (!apiKey && row?.api_key_encrypted && row?.api_key_iv) {
     try {
       apiKey = decryptApiKey(row.api_key_encrypted, row.api_key_iv)
     } catch {

@@ -9,7 +9,7 @@ import { existsSync, rmSync } from 'fs'
 import path from 'path'
 
 const ROOT = path.join(import.meta.dir, '..')
-const PACKAGES = ['core', 'server', 'ui']
+const PACKAGES = ['core', 'hivelearn-ui']
 
 async function build() {
   console.log('🐝 Building HiveLearn...\n')
@@ -26,7 +26,7 @@ async function build() {
     }
     
     try {
-      if (pkg === 'ui') {
+      if (pkg === 'hivelearn-ui') {
         // Vite build
         await $`cd ${pkgDir} && bun run build`
       } else {

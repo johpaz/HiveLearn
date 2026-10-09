@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@hivelearn/core": ["./src/index.ts"],
+      "@hivelearn/core/*": ["./src/*"],
+      "@johpaz/hive-sdk/*": ["./src/agent/sdk/types/*"]
+    }
+  }
+}

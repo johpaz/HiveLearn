@@ -99,6 +99,12 @@ data/
 
 # Testing
 .junit.xml
+/artifacts/
+
+# Tauri desktop build artifacts and platform sidecars
+/packages/hivelearn-desktop/src-tauri/target/
+/packages/hivelearn-desktop/src-tauri/binaries/*
+!/packages/hivelearn-desktop/src-tauri/binaries/.gitkeep
 
 # Build info
 BUILD_INFO

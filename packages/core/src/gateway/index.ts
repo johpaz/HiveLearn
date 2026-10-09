@@ -9,6 +9,7 @@ import { initializeDatabase, getDb } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
 import { logger } from '../utils/logger'
 import { createServer, setBunServer } from './server'
+import { installShutdownHandlers, startSdkEngineIfEnabled } from '../agent/sdk/bootstrap'
 
 const log = logger.child('server')
 
@@ -29,6 +30,9 @@ async function main() {
     await initHiveLearnStorage()
     log.info('✅ Database schemas initialized')
 
+    // Motor de agentes basado en @johpaz/hive-sdk (opt-in): base propia, separada de hl_*.
+    if (await startSdkEngineIfEnabled()) log.info('✅ SDK agent engine initialized')
+
     // Reconcile de runs de generación huérfanos (larga duración)
     const { reconcileGenerationRuns } = await import('../agent/run-store')
     const interrupted = await reconcileGenerationRuns()
@@ -48,9 +52,11 @@ async function main() {
     fetch: server.fetch,
     websocket: server.websocket,
     idleTimeout: 120,
+    maxRequestBodySize: 3 * 1024 * 1024,
   })
 
   setBunServer(listener)
+  installShutdownHandlers(async () => { await listener.stop() })
 
   log.info(`✅ Server listening on http://${HOST}:${PORT}`)
 

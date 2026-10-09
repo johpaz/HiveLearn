@@ -13,8 +13,14 @@ import { getDb } from '../storage/hivedb'
 import type { AgentDoc } from './registry'
 import { logger } from '../utils/logger'
 import { AGENT_PROMPTS } from './prompts'
+import { getAgentEngine } from './sdk/bootstrap'
+import { assertProviderAllowed, type RunContext } from './policy/age-policy'
+import { runViaSdk, SdkEngineUnsupportedError } from './sdk/run-agent'
 
 const log = logger.child('hl-runner')
+
+/** Tope de iteraciones que el loop propio aplicaba a todos los agentes. */
+const LEGACY_MAX_ITERATIONS = 6
 
 export async function runHiveLearnAgent(opts: {
   agentId: string
@@ -22,6 +28,8 @@ export async function runHiveLearnAgent(opts: {
   systemPrompt: string
   tools: Tool[]
   threadId: string
+  /** Obligatorio: sin saber quién ejecuta no se puede aplicar la política por edad. */
+  runContext: RunContext
   validationContext?: {
     rangoEdad?: string
     tema?: string
@@ -40,6 +48,8 @@ export async function runHiveLearnAgent(opts: {
 
   const providerConfig = await resolveProviderConfig(providerId, modelId)
 
+  await assertProviderAllowed(opts.runContext, { provider: providerConfig.provider, baseUrl: providerConfig.baseUrl })
+
   const cleanModel = providerConfig.model.replace(new RegExp(`^${providerConfig.provider}\\/`), '')
   log.info(`[hl-runner] ${opts.agentId} → ${providerConfig.provider}/${cleanModel} tools=${opts.tools.length}`)
 
@@ -50,16 +60,45 @@ export async function runHiveLearnAgent(opts: {
   const canonicalPrompt = AGENT_PROMPTS[opts.agentId]
   const basePrompt = canonicalPrompt ?? agent.system_prompt ?? opts.systemPrompt ?? ''
 
+  const systemPrompt = basePrompt + promptPatch
+  const validationContext = opts.validationContext ? {
+    agenteId: opts.agentId,
+    ...opts.validationContext,
+  } : undefined
+
+  if (getAgentEngine() === 'sdk') {
+    try {
+      return await runViaSdk({
+        agentId: opts.agentId,
+        systemPrompt,
+        taskDescription: opts.taskDescription,
+        tools: opts.tools,
+        threadId: opts.threadId,
+        provider: providerConfig.provider,
+        model: cleanModel,
+        apiKey: providerConfig.apiKey,
+        baseUrl: providerConfig.baseUrl,
+        numCtx: providerConfig.numCtx,
+        numGpu: providerConfig.numGpu,
+        // El loop propio ignoraba `max_iterations` y usaba siempre 6; se conserva ese mínimo.
+        maxIterations: Math.max(agent.max_iterations ?? 0, LEGACY_MAX_ITERATIONS),
+        maxTokens: 2048,
+        runContext: opts.runContext,
+        validationContext,
+      })
+    } catch (error) {
+      if (!(error instanceof SdkEngineUnsupportedError)) throw error
+      log.info(`[hl-runner] ${error.message}; usando el loop propio`)
+    }
+  }
+
   return runAgentLoop({
-    systemPrompt: basePrompt + promptPatch,
+    systemPrompt,
     taskDescription: opts.taskDescription,
     tools: opts.tools,
     providerConfig,
     maxTokens: 2048,
     temperature: 0.3,
-    validationContext: opts.validationContext ? {
-      agenteId: opts.agentId,
-      ...opts.validationContext,
-    } : undefined,
+    validationContext,
   })
 }

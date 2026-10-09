@@ -23,6 +23,7 @@ export interface GenerationRunDoc {
   perfil_json: string
   meta: string
   blueprint_json: string | null
+  curriculum_json?: string
   started_at: string
   updated_at: string
   lease_expires_at: string
@@ -59,6 +60,10 @@ export async function saveRunBlueprint(sessionId: string, blueprintJson: string)
   const entry = await runs().get(sessionId)
   if (!entry) return
   await runs().put(sessionId, { ...entry.doc, blueprint_json: blueprintJson, updated_at: nowIso() })
+}
+export async function saveRunCurriculum(sessionId: string, curriculumJson: string): Promise<void> {
+  const entry = await runs().get(sessionId)
+  if (entry && !entry.doc.curriculum_json) await runs().put(sessionId, { ...entry.doc, curriculum_json: curriculumJson }, { expectedVersion: entry.version })
 }
 
 /** Heartbeat del lease — llamar periódicamente mientras el run está activo */
