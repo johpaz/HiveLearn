@@ -137,6 +137,8 @@ export async function handleAgentChatWS(
       messages: state.history,
       maxTokens: 300,
       temperature: 0.7,
+      // Canal de administración (los sockets legacy exigen administrador): no hay un alumno detrás.
+      runContext: { ageBand: 'adulto' },
     })
 
     // El LLM no siempre incluye la etiqueta de emoción en la primera respuesta

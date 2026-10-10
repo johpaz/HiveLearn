@@ -95,6 +95,8 @@ async function generatePortrait(gameId: string): Promise<PortraitFile | null> {
       ],
       maxTokens: 2048,
       temperature: 0.6,
+      // Genera un retrato de personaje: no lleva datos de ningún alumno.
+      runContext: { ageBand: 'adulto' },
     }),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('timeout generando retrato')), GEN_TIMEOUT_MS),

@@ -114,6 +114,14 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 - **Restablecimiento por personal:** `POST /accounts/:id/password-reset` (administrador, o el docente de ese alumno) emite un código de un solo uso válido 24 h que se canjea en `POST /reset`; también cierra las sesiones. Un código de restablecimiento no sirve para activar cuentas.
 - Sin canal de correo no hay verificación de identidad: quien tenga el código de recuperación controla la cuenta.
 
+### Onboarding conversacional
+
+- `onboarding/engine.ts` y `onboarding/fields.ts`: el orden de captura (apodo, nombre, edad, tema, objetivo, energía, tiempo, estilo), la validación y el cierre son **código**. Antes el modelo decidía qué campo guardar llamando tools y, si no las llamaba, el servidor adivinaba el campo por palabras de la pregunta anterior.
+- El modelo solo pone la voz de Maya y, si una respuesta de opción cerrada es ambigua (energía, estilo), Kev la clasifica. Sin modelo, o con el proveedor prohibido por la política, el flujo sigue con preguntas fijas.
+- `runHiveLearnConversation` ahora aplica la política por edad: sin `runContext` asume la banda restrictiva. Un alumno sin edad declarada no puede usar un proveedor remoto salvo que la institución lo permita; los canales de administración y de retratos pasan `adulto` de forma explícita.
+- Reanudar una sesión repite la pregunta pendiente; con un alumno ya conocido no se vuelve a preguntar nombre ni edad.
+- Límite: una respuesta que contiene varios datos a la vez ("soy Ana, tengo 12 y quiero aprender SQL") se interpreta como el campo pendiente; el resto se vuelve a preguntar.
+
 ### Cola de revisión docente
 
 - La evidencia de confianza media (p. ej. un juicio de Kev entre 0,65 y 0,8) o de un alumno con docente queda marcada para revisión. `GET /api/portal/review-queue` (docente o administrador) lista solo los alumnos a su cargo, la más antigua primero.

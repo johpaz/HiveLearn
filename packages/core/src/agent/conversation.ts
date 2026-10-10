@@ -10,6 +10,7 @@ import type { LLMMessage, LLMToolDef, LLMToolCall } from './llm-client'
 import { getDb } from '../storage/hivedb'
 import type { AgentDoc } from './registry'
 import { logger } from '../utils/logger'
+import { assertProviderAllowed, runContextForAge, type RunContext } from './policy/age-policy'
 
 export type { LLMMessage }
 
@@ -32,6 +33,11 @@ export async function runHiveLearnConversation(opts: {
   tools?: ConversationTool[]
   maxTokens?: number
   temperature?: number
+  /**
+   * Quién habla: condiciona qué proveedores se pueden usar (política por edad/institución). Sin indicar se
+   * asume la banda más restrictiva; las herramientas de sistema sin alumno deben indicarlo explícitamente.
+   */
+  runContext?: RunContext
 }): Promise<ConversationResult> {
   const db = getDb()
   const agentEntry = await db.collection<AgentDoc>('hl_agents').get(opts.agentId)
@@ -42,6 +48,8 @@ export async function runHiveLearnConversation(opts: {
     agent.provider_id ?? 'ollama',
     agent.model_id ?? 'gemma4-e4b',
   )
+
+  await assertProviderAllowed(opts.runContext ?? runContextForAge(null), { provider: providerConfig.provider, baseUrl: providerConfig.baseUrl })
 
   const toolDefs: LLMToolDef[] = (opts.tools ?? []).map(t => ({
     type: 'function',
