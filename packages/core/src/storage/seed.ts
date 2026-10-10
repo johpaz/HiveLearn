@@ -245,6 +245,9 @@ export const SEED_DATA: SeedData = {
 
     // ── HiveAgents (backend GGUF propio) ──
     { id: "Qwen3.6-35B-A3B-UD-Q6_K.gguf",    providerId: "hiveagents", name: "Qwen3.6 35B MoE (Recomendado)", modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
+    { id: "Qwen3.8-27B-UD-Q6_K_XL.gguf", providerId: "hiveagents", name: "Qwen3.8 27B Q6_K_XL (probado con HiveLearn)", modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
+    { id: "Qwen3.5-9B-UD-Q8_K_XL.gguf", providerId: "hiveagents", name: "Qwen3.5 9B Q8_K_XL (rápido)", modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
+    { id: "gemma-4-12b-it-UD-Q8_K_XL.gguf", providerId: "hiveagents", name: "Gemma 4 12B Q8_K_XL", modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
     { id: "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",   providerId: "hiveagents", name: "Qwen3.6 35B MoE Q4_K_M",        modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
     { id: "Qwen3.6-27B-UD-Q4_K_XL.gguf",      providerId: "hiveagents", name: "Qwen3.6 27B + MTP",             modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "reasoning"]) },
     { id: "Qwen3-Coder-Next-UD-Q4_K_M.gguf",  providerId: "hiveagents", name: "Qwen3 Coder Next",              modelType: "llm", contextWindow: 50000, capabilities: JSON.stringify(["chat", "streaming", "code"]) },
