@@ -61,7 +61,9 @@ export function evaluateProgramSafety(program: Pick<LessonProgram, 'nodos'>, opt
       if (EXECUTABLE.test(text)) findings.push({ severity: 'veto', code: 'executable_markup', where: path, detail: 'contiene marcado ejecutable' })
       if (minor && SENSITIVE_FOR_MINORS.test(text)) findings.push({ severity: 'review', code: 'sensitive_for_minor', where: path, detail: 'tema sensible para un menor' })
 
-      for (const match of text.matchAll(URL_RE)) {
+      // Los espacios de nombres XML de un SVG (xmlns="http://www.w3.org/2000/svg") son identificadores, no enlaces.
+      const visibleText = text.replace(/\bxmlns(?::[a-z]+)?\s*=\s*["'][^"']*["']/gi, ' ')
+      for (const match of visibleText.matchAll(URL_RE)) {
         const raw = match[0].replace(/[.,;:]+$/, '')
         let url: URL
         try { url = new URL(raw.startsWith('www.') ? `https://${raw}` : raw) } catch {

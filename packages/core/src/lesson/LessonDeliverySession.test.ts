@@ -85,3 +85,49 @@ for (const engine of ['legacy', 'sdk'] as const) {
     }, 60_000)
   })
 }
+
+describe('XP sin duplicar tras corrección determinista', () => {
+  for (const engine of ['legacy', 'sdk'] as const) {
+    test(`evaluar_respuesta sobre un nodo ya corregido por código no suma XP (${engine})`, async () => {
+      process.env.HIVELEARN_AGENT_ENGINE = engine
+      const { resolveStudentAction } = await import('../tools/coordinator/enviar-interaccion.tool')
+      const sent: object[] = []
+      const session = new LessonDeliverySession('s2', msg => {
+        sent.push(msg)
+        if ((msg as { type: string }).type === 'a2ui') {
+          setTimeout(() => resolveStudentAction('s2', { name: 'check_answer', context: { respuesta: 'Un registro' }, timestamp: Date.now() }), 5)
+        }
+      })
+      ;(session as unknown as { persistence: object }).persistence = {
+        getSessionWithCurriculum: async () => ({
+          alumnoId: 'al1', curriculoId: 'c1', metaAlumno: 'aprender', topicSlug: 'sql',
+          nodosJson: JSON.stringify([{ id: 'q1', titulo: 'Filas', tipoPedagogico: 'quiz', tipoVisual: 'text_card', concepto: 'filas', xpRecompensa: 50,
+            contenido: { quiz: { pregunta: '¿Qué guarda una fila?', opciones: ['Un registro', 'Un índice', 'Una vista'], indicesCorrecto: 0, explicacionesIncorrectas: [] } } }]),
+        }),
+        getStudentProfile: async () => ({ nombre: 'Ana', edad: 30 }),
+        getInteractions: async () => [], getNextTurnIndex: async () => 0, saveInteraction: async () => {},
+      }
+      // La tool también carga los nodos con su propia persistencia: se redirige al mismo programa.
+      const { LessonPersistence } = await import('../storage/LessonPersistence')
+      const original = LessonPersistence.prototype.getSessionWithCurriculum
+      LessonPersistence.prototype.getSessionWithCurriculum = (async () => ({
+        nodosJson: JSON.stringify([{ id: 'q1', titulo: 'Filas', tipoPedagogico: 'quiz', tipoVisual: 'text_card', concepto: 'filas', xpRecompensa: 50,
+          contenido: { quiz: { pregunta: '¿Qué guarda una fila?', opciones: ['Un registro', 'Un índice', 'Una vista'], indicesCorrecto: 0, explicacionesIncorrectas: [] } } }]),
+      })) as never
+      script = [
+        { name: 'enviar_interaccion', args: { nodoId: 'q1', a2uiMessages: [] } },
+        // El tutor insiste en evaluar un nodo que el código ya corrigió.
+        { name: 'evaluar_respuesta', args: { correcto: true, xpGanado: 50, mensaje: '¡Bien!', nodoId: 'q1' } },
+        { name: 'completar_leccion', args: { xpTotal: 50, nodosCompletados: 1, totalNodos: 1, mensaje: 'Fin' } },
+      ]
+      try {
+        await session.start()
+      } finally {
+        LessonPersistence.prototype.getSessionWithCurriculum = original
+      }
+      const awards = (sent as Array<{ type: string; amount?: number }>).filter(m => m.type === 'xp_award')
+      expect(awards.map(a => a.amount)).toEqual([50])
+      expect((sent as Array<{ type: string }>).map(m => m.type)).toContain('lesson_complete')
+    }, 60_000)
+  }
+})

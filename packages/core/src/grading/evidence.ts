@@ -16,7 +16,7 @@ export const MIN_DISTINCT_SESSIONS = 2
 const MAX_ENTRIES = 30
 
 export type CurriculumStatus = 'canonical' | 'generated' | 'reviewed'
-export type EvidenceAction = 'counts' | 'self_reported' | 'teacher_review' | 'retry'
+export type EvidenceAction = 'counts' | 'self_reported' | 'teacher_review' | 'retry' | 'resolved'
 
 export interface DecisionContext { curriculumStatus: CurriculumStatus; hasTeacher: boolean }
 
@@ -55,8 +55,54 @@ export function masteryReady(doc: Pick<EvidenceDoc, 'entries'> | null): boolean 
   return new Set(doc.entries.filter(e => e.action === 'counts').map(e => e.sessionId)).size >= MIN_DISTINCT_SESSIONS
 }
 
+/** Hay una revisión pendiente: la última petición de revisión es posterior a la última resolución. */
 export function pendingReview(doc: Pick<EvidenceDoc, 'entries'> | null): boolean {
-  return !!doc && doc.entries.some(e => e.action === 'teacher_review')
+  if (!doc) return false
+  const lastRequest = doc.entries.map(e => e.action).lastIndexOf('teacher_review')
+  const lastResolved = doc.entries.map(e => e.action).lastIndexOf('resolved')
+  return lastRequest > lastResolved
+}
+
+export interface PendingReview {
+  studentId: string
+  curriculumId: string
+  nodeId: string
+  requestedAt: string
+  attempts: number
+  lastScore: number
+  lastConfidence: number
+  method: Grade['method']
+}
+
+/** Evidencia que espera a un docente, de los alumnos indicados. Más antigua primero. */
+export async function listPendingReviews(db: HiveDB, studentIds: ReadonlySet<string>): Promise<PendingReview[]> {
+  const out: PendingReview[] = []
+  for (const entry of await db.collection<EvidenceDoc>(EVIDENCE_COLLECTION).scan()) {
+    const doc = entry.doc
+    if (!studentIds.has(doc.studentId) || !pendingReview(doc)) continue
+    const request = [...doc.entries].reverse().find(e => e.action === 'teacher_review')!
+    out.push({
+      studentId: doc.studentId, curriculumId: doc.curriculumId, nodeId: doc.nodeId,
+      requestedAt: request.at, attempts: doc.entries.length, lastScore: request.score, lastConfidence: request.confidence, method: request.method,
+    })
+  }
+  return out.sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
+}
+
+/** El docente cerró la revisión (acepte o rechace). Serializado como el resto de escrituras. */
+export function resolveReview(db: HiveDB, input: { studentId: string; curriculumId: string; nodeId: string; reviewerId: string; at?: Date }): Promise<void> {
+  const id = key(input.studentId, input.curriculumId, input.nodeId)
+  const run = async () => {
+    const col = db.collection<EvidenceDoc>(EVIDENCE_COLLECTION)
+    const existing = await col.get(id)
+    if (!existing) throw new Error('No hay evidencia para revisar')
+    const at = (input.at ?? new Date()).toISOString()
+    const entry: EvidenceEntry = { sessionId: `review:${input.reviewerId}`, at, score: 0, confidence: 1, method: 'deterministic', action: 'resolved' }
+    await col.put(id, { ...existing.doc, entries: [...existing.doc.entries, entry].slice(-MAX_ENTRIES), updatedAt: at }, { expectedVersion: existing.version })
+  }
+  const next = (queues.get(id) ?? Promise.resolve()).then(run, run)
+  queues.set(id, next.catch(() => {}))
+  return next
 }
 
 const queues = new Map<string, Promise<unknown>>()

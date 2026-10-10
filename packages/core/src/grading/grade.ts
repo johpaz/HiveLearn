@@ -16,7 +16,7 @@ export type AnswerSpec =
   | { kind: 'numeric'; value: number; tolerance?: number; relativeTolerance?: number }
   | { kind: 'text'; accepted: readonly string[]; requiredKeywords?: readonly string[] }
 
-export type GradeMethod = 'deterministic' | 'rubric'
+export type GradeMethod = 'deterministic' | 'rubric' | 'oracle'
 export interface Grade {
   /** null = no se pudo decidir (p. ej. opción ambigua). */
   correct: boolean | null

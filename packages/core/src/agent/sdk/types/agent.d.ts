@@ -60,3 +60,21 @@ export interface AgentLoopOptions {
 
 export function runAgent(opts: AgentLoopOptions): AsyncGenerator<StreamChunk>
 export function flushTraces(): Promise<void>
+
+export type JevQuestion =
+  | { type: 'choice'; instructions: string; criteria: Record<string, string> }
+  | { type: 'noul'; instructions: string; criteria?: { true: string; false: string } }
+export type JevAnswer =
+  | { type: 'choice'; choice: string; confidence: number; probabilities: Record<string, number> }
+  | { type: 'noul'; noul: number }
+export interface JevResult {
+  answers: Record<string, JevAnswer>
+  inputTokens: number
+  costUsd: number
+  latencyMs: number
+}
+export function askJev(
+  state: unknown,
+  questions: Record<string, JevQuestion>,
+  options?: { fetcher?: typeof fetch; signal?: AbortSignal; jev?: JevOption },
+): Promise<JevResult | null>

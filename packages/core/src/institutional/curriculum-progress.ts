@@ -9,9 +9,24 @@ import type { HiveDB } from '@johpaz/hive-db'
 import { z } from 'zod'
 import type { Account } from './accounts'
 import { canAccredit, routeFor, scoreDiagnosticFor, type CurriculumDef } from './curriculum-def'
+import { getEvidence } from '../grading/evidence'
+import type { KevClient } from '../agent/kev/client'
+import { judgeLevel } from '../agent/kev/judge'
+import { decideLevelAdvance, type LevelDecision } from '../agent/kev/level'
 
 export const PROGRESS_COLLECTION = 'hl_curriculum_progress'
 const REVIEWS_COLLECTION = 'hl_curriculum_reviews'
+export const LEVEL_REVIEWS_COLLECTION = 'hl_level_reviews'
+
+export interface LevelReviewRequest {
+  studentId: string
+  institutionId: string
+  curriculumId: string
+  level: string
+  reason: string
+  requestedAt: string
+  status: 'pending' | 'resolved'
+}
 
 export interface CurriculumProgress {
   studentId: string
@@ -43,6 +58,43 @@ export class CurriculumProgressStore {
     const record = await this.record(actor.id, def)
     const route = routeFor(def, actor.age ?? 18, record?.level ?? def.levels[0], record?.mastered ?? [])
     return { ...route, curriculumId: def.id, status: def.status, accredits: canAccredit(def), diagnosticCompleted: !!record, scores: record?.scores ?? {} }
+  }
+
+  /**
+   * ¿Superó el alumno el nivel? Base: dominio por evidencia (o revisión docente) de TODOS los nodos del nivel.
+   * Kev es asesor: puede frenar un avance dudoso o pedir revisión, nunca promover sin evidencia.
+   * Un `teacher_review` queda registrado (idempotente por alumno/currículo/nivel) para el docente.
+   */
+  async levelCheck(actor: Pick<Account, 'id' | 'institutionId'>, def: CurriculumDef, opts: { kev?: KevClient | null; level?: string } = {}) {
+    const record = await this.record(actor.id, def)
+    const level = opts.level ?? record?.level ?? def.levels[0]
+    if (!def.levels.includes(level)) throw new Error('Nivel desconocido')
+    const nodes = def.nodes.filter(n => n.level === level)
+    const mastered = record?.mastered ?? []
+
+    let kevReady: number | null = null
+    if (opts.kev && nodes.length) {
+      const summary = await Promise.all(nodes.map(async node => {
+        const ev = await getEvidence(this.db, actor.id, def.id, node.id)
+        const graded = (ev?.entries ?? []).filter(e => e.action !== 'self_reported')
+        return {
+          title: node.title, objective: node.objective, mastered: mastered.includes(node.id),
+          attempts: ev?.entries.length ?? 0,
+          accuracy: graded.length ? graded.filter(e => e.score >= 0.5).length / graded.length : undefined,
+        }
+      }))
+      kevReady = (await judgeLevel(opts.kev, { topic: def.topic, level, nodes: summary }).catch(() => ({ ready: null }))).ready
+    }
+
+    const result = decideLevelAdvance({ levelNodes: nodes.map(n => n.id), mastered, kevReady, accredits: canAccredit(def) })
+    if (result.decision === 'teacher_review') {
+      const id = key(actor.id, `${def.id}:${level}`)
+      const col = this.db.collection<LevelReviewRequest>(LEVEL_REVIEWS_COLLECTION)
+      if (!(await col.get(id))) {
+        await col.put(id, { studentId: actor.id, institutionId: actor.institutionId, curriculumId: def.id, level, reason: result.reason, requestedAt: new Date().toISOString(), status: 'pending' }, { expectedVersion: 0 }).catch(() => {})
+      }
+    }
+    return { curriculumId: def.id, level, kevReady, ...result, decision: result.decision as LevelDecision }
   }
 
   async diagnostic(actor: Account, def: CurriculumDef, input: unknown) {

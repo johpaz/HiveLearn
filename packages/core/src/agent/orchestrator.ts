@@ -1,7 +1,7 @@
 /**
- * Orchestrator — combina los outputs del DAGScheduler en un LessonProgram completo
+ * Orchestrator — combina los resultados de los trabajos delegados en un LessonProgram completo
  */
-import type { DAGResult } from './scheduler/dag'
+import type { DelegationResult } from './swarm/jobs'
 import type {
   LessonProgram, NodoLesson, NodoContenido, GamificacionOutput, EvaluacionOutput,
   PerfilAdaptacion, RangoEdad, TipoPedagogico, TipoVisual, EstadoNodo, NivelPrevio
@@ -127,10 +127,10 @@ export function buildNodosBase(structureResult: string, perfil: PerfilAdaptacion
 /** Enriquece los nodos con el contenido generado por los agentes Tier 1 */
 function enriquecerNodos(
   nodos: Omit<NodoLesson, 'posX' | 'posY'>[],
-  dagResult: DAGResult,
+  delegation: DelegationResult,
 ): Omit<NodoLesson, 'posX' | 'posY'>[] {
   const resultMap = new Map<string, string>()
-  for (const node of [...dagResult.completed, ...dagResult.failed]) {
+  for (const node of [...delegation.completed, ...delegation.failed]) {
     if (hasUsableResult(node.result)) {
       resultMap.set(node.id, node.result)
     } else if (typeof node.result === 'string') {
@@ -206,17 +206,17 @@ export function aplicarRedistribucionXP(
 }
 
 export function buildLessonProgram(opts: {
-  dagResult: DAGResult
+  delegation: DelegationResult
   alumnoId: string
   meta: string
   sessionId: string
   perfil: PerfilAdaptacion
   xpRedistribuido?: Record<string, number>
 }): LessonProgram {
-  const { dagResult, alumnoId, meta, sessionId, perfil, xpRedistribuido } = opts
+  const { delegation, alumnoId, meta, sessionId, perfil, xpRedistribuido } = opts
 
   const resultMap = new Map<string, string>()
-  for (const n of [...dagResult.completed, ...dagResult.failed]) {
+  for (const n of [...delegation.completed, ...delegation.failed]) {
     if (hasUsableResult(n.result)) {
       resultMap.set(n.id, n.result)
     } else if (typeof n.result === 'string') {
@@ -227,7 +227,7 @@ export function buildLessonProgram(opts: {
   // Construir nodos desde StructureAgent
   const structureRaw = resultMap.get('structure') ?? '{}'
   const nodosBase = buildNodosBase(structureRaw, perfil)
-  const nodosEnriquecidos = enriquecerNodos(nodosBase, dagResult)
+  const nodosEnriquecidos = enriquecerNodos(nodosBase, delegation)
   let nodos = calcularPosiciones(nodosEnriquecidos)
 
   // Aplicar redistribución de XP del coordinador si existe

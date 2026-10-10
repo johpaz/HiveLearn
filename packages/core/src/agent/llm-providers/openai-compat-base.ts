@@ -27,6 +27,12 @@ export abstract class OpenAICompatBase implements LLMProvider {
    */
   protected injectToolsIntoPrompt(_body: any, _preparedTools: any[]): void {}
 
+  /**
+   * Hook para ajustar el cuerpo justo antes de enviarlo (campos propios del backend, p. ej.
+   * `chat_template_kwargs`). Debe devolver el cuerpo. El SDK de OpenAI serializa las claves desconocidas tal cual.
+   */
+  protected modifyRequestBody(body: any, _options: LLMCallOptions): any { return body }
+
   /** Override to customize the OpenAI client (e.g. strip unwanted headers, add custom fetch). */
   protected async resolveOpenAIClient(apiKey: string, baseURL: string | undefined): Promise<any> {
     const { default: OpenAI } = await import("openai")
@@ -116,6 +122,8 @@ export abstract class OpenAICompatBase implements LLMProvider {
 
       this.injectToolsIntoPrompt(body, preparedTools)
     }
+
+    Object.assign(body, this.modifyRequestBody(body, options))
 
     log.info(`[llm-client] ${this.providerName}/${body.model} — ${(options.messages ?? []).length} msgs, ${options.tools?.length ?? 0} tools${sendTools ? "" : " (tools suppressed)"}`)
 

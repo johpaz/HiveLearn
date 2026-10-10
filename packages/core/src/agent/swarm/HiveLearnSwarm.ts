@@ -16,15 +16,15 @@ import { LessonPersistence } from '../../storage/LessonPersistence'
 import { logger } from '../../utils/logger'
 import { hlSwarmEmitter } from '../../events/swarm-events'
 import type { StudentProfile, PerfilAdaptacion, LessonProgram, SwarmProgress } from '../../types'
-import { DAGScheduler, type DAGResult, type NodeSummary } from '../scheduler/dag'
-import { buildFullDAG } from '../presets/HiveLearnPreset'
+import { runRound, mergeRounds, resultsOf, type DelegationResult, type JobSummary } from './jobs'
+import { buildWorkPlan } from './work-plan'
 import { buildLessonProgram, buildNodosBase } from '../orchestrator'
-import { HiveLearnExecutor } from '../executor'
 import { evaluateProgramSafety, summarizeReport } from '../../safety/content-safety'
 import { dossierToText, type Dossier } from '../../research/dossier'
 import { routeFor, validateBlueprintFor, type CurriculumDef } from '../../institutional/curriculum-def'
 import { CurriculumProgressStore } from '../../institutional/curriculum-progress'
 import { AgentExecutionError } from '../errors'
+import { prepareDelegation } from './coordinator-delegation'
 import {
   createGenerationRun,
   saveRunBlueprint,
@@ -52,6 +52,25 @@ function normalizeRuntimeVisualType(tipoVisual: LessonProgram['nodos'][number]['
     default:
       return tipoVisual
   }
+}
+
+const ALLOWED_VISUALS = new Set(['text_card', 'image_ai', 'infographic', 'audio_ai'])
+
+/**
+ * Un nodo nunca promete un apoyo visual que no tiene: si el tipo no es del pipeline o falta su asset, queda
+ * como tarjeta de texto (la explicación/ejercicio siempre está). Evita tipos inventados por el modelo
+ * ("interactive_diagram") y visuales cuyo trabajo falló.
+ */
+export function sanitizeVisuals<T extends Pick<LessonProgram['nodos'][number], 'tipoVisual' | 'contenido'>>(nodos: T[]): T[] {
+  return nodos.map(node => {
+    const c = node.contenido ?? {}
+    const has =
+      node.tipoVisual === 'text_card' ||
+      (node.tipoVisual === 'infographic' && Array.isArray(c.infografia?.secciones) && c.infografia.secciones.length > 0) ||
+      (node.tipoVisual === 'image_ai' && !!(c.imagen?.prompt?.trim() || c.imagen?.svg_fallback?.trim())) ||
+      (node.tipoVisual === 'audio_ai' && !!c.audio?.narration_text?.trim())
+    return ALLOWED_VISUALS.has(node.tipoVisual) && has ? node : { ...node, tipoVisual: 'text_card' as T['tipoVisual'] }
+  })
 }
 
 function normalizeNodeForRuntime(node: LessonProgram['nodos'][number]): LessonProgram['nodos'][number] {
@@ -281,30 +300,48 @@ export class HiveLearnSwarm {
         timestamp: Date.now(),
       })
 
-      const planningRaw = await runHiveLearnAgent({
-        agentId: AGENT_IDS.coordinator,
-        taskDescription,
-        systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
-        tools: [planificarProgramaTool],
-        threadId: sessionId,
-        runContext: this.runContext,
-      })
+      // El blueprint se valida contra el currículo; si el modelo se sale (competencia inexistente, prerrequisitos
+      // pendientes), se le devuelve el motivo y las competencias permitidas para que lo corrija. Máx. 3 intentos.
+      const allowed = (curriculum.nodes as Array<{ id: string; status: string }>).filter(n => n.status !== 'pending').map(n => n.id)
+      let feedback = ''
+      let lastError: Error | null = null
+      let planned: string | null = null
+      for (let attempt = 1; attempt <= 3 && planned === null; attempt++) {
+        const planningRaw = await runHiveLearnAgent({
+          agentId: AGENT_IDS.coordinator,
+          taskDescription: taskDescription + feedback,
+          systemPrompt: AGENT_PROMPTS[AGENT_IDS.coordinator] ?? '',
+          tools: [planificarProgramaTool],
+          threadId: sessionId,
+          runContext: this.runContext,
+        })
 
-      const blueprint = parseAgentOutput<{ tema?: string; topic_slug?: string | null; curriculumVersion?: string; nodos?: unknown[] }>(planningRaw, {})
-      if (!Array.isArray(blueprint.nodos) || blueprint.nodos.length === 0) {
-        throw new Error('El coordinador no pudo planificar un blueprint válido del programa')
+        const blueprint = parseAgentOutput<{ tema?: string; topic_slug?: string | null; curriculumVersion?: string; nodos?: unknown[] }>(planningRaw, {})
+        if (!Array.isArray(blueprint.nodos) || blueprint.nodos.length === 0) {
+          lastError = new Error('El coordinador no pudo planificar un blueprint válido del programa')
+          feedback = '\n\nTu respuesta anterior no incluyó nodos. Llama planificar_programa con la lista completa de nodos.'
+          continue
+        }
+        const candidate = JSON.stringify({
+          curriculumVersion: blueprint.curriculumVersion,
+          tema: blueprint.tema ?? meta,
+          topic_slug: blueprint.topic_slug ?? null,
+          nodos: blueprint.nodos,
+        })
+        try {
+          this.validateBlueprint(JSON.parse(candidate), curriculum)
+          planned = candidate
+        } catch (error) {
+          lastError = error as Error
+          log.warn(`[coordinator-flow] blueprint rechazado (intento ${attempt}/3): ${lastError.message}`)
+          feedback = `\n\nTU BLUEPRINT ANTERIOR FUE RECHAZADO: ${lastError.message}. Usa en "competencyId" SOLO uno de estos identificadores: ${allowed.join(', ')}; y "curriculumVersion" debe ser exactamente "${curriculum.version}". Cada nodo "id" debe ser único.`
+        }
       }
+      if (planned === null) throw lastError ?? new Error('El coordinador no pudo planificar un blueprint válido del programa')
+      structureResult = planned
 
-      structureResult = JSON.stringify({
-        curriculumVersion: blueprint.curriculumVersion,
-        tema: blueprint.tema ?? meta,
-        topic_slug: blueprint.topic_slug ?? null,
-        nodos: blueprint.nodos,
-      })
-
-      // Checkpoint del blueprint: si el proceso muere durante Tier 1,
+      // Checkpoint del blueprint: si el proceso muere durante la generación,
       // la reanudación no repite la planificación
-      this.validateBlueprint(JSON.parse(structureResult), curriculum)
       await saveRunBlueprint(sessionId, structureResult)
     }
 
@@ -323,7 +360,14 @@ export class HiveLearnSwarm {
         log.info(`[coordinator-flow] resume: ${priorOutputs.size} outputs de nodos reutilizados`)
       } catch { /* non-critical */ }
     }
-    const executor = new HiveLearnExecutor(this.runContext, priorOutputs, { dossierText: this.dossier ? dossierToText(this.dossier) : undefined })
+    // El coordinador reparte el trabajo con ayuda de Kev (agente visual, skills y longitud por nodo).
+    const { executor } = await prepareDelegation({
+      runContext: this.runContext,
+      objective: meta,
+      nodos: nodosBase,
+      priorOutputs,
+      dossierText: this.dossier ? dossierToText(this.dossier) : undefined,
+    })
 
     this.emit('tier1', 'HiveLearnCoordinator', 15, `Coordinador despachando ${nodosBase.length} nodos al enjambre reducido...`)
     hlSwarmEmitter.emit('coordinator:phase_changed', {
@@ -335,22 +379,22 @@ export class HiveLearnSwarm {
       timestamp: Date.now(),
     })
 
-    const dagInput = { alumnoId: perfil.alumnoId, meta, perfil: perfilAdaptacion, sessionId }
-    const scheduler = new DAGScheduler({
-      maxConcurrentWorkers: 2,
-      silent: false,
+    // Reparto por rondas (sin grafo): nodos en paralelo y, con sus resultados, la evaluación final.
+    const workInput = { alumnoId: perfil.alumnoId, meta, perfil: perfilAdaptacion, sessionId }
+    const workPlan = buildWorkPlan(workInput, nodosBase)
+    const roundOptions = {
       executor,
+      concurrency: Number(process.env.HIVELEARN_MAX_CONCURRENT_WORKERS ?? 2),
+      sessionId,
       coordinatorId: AGENT_IDS.coordinator,
-    })
-    const fullGraph = buildFullDAG(dagInput, nodosBase)
-    const fullResult = await scheduler.execute(fullGraph, {
-      projectId: sessionId,
-      coordinatorId: AGENT_IDS.coordinator,
-    })
+    }
+    const nodeRound = await runRound(workPlan.nodeJobs, roundOptions)
+    const finalRound = await runRound(workPlan.finalJobs, { ...roundOptions, priorResults: resultsOf(nodeRound) })
+    const fullResult = mergeRounds([nodeRound, finalRound])
 
     log.info(`[coordinator-flow] reduced swarm finished. ${fullResult.completed.length} completed, ${fullResult.failed.length} failed`)
 
-    const syntheticStructureNode: NodeSummary = {
+    const syntheticStructureNode: JobSummary = {
       id: 'structure',
       name: 'CoordinatorBlueprint',
       status: 'COMPLETED',
@@ -359,7 +403,7 @@ export class HiveLearnSwarm {
       retries: 0,
     }
 
-    const mergedDagResult: DAGResult = {
+    const delegated: DelegationResult = {
       ...fullResult,
       completed: [syntheticStructureNode, ...fullResult.completed],
       failed: [...(fullResult.failed ?? [])],
@@ -367,12 +411,12 @@ export class HiveLearnSwarm {
     }
 
     const rawOutputs = new Map<string, string>([['structure', structureResult]])
-    for (const n of [...mergedDagResult.completed, ...(mergedDagResult.failed ?? [])]) {
+    for (const n of [...delegated.completed, ...(delegated.failed ?? [])]) {
       if (n.result) rawOutputs.set(n.id, n.result)
     }
 
-    const program = buildLessonProgram({ dagResult: mergedDagResult, alumnoId: perfil.alumnoId, meta, sessionId, perfil: perfilAdaptacion })
-    await this.updateFailedWorkerPrompts(meta, sessionId, mergedDagResult.failed ?? [])
+    const program = buildLessonProgram({ delegation: delegated, alumnoId: perfil.alumnoId, meta, sessionId, perfil: perfilAdaptacion })
+    await this.updateFailedWorkerPrompts(meta, sessionId, delegated.failed ?? [])
     const repairedProgram = await this.repairIncompleteNodes(program, meta, sessionId, rawOutputs)
     log.info(`[coordinator-flow] program assembled: ${repairedProgram.nodos.length} nodes, sessionId=${sessionId}`)
 
@@ -391,7 +435,7 @@ export class HiveLearnSwarm {
       timestamp: Date.now(),
     })
 
-    let reviewed = await this.runCoordinatorReview(repairedProgram, meta, sessionId, rawOutputs, mergedDagResult)
+    let reviewed = await this.runCoordinatorReview(repairedProgram, meta, sessionId, rawOutputs, delegated)
 
     // Hard-enforce XP total = 100 regardless of LLM output
     const xpSum = reviewed.nodos.reduce((s, n) => s + (n.xpRecompensa ?? 0), 0)
@@ -411,6 +455,8 @@ export class HiveLearnSwarm {
       }
       log.info(`[coordinator] XP normalized from ${xpSum} → 100`)
     }
+
+    reviewed = { ...reviewed, nodos: sanitizeVisuals(reviewed.nodos) }
 
     // Puerta de seguridad ejecutable: un veto impide entregar el programa.
     const safety = evaluateProgramSafety(reviewed, {
@@ -478,7 +524,9 @@ export class HiveLearnSwarm {
     })
 
     const repairedNodes = [...program.nodos]
+    const dropped = new Set<string>()
     for (const node of incompleteNodes) {
+      try {
       const rawSummary = [...rawOutputs.entries()]
         .filter(([key]) => key.endsWith(node.id) || key === 'structure')
         .map(([key, value]) => `${key}: ${value.slice(0, 300)}`)
@@ -559,9 +607,23 @@ No devuelvas svg_diagram, gif_guide, code_block, chart ni animated_card.`
         progress: 90,
         timestamp: Date.now(),
       })
+      } catch (error) {
+        // Un nodo irrecuperable no tumba la generación completa: se retira y el resto se entrega.
+        dropped.add(node.id)
+        log.warn(`[coordinator-flow] nodo ${node.id} descartado tras fallar su reparación: ${(error as Error).message}`)
+      }
     }
 
-    return { ...program, nodos: repairedNodes }
+    if (dropped.size === 0) return { ...program, nodos: repairedNodes }
+    const kept = repairedNodes.filter(n => !dropped.has(n.id))
+    const minimum = Math.max(2, Math.ceil(program.nodos.length * 0.6))
+    if (kept.length < minimum) {
+      throw new Error(`Quedaron ${kept.length} de ${program.nodos.length} nodos tras descartar los irreparables (mínimo ${minimum})`)
+    }
+    // El XP total vuelve a sumar 100 entre los nodos que se entregan.
+    const total = kept.reduce((sum, n) => sum + (n.xpRecompensa ?? 0), 0)
+    const rescaled = total > 0 ? kept.map(n => ({ ...n, xpRecompensa: Math.max(1, Math.round((n.xpRecompensa ?? 0) * 100 / total)) })) : kept
+    return { ...program, nodos: rescaled }
   }
 
   private inferAgentIdFromFailure(taskId: string, name: string): string | null {
@@ -637,7 +699,7 @@ Llama actualizar_prompt_agente una vez por cada worker fallido.`,
     meta: string,
     sessionId: string,
     rawOutputs: Map<string, string>,
-    _dagResult: DAGResult,
+    _delegated: DelegationResult,
   ): Promise<LessonProgram> {
     try {
       const rawSummary = [...rawOutputs.entries()]

@@ -1,7 +1,7 @@
 import type { Tool } from '../../types/tool'
-import { buildFullDAG } from '../../agent/presets/HiveLearnPreset'
-import { DAGScheduler } from '../../agent/scheduler/dag'
-import { HiveLearnExecutor } from '../../agent/executor'
+import { buildWorkPlan } from '../../agent/swarm/work-plan'
+import { runRound, mergeRounds, resultsOf } from '../../agent/swarm/jobs'
+import { prepareDelegation } from '../../agent/swarm/coordinator-delegation'
 import { buildLessonProgram } from '../../agent/orchestrator'
 import { AGENT_IDS } from '../../agent/registry'
 import { logger } from '../../utils/logger'
@@ -79,8 +79,8 @@ export const delegarEnjambreTool: Tool = {
     }
     try {
       // Aquí solo hay el rango del perfil de adaptación, no la edad: se usa la banda más restrictiva compatible.
-      const executor = new HiveLearnExecutor({ studentId: alumnoId, ageBand: ageBandFromRango(perfil.rangoEdad) })
-      const dagInput = { alumnoId, meta, perfil, sessionId }
+      const runContext = { studentId: alumnoId, ageBand: ageBandFromRango(perfil.rangoEdad) }
+      const workInput = { alumnoId, meta, perfil, sessionId }
 
       // Map coordinator blueprint → NodoLesson[]
       const nodosBase: NodoLesson[] = (rawNodos ?? []).map((n, idx) => ({
@@ -98,22 +98,16 @@ export const delegarEnjambreTool: Tool = {
       }))
 
       log.info(`[delegar] start — ${nodosBase.length} nodes, alumnoId=${alumnoId}`)
+      const { executor } = await prepareDelegation({ runContext, objective: meta, nodos: nodosBase })
 
-      const fullGraph = buildFullDAG(dagInput, nodosBase)
-      const schedulerFull = new DAGScheduler({
-        maxConcurrentWorkers: MAX_WORKERS,
-        silent: false,
-        executor,
-        coordinatorId: AGENT_IDS.coordinator,
-      })
-
-      const fullResult = await schedulerFull.execute(fullGraph, {
-        projectId: sessionId,
-        coordinatorId: AGENT_IDS.coordinator,
-      })
+      const workPlan = buildWorkPlan(workInput, nodosBase)
+      const roundOptions = { executor, concurrency: MAX_WORKERS, sessionId, coordinatorId: AGENT_IDS.coordinator }
+      const nodeRound = await runRound(workPlan.nodeJobs, roundOptions)
+      const finalRound = await runRound(workPlan.finalJobs, { ...roundOptions, priorResults: resultsOf(nodeRound) })
+      const fullResult = mergeRounds([nodeRound, finalRound])
       log.info(`[delegar] done — ${fullResult.completed.length} completed, ${fullResult.failed.length} failed`)
 
-      const program = buildLessonProgram({ dagResult: fullResult, alumnoId, meta, sessionId, perfil })
+      const program = buildLessonProgram({ delegation: fullResult, alumnoId, meta, sessionId, perfil })
 
       const msg = `${program.nodos.length} nodos generados (${fullResult.completed.length} agentes completados).`
       log.info(`[delegar] ${msg}`)

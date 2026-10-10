@@ -35,6 +35,8 @@ export interface AgentLoopOptions {
   maxIterations?: number
   maxTokens?: number
   temperature?: number
+  /** Razonamiento del modelo en esta corrida; sin indicar, lo decide el proveedor (Qwen/Gemma: apagado/encendido). */
+  thinking?: boolean
   /** Contexto para validación pedagógica */
   validationContext?: {
     agenteId: string
@@ -104,6 +106,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<string> {
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       maxTokens: opts.maxTokens ?? 2048,
       temperature: opts.temperature ?? 0.3,
+      ...(opts.thinking === undefined ? {} : { thinking: { enabled: opts.thinking } }),
       ...opts.providerConfig,
     })
 

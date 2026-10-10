@@ -96,3 +96,43 @@ describe('dominio por evidencia (regla híbrida)', () => {
     expect(await store.masterByEvidence(student.id, reviewed, 'tablas')).toBe(false) // ya dominado: idempotente
   })
 })
+
+describe('levelCheck: ¿superó el nivel?', () => {
+  const fakeKev = (ready: number | null) => ({
+    kind: 'custom' as const,
+    ask: async () => (ready === null ? null : { ready: { type: 'noul' as const, noul: ready } }),
+  })
+  const evidence = { nodeId: 'tablas', evidence: 'Explicó con sus palabras qué es una tabla y dio un ejemplo.' }
+
+  async function setup() {
+    const saved = await saveGeneratedCurriculum(db, content())
+    const reviewed = await approveCurriculum(db, saved.docId, { id: 't1', role: 'teacher' })
+    const store = new CurriculumProgressStore(db)
+    await store.diagnostic(student, reviewed, answers(0, 1))
+    return { store, reviewed, saved }
+  }
+
+  test('sin evidencia el nivel no se supera, aunque Kev diga que sí', async () => {
+    const { store, reviewed } = await setup()
+    const r = await store.levelCheck(student, reviewed, { kev: fakeKev(0.99) as never, level: 'inicial' })
+    expect(r).toMatchObject({ decision: 'hold', masteredCount: 0, total: 1, kevReady: 0.99 })
+  })
+
+  test('con todo dominado avanza; si Kev ve evidencia débil pasa a revisión docente y queda registrado una sola vez', async () => {
+    const { store, reviewed } = await setup()
+    await store.review(teacher, student, reviewed, evidence)
+    expect((await store.levelCheck(student, reviewed, { kev: fakeKev(0.9) as never, level: 'inicial' })).decision).toBe('advance')
+    expect((await store.levelCheck(student, reviewed, { kev: null, level: 'inicial' })).decision).toBe('advance')
+
+    const doubtful = await store.levelCheck(student, reviewed, { kev: fakeKev(0.1) as never, level: 'inicial' })
+    expect(doubtful.decision).toBe('teacher_review')
+    await store.levelCheck(student, reviewed, { kev: fakeKev(0.1) as never, level: 'inicial' })
+    const { LEVEL_REVIEWS_COLLECTION } = await import('./curriculum-progress')
+    expect(await db.collection(LEVEL_REVIEWS_COLLECTION).scan()).toHaveLength(1)
+  })
+
+  test('un currículo sin revisar nunca supera el nivel', async () => {
+    const { store, saved } = await setup()
+    expect((await store.levelCheck(student, saved.def, { kev: fakeKev(0.99) as never, level: 'inicial' })).decision).toBe('hold')
+  })
+})

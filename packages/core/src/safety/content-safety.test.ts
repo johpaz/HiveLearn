@@ -24,6 +24,13 @@ describe('evaluateProgramSafety', () => {
     expect(evaluateProgramSafety(explicacion('<img src=x onerror=alert(1)>'), { ageBand: 'adulto' }).state).toBe('veto')
   })
 
+  test('el espacio de nombres xmlns de un SVG no es un enlace inseguro', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink=\'http://www.w3.org/1999/xlink\'><circle r="4"/></svg>'
+    expect(evaluateProgramSafety(program({ imagen: { svg_fallback: svg } }), { ageBand: 'ninez' }).state).toBe('ok')
+    // Un enlace real dentro del mismo SVG sí se detecta.
+    expect(codes(evaluateProgramSafety(program({ imagen: { svg_fallback: `${svg}<a href="http://malo.example.com/x">t</a>` } }), { ageBand: 'adulto' }))).toContain('insecure_url')
+  })
+
   test('URLs: http, IP y dominios no permitidos para menores', () => {
     expect(codes(evaluateProgramSafety(explicacion('Mira http://ejemplo.org/a'), { ageBand: 'adulto' }))).toContain('insecure_url')
     expect(codes(evaluateProgramSafety(explicacion('Mira https://10.0.0.1/a'), { ageBand: 'adulto' }))).toContain('ip_url')

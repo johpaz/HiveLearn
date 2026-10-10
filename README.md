@@ -49,6 +49,18 @@ En Fedora, `bun run build:desktop` genera `packages/hivelearn-desktop/src-tauri/
 
 La ruta predeterminada de datos es `~/.hivelearn/hivedb`; usa `HIVELEARN_DB_PATH` para una ubicación institucional. No reutilices la base de Hive: HiveLearn conserva una base propia.
 
+### Reparto del trabajo: coordinador, especialistas y Kev (sin grafo de tareas)
+
+HiveLearn **no usa un grafo de tareas ni un planificador de dependencias**. El trabajo se reparte como en Hive: un coordinador y especialistas que ejecutan su propio loop con sus tools y skills.
+
+1. **El coordinador planifica** el programa (`planificar_programa`) a partir del perfil, la edad y la ruta curricular. El blueprint se valida contra el currículo; si el modelo se sale (competencia inexistente, prerrequisitos pendientes) se le devuelve el motivo y las competencias permitidas, hasta 3 intentos.
+2. **El coordinador delega con ayuda de Kev** (`agent/swarm/coordinator-delegation.ts`): para cada nodo decide qué especialista redacta (explicación, ejercicio, evaluación), qué apoyo visual lleva (texto, infografía, imagen, audio) y qué skills pedagógicas aplican.
+3. **Los especialistas trabajan por rondas** (`agent/swarm/jobs.ts`). Los trabajos de una ronda son independientes y corren en paralelo hasta `HIVELEARN_MAX_CONCURRENT_WORKERS` (2 por defecto); la ronda siguiente recibe los resultados de la anterior como contexto. Hoy hay dos: nodos y evaluación final. No hay dependencias declaradas: el orden lo da el coordinador.
+4. **Cada especialista afina su corrida** (`HiveLearnExecutor`): Kev decide esfuerzo de razonamiento, longitud y qué skills del nodo aplica de verdad.
+5. **El coordinador integra, repara y revisa**; la puerta de seguridad determinista decide si el programa se entrega.
+
+Un trabajo que falla se reintenta y no detiene a los demás; el coordinador repara los nodos incompletos. Cada trabajo tiene un tope de tiempo (`HIVELEARN_JOB_TIMEOUT_MS`, 240 s): al vencer deja de esperarse, pero la llamada al modelo en curso no se cancela.
+
 ### Motor de agentes (`@johpaz/hive-sdk`)
 
 El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGINE=sdk` los agentes se ejecutan con el loop de `@johpaz/hive-sdk`. Un proveedor que el SDK no soporta (p. ej. `local-llama`) cae solo al loop propio.
@@ -56,6 +68,12 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 - El SDK usa una base **separada** (`sdk-db` y `sdk-home`, junto a la de HiveLearn). Se puede mover con `HIVELEARN_SDK_DB_PATH` y `HIVELEARN_SDK_HOME`.
 - **Oráculo Kev/Jev:** se activa solo si hay API key del proveedor `hiveagents` (Kev) o `openrouter` (Jev). Se apaga con `oracleEnabled: false` en la configuración institucional, y con `allowRemoteProviders: false` solo se admite un endpoint local o de red privada. Del turno solo viaja el objetivo de la tarea; instrucciones, historial y resultados de tools no se comparten.
 - Con el motor `sdk` el servidor cierra ordenadamente al recibir `SIGINT`/`SIGTERM`.
+- **Verificado con HiveAgents (Qwen3.5-9B, 2026-10-10):** ambos motores generan un currículo con tool calling (45–57 s), completan una lección interactiva (30–43 s) y el investigador web produce un dossier real (3 fuentes, 9 afirmaciones, ~200 s). Con Qwen el razonamiento va **apagado por defecto** (`chat_template_kwargs.enable_thinking`): una respuesta corta pasa de 14 s a 1,4 s; actívalo con `thinking.enabled = true`.
+- **Kev como oráculo de decisiones** (`agent/kev/`): consultas cerradas (elegir o probabilidad) de ~0,1 s por pregunta. Sin oráculo (sin clave, política, caída) todo cae a una ruta determinista; el sistema nunca depende de él.
+  - *Coordinador* (`planDelegation`): por nodo, agente visual y skills pedagógicas (`agent/skills/catalog.ts`); solo elige entre candidatos permitidos con confianza ≥ 0,7, máx. 3 skills, y no puede quitar las obligatorias (p. ej. `verificar-con-fuente` con dossier).
+  - *Especialista* (`planSpecialist`, en `HiveLearnExecutor`): esfuerzo de razonamiento (`thinking`), longitud y qué skills del nodo aplica.
+  - *App*: respuestas **abiertas** (sin clave) las juzga Kev (`judgeAnswer`; ≥ 0,65 correcta, ≤ 0,25 incorrecta; evidencia solo con ≥ 0,8); con clave manda el código y Kev no se consulta. ¿Superó el nivel? (`GET /curricula/:id/level`): la evidencia manda y Kev solo frena o pide revisión docente (`GET /curricula/level-reviews`). Tras un fallo, Kev elige pista/repaso/ejemplo; no se abandona un nodo antes del 3.er fallo.
+  - Medido: ~0,1 s por pregunta y el SDK corta a los 3 s; se envían lotes de 8, consecutivos, y se detiene al primer fallo para no agotar el presupuesto de errores del SDK (en paralelo el servidor los serializa y todos pasan de 3 s). Bajo carga de GPU compartida una consulta de 12 preguntas llegó a superar los 3 s.
 
 ### Currículo para cualquier tema
 
@@ -95,6 +113,19 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 - **Recuperación sin correo:** el registro entrega un código de recuperación que se muestra una vez. `POST /recover` lo canjea por una contraseña nueva, entrega otro código y cierra todas las sesiones de la cuenta. Cualquier fallo responde con el mismo mensaje.
 - **Restablecimiento por personal:** `POST /accounts/:id/password-reset` (administrador, o el docente de ese alumno) emite un código de un solo uso válido 24 h que se canjea en `POST /reset`; también cierra las sesiones. Un código de restablecimiento no sirve para activar cuentas.
 - Sin canal de correo no hay verificación de identidad: quien tenga el código de recuperación controla la cuenta.
+
+### Cola de revisión docente
+
+- La evidencia de confianza media (p. ej. un juicio de Kev entre 0,65 y 0,8) o de un alumno con docente queda marcada para revisión. `GET /api/portal/review-queue` (docente o administrador) lista solo los alumnos a su cargo, la más antigua primero.
+- `POST /api/portal/review-queue/resolve` con `{studentId, curriculumId, nodeId, decision: 'accept'|'reject', evidence?}`. **Aceptar exige describir la evidencia observada** (≥ 20 caracteres) y otorga el dominio por el mismo camino que una revisión directa (respeta prerrequisitos y que el currículo acredite); rechazar solo cierra la revisión.
+- Cada resolución deja registro (`system`/docente) y la entrada sale de la cola.
+
+### Robustez de la generación
+
+- El blueprint se corrige con el motivo del rechazo (hasta 3 intentos).
+- Un nodo que no se puede reparar **se descarta** y el resto se entrega, siempre que queden al menos el 60 % (mínimo 2); el XP se renormaliza a 100.
+- Un nodo nunca promete un visual que no tiene (`sanitizeVisuals`): tipos inventados por el modelo o assets que fallaron quedan como tarjeta de texto.
+- Verificado con Qwen3.5-9B + Kev en ambos motores: 10 nodos en 4–5 min con 22–23 consultas a Kev (≈0,7 s cada una).
 
 ### Edad, política y identidad del alumno
 

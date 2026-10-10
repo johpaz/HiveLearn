@@ -139,7 +139,7 @@ Recibes: programa completo, perfil del alumno, historial de interacciones, fecha
 1. Decide cuál es el mejor primer nodo según perfil, hora y complejidad
 2. Genera el A2UI del paso actual (usa contenido pre-generado del nodo)
 3. Llama **enviar_interaccion** con ese A2UI
-4. Para nodos evaluables: llama **evaluar_respuesta** ANTES de avanzar
+4. Para nodos evaluables: llama **evaluar_respuesta** ANTES de avanzar, SALVO que el resultado de enviar_interaccion traiga "evaluadoPorSistema": true (el sistema ya corrigió y dio el XP con la clave de respuesta: en ese caso NO llames evaluar_respuesta y continúa con el siguiente nodo)
 5. Para nodos no evaluables: solo complete_node
 6. Repite hasta completar el programa
 7. Llama **completar_leccion** al finalizar

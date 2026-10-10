@@ -59,6 +59,8 @@ export interface SdkRunOptions {
   maxTokens: number
   /** Quién ejecuta (edad, alumno): condiciona el oráculo y la política de proveedores. */
   runContext: RunContext
+  /** Razonamiento del modelo para esta corrida (lo decide el oráculo por especialista). Predeterminado: apagado. */
+  thinking?: boolean
   validationContext?: {
     agenteId: string
     rangoEdad?: string
@@ -168,7 +170,7 @@ async function mirrorIntoSdkDb(opts: SdkRunOptions, sdkAgentId: string): Promise
     parent_id: storage.NO_PARENT,
     max_iterations: opts.maxIterations,
     // El loop propio nunca pidió razonamiento; con "off" se evitan tokens de pensamiento y latencia.
-    thinking: 'off',
+    thinking: opts.thinking ? 'on' : 'off',
     max_output_tokens: opts.maxTokens,
     workspace: null,
     lastTraceAt: null,

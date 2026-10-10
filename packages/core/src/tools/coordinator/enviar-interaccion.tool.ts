@@ -54,6 +54,19 @@ export function createEnviarInteraccionTool(
     addXp?: (amount: number) => void
     /** Cada respuesta corregida de forma determinista (para memoria y evidencia). Un fallo aquí no rompe la lección. */
     onGraded?: (event: { nodoId: string; grade: Grade; answer: string }) => Promise<void> | void
+    /** Nodos ya resueltos correctamente en esta sesión: reenviarlos no repite la pantalla ni el XP. */
+    isCompleted?: (nodoId: string) => boolean
+    /**
+     * Juez de respuestas abiertas (Kev). Solo se consulta cuando el nodo NO tiene clave de respuesta: con clave
+     * manda la corrección determinista. Devuelve null si no hay oráculo o no aplica a ese nodo.
+     */
+    /**
+     * Ayuda tras una respuesta incorrecta (decidida por Kev con respaldo determinista). `advance` hace que el
+     * sistema siga al siguiente nodo sin crédito. Un fallo aquí no rompe la lección.
+     */
+    onIncorrect?: (input: { node: NodoLesson; attempts: number; answer: string; nodes: NodoLesson[] }) =>
+      Promise<{ mensaje?: string; pista?: string; advance?: boolean } | null>
+    judgeOpen?: (input: { node: NodoLesson; answer: string }) => Promise<{ verdict: 'correct' | 'incorrect' | 'unsure'; probability: number; grade: Grade } | null>
   },
 ): Tool {
   const loadCurriculumNodes = async (): Promise<NodoLesson[]> => {
@@ -172,6 +185,13 @@ export function createEnviarInteraccionTool(
     execute: async (args: Record<string, unknown>): Promise<string> => {
       const nodoId = args.nodoId as string
       const xpDisponible = (args.xpDisponible as number) ?? 0
+      if (opts?.isCompleted?.(nodoId)) {
+        return JSON.stringify({
+          accion: 'ya_completado',
+          nodoActual: nodoId,
+          nota: 'Ese nodo ya fue resuelto correctamente. No lo reenvíes: continúa con el siguiente nodo del programa o llama completar_leccion si era el último.',
+        })
+      }
       let messages = args.a2uiMessages as object[] | undefined
 
       if (!isRenderableA2UI(messages)) {
@@ -195,6 +215,11 @@ export function createEnviarInteraccionTool(
       // Si el LLM marcó esEvaluable=false, aun así esperamos la acción del cliente
       let currentNodeId = nodoId
       let action: StudentAction
+      // true si el sistema ya corrigió (y dio XP) en esta llamada: el tutor NO debe volver a evaluar.
+      let gradedBySystem = false
+      // Veredicto dudoso del oráculo sobre la última respuesta abierta: se le pasa al tutor como dato.
+      let oracleDoubt: { probabilidad: number } | null = null
+      const failures = new Map<string, number>()
 
       while (true) {
         action = await new Promise<StudentAction>((resolve, reject) => {
@@ -229,8 +254,35 @@ export function createEnviarInteraccionTool(
           const nodos = await loadCurriculumNodes()
           const currentNode = nodos.find((candidate) => candidate.id === currentNodeId)
           if (currentNode) {
-            const evaluation = evaluateNodeAnswer(currentNode, action)
+            let evaluation = evaluateNodeAnswer(currentNode, action)
+            // Sin clave de respuesta: Kev juzga la respuesta abierta (la clave, cuando existe, ya decidió arriba).
+            if (!evaluation.supported && opts?.judgeOpen) {
+              const answer = extractAnswer(action)
+              const judged = answer ? await opts.judgeOpen({ node: currentNode, answer }).catch(() => null) : null
+              if (judged && judged.verdict !== 'unsure') {
+                const correcto = judged.verdict === 'correct'
+                evaluation = {
+                  supported: true, correcto, grade: judged.grade, answer,
+                  xpGanado: correcto ? currentNode.xpRecompensa ?? 0 : 0,
+                  mensaje: correcto ? '¡Muy bien! Tu respuesta muestra que lo entendiste. 🌟' : 'Todavía no está del todo. Revisa tu respuesta y vuelve a intentarlo.',
+                  pista: correcto ? undefined : currentNode.contenido?.ejercicio?.pistaOpcional,
+                }
+              } else if (judged) {
+                oracleDoubt = { probabilidad: Math.round(judged.probability * 100) / 100 }
+              }
+            }
+            let advanceWithoutCredit = false
+            if (evaluation.supported && !evaluation.correcto && opts?.onIncorrect) {
+              const attempts = (failures.get(currentNodeId) ?? 0) + 1
+              failures.set(currentNodeId, attempts)
+              const help = await opts.onIncorrect({ node: currentNode, attempts, answer: evaluation.answer ?? '', nodes: nodos }).catch(() => null)
+              if (help) {
+                evaluation = { ...evaluation, mensaje: help.mensaje ?? evaluation.mensaje, pista: help.pista ?? evaluation.pista }
+                advanceWithoutCredit = !!help.advance
+              }
+            }
             if (evaluation.supported) {
+              gradedBySystem = true
               if (evaluation.grade) {
                 try { await opts?.onGraded?.({ nodoId: currentNodeId, grade: evaluation.grade, answer: evaluation.answer ?? '' }) } catch { /* auxiliar */ }
               }
@@ -252,7 +304,7 @@ export function createEnviarInteraccionTool(
                 })
               }
 
-              if (!evaluation.correcto) {
+              if (!evaluation.correcto && !advanceWithoutCredit) {
                 continue
               }
 
@@ -281,6 +333,9 @@ export function createEnviarInteraccionTool(
         accion: action.name,
         contexto: action.context,
         timestamp: action.timestamp,
+        nodoActual: currentNodeId,
+        ...(oracleDoubt && !gradedBySystem ? { veredictoOraculo: { veredicto: 'dudoso', ...oracleDoubt }, notaOraculo: 'El oráculo no pudo decidir con confianza: evalúa tú la respuesta con tu criterio.' } : {}),
+        ...(gradedBySystem ? { evaluadoPorSistema: true, nota: 'La corrección y el XP de este nodo ya los aplicó el sistema: NO llames evaluar_respuesta para él; continúa con el siguiente paso.' } : {}),
       })
     },
   }

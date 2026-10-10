@@ -1,4 +1,7 @@
-import { CurriculumProgressStore } from './curriculum-progress'
+import { CurriculumProgressStore, LEVEL_REVIEWS_COLLECTION, type LevelReviewRequest } from './curriculum-progress'
+import { kevForRun } from '../agent/kev/client'
+import { listPendingReviews, resolveReview } from '../grading/evidence'
+import { ageBandFor } from './age'
 import { approveCurriculum, findCurriculum, CURRICULA_COLLECTION } from './curriculum-store'
 import { canAccredit, type CurriculumDef } from './curriculum-def'
 import type { HiveDB } from '@johpaz/hive-db'
@@ -253,7 +256,40 @@ export class Portal {
         const defs = (await this.db.collection<CurriculumDef>(CURRICULA_COLLECTION).scan()).map(e => ({ docId: e.id, id: e.doc.id, topic: e.doc.topic, status: e.doc.status, accredits: canAccredit(e.doc), nodes: e.doc.nodes.length, createdAt: e.doc.createdAt }))
         return json({ curricula: actor.role === 'student' ? defs.filter(d => d.accredits) : defs })
       }
-      const curriculumPath = path.match(/^\/curricula\/([^/]+)\/(approve|diagnostic|route)$/)
+      if (path === '/review-queue' && method === 'GET') {
+        this.allow(actor, ['teacher', 'admin'])
+        const students = (await this.accounts.list(actor)).filter(a => a.role === 'student')
+        const names = new Map(students.map(a => [a.id, a.name]))
+        const pending = await listPendingReviews(this.db, new Set(students.map(a => a.id)))
+        return json({ queue: pending.map(item => ({ ...item, student: names.get(item.studentId) })) })
+      }
+      if (path === '/review-queue/resolve' && method === 'POST') {
+        this.allow(actor, ['teacher', 'admin'])
+        const data = z.object({
+          studentId: z.string(), curriculumId: z.string().max(80), nodeId: z.string().max(80),
+          decision: z.enum(['accept', 'reject']), evidence: z.string().trim().min(20).max(2000).optional(),
+        }).strict().parse(await body(req))
+        const student = await this.accessibleStudent(actor, data.studentId!)
+        if (data.decision === 'accept') {
+          if (!data.evidence) throw new HttpError(422, 'Aceptar exige describir la evidencia observada (mín. 20 caracteres)')
+          if (data.curriculumId === 'ai') await this.learning.review(actor, student, { nodeId: data.nodeId, evidence: data.evidence })
+          else {
+            const found = await findCurriculum(this.db, data.curriculumId!)
+            if (!found) throw new HttpError(404, 'Currículo no encontrado')
+            await this.progress.review(actor, student, found.def, { nodeId: data.nodeId, evidence: data.evidence })
+          }
+        }
+        await resolveReview(this.db, { studentId: student.id, curriculumId: data.curriculumId!, nodeId: data.nodeId!, reviewerId: actor.id })
+        return json({ ok: true, decision: data.decision })
+      }
+      if (path === '/curricula/level-reviews' && method === 'GET') {
+        this.allow(actor, ['teacher', 'admin'])
+        const all = await this.db.collection<LevelReviewRequest>(LEVEL_REVIEWS_COLLECTION).scan()
+        const students = new Map((await this.accounts.list(actor)).map(a => [a.id, a]))
+        const pending = all.map(e => e.doc).filter(r => r.status === 'pending' && r.institutionId === actor.institutionId && students.has(r.studentId))
+        return json({ reviews: pending.map(r => ({ ...r, student: students.get(r.studentId)?.name })) })
+      }
+      const curriculumPath = path.match(/^\/curricula\/([^/]+)\/(approve|diagnostic|route|level)$/)
       if (curriculumPath) {
         const [, ref, action] = curriculumPath
         if (action === 'approve') {
@@ -270,6 +306,10 @@ export class Portal {
         if (action === 'diagnostic' && method === 'GET') return json({ questions: found.def.questionBank.map(({ correct: _, ...question }) => question) })
         if (action === 'diagnostic' && method === 'POST') return json({ route: await this.progress.diagnostic(actor, found.def, await body(req)) })
         if (action === 'route' && method === 'GET') return json({ route: await this.progress.route(actor, found.def) })
+        if (action === 'level' && method === 'GET') {
+          const kev = await kevForRun({ studentId: actor.id, institutionId: actor.institutionId, ageBand: ageBandFor(actor.age) })
+          return json({ level: await this.progress.levelCheck(actor, found.def, { kev }) })
+        }
       }
       const curriculumReview = path.match(/^\/students\/([^/]+)\/curricula\/([^/]+)\/reviews$/)
       if (curriculumReview && method === 'POST') {

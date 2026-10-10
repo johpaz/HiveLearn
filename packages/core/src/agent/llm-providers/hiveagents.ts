@@ -135,7 +135,7 @@ export class HiveAgentsProvider extends OpenAICompatBase {
         for (const h of BLOCKED_HEADERS) headers.delete(h)
 
         const headersObj: Record<string, string> = {}
-        headers.forEach((v, k) => { headersObj[k] = k.toLowerCase() === "authorization" ? `Bearer ••••${v.slice(-6)}` : v })
+        headers.forEach((v, k) => { headersObj[k] = k.toLowerCase() === "authorization" ? "Bearer ••••" : v })
         log.info(`[hiveagents] → POST ${url}`)
         log.info(`[hiveagents] → Headers: ${JSON.stringify(headersObj)}`)
         if (init?.body) {
@@ -179,14 +179,16 @@ export class HiveAgentsProvider extends OpenAICompatBase {
     return super.call(callOptions)
   }
 
-  // Gemma 4: inyectar chat_template_kwargs.enable_thinking vía extra_body.
+  // `chat_template_kwargs.enable_thinking` va en la raíz del cuerpo (así lo lee llama-server; antes se enviaba
+  // dentro de `extra_body` y el backend lo ignoraba, además de que la base nunca llamaba a este hook).
+  // Gemma 4: razonamiento activo salvo que se apague. Qwen 3.x: APAGADO salvo petición explícita. Medido contra
+  // el backend: una respuesta de una palabra pasa de 14 s y 180 tokens de razonamiento a 1,5 s y 3 tokens, y
+  // con `max_tokens` bajos el razonamiento se come el presupuesto y la respuesta llega vacía.
   protected modifyRequestBody(body: any, options: LLMCallOptions): any {
-    if (this._isGemma4(this._currentModelId)) {
-      const enableThinking = options.thinking?.enabled !== false
-      body.extra_body = {
-        ...(body.extra_body ?? {}),
-        chat_template_kwargs: { enable_thinking: enableThinking },
-      }
+    if (this._isQwen3(this._currentModelId)) {
+      body.chat_template_kwargs = { ...(body.chat_template_kwargs ?? {}), enable_thinking: options.thinking?.enabled === true }
+    } else if (this._isGemma4(this._currentModelId)) {
+      body.chat_template_kwargs = { ...(body.chat_template_kwargs ?? {}), enable_thinking: options.thinking?.enabled !== false }
     }
     return body
   }

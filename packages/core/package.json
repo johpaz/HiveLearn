@@ -17,7 +17,6 @@
     "./events/*": "./src/events/*.ts",
     "./lesson/*": "./src/lesson/*.ts",
     "./storage/*": "./src/storage/*.ts",
-    "./scheduler/*": "./src/agent/scheduler/*.ts",
     "./skills/*": "./src/skills/*.ts",
     "./swarm/*": "./src/agent/swarm/*.ts",
     "./tools/*": "./src/tools/*.ts",

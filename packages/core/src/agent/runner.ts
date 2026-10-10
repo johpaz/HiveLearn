@@ -32,6 +32,8 @@ export async function runHiveLearnAgent(opts: {
   runContext: RunContext
   /** Sustituye el tope de iteraciones (el predeterminado es 6, como el loop propio histórico). */
   maxIterations?: number
+  /** Razonamiento del modelo en esta corrida (decidido por el oráculo por especialista). */
+  thinking?: boolean
   validationContext?: {
     rangoEdad?: string
     tema?: string
@@ -86,6 +88,7 @@ export async function runHiveLearnAgent(opts: {
         maxIterations: opts.maxIterations ?? Math.max(agent.max_iterations ?? 0, LEGACY_MAX_ITERATIONS),
         maxTokens: 2048,
         runContext: opts.runContext,
+        thinking: opts.thinking,
         validationContext,
       })
     } catch (error) {
@@ -102,6 +105,7 @@ export async function runHiveLearnAgent(opts: {
     maxTokens: 2048,
     temperature: 0.3,
     maxIterations: opts.maxIterations,
+    thinking: opts.thinking,
     validationContext,
   })
 }

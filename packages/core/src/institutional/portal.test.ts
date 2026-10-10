@@ -343,6 +343,11 @@ describe('currículos de cualquier tema en el portal', () => {
     const review = await request(`/students/${actor.id}/curricula/sql-basico/reviews`, 'POST', { nodeId: 'tablas', evidence: 'Explicó con sus palabras qué es una tabla y puso un ejemplo.' }, teacherCookie)
     expect(review.status).toBe(200)
     expect((await review.json()).route.nodes.find((n: { id: string }) => n.id === 'tablas').status).toBe('mastered')
+    // ¿Superó el nivel? Con un solo nodo dominado de dos y sin oráculo, la evidencia decide.
+    const level = await (await request('/curricula/sql-basico/level', 'GET', undefined, learner)).json()
+    expect(level.level).toMatchObject({ curriculumId: 'sql-basico', level: 'avanzado', decision: 'hold', kevReady: null })
+    // El docente ve las solicitudes de revisión de nivel de sus alumnos.
+    expect((await (await request('/curricula/level-reviews', 'GET', undefined, teacherCookie)).json()).reviews).toEqual([])
     // El diagnóstico del currículo de IA no se ve afectado.
     expect((await (await request('/route', 'GET', undefined, learner)).json()).route.diagnosticCompleted).toBe(false)
   })
@@ -425,4 +430,47 @@ describe('registro autónomo de adultos y recuperación de contraseña', () => {
     expect((await request('/reset', 'POST', { code: resetCode, password: 'Nueva contraseña segura 2!' })).status).toBe(400)
     expect((await request('/login', 'POST', { username: 'alumna.uno', password: 'Nueva contraseña segura 1!', role: 'student' })).status).toBe(200)
   })
+
+  test('cola de revisión docente: aparece, el docente acepta con evidencia o rechaza, y desaparece', async () => {
+    const { saveGeneratedCurriculum, approveCurriculum } = await import('./curriculum-store')
+    const { recordEvidence } = await import('../grading/evidence')
+    const admin = await institution(), teacherCookie = await teacher(admin), learner = await student(teacherCookie)
+    const otherTeacher = await teacher(admin, 'maestro.dos')
+    const actor = (await portal.accounts.byUsername('alumna.uno'))!
+    const saved = await saveGeneratedCurriculum(db, {
+      id: 'sql-basico', topic: 'SQL básico', language: 'es', version: 'sql-1', levels: ['inicial', 'avanzado'],
+      nodes: [
+        { id: 'tablas', title: 'Tablas', level: 'inicial', prerequisites: [], objective: 'Explicar una tabla.', evidence: 'Describe una tabla.', tags: [], sources: [] },
+        { id: 'select', title: 'SELECT', level: 'avanzado', prerequisites: ['tablas'], objective: 'Escribir SELECT.', evidence: 'Consulta una tabla.', tags: [], sources: [] },
+      ],
+      questionBank: [
+        { id: 'q1', nodeId: 'tablas', prompt: '¿Qué guarda una fila?', options: ['Un registro', 'Un índice', 'Una vista'], correct: 0 },
+        { id: 'q2', nodeId: 'select', prompt: '¿Qué elige columnas?', options: ['WHERE', 'SELECT', 'ORDER'], correct: 1 },
+      ],
+      sources: {},
+    })
+    await approveCurriculum(db, saved.docId, { id: 'x', role: 'teacher' })
+    await request('/curricula/sql-basico/diagnostic', 'POST', { answers: [{ questionId: 'q1', option: 0 }, { questionId: 'q2', option: 1 }] }, learner)
+
+    // Evidencia de confianza media (p. ej. un juicio del oráculo a 0,74): va a revisión.
+    const grade = { correct: true, score: 0.74, confidence: 0.74, method: 'oracle' as const, detail: '' }
+    await recordEvidence(db, { studentId: actor.id, curriculumId: 'sql-basico', nodeId: 'tablas', sessionId: 's1', grade, context: { curriculumStatus: 'reviewed', hasTeacher: true } })
+
+    const queue = (await (await request('/review-queue', 'GET', undefined, teacherCookie)).json()).queue
+    expect(queue).toHaveLength(1)
+    expect(queue[0]).toMatchObject({ curriculumId: 'sql-basico', nodeId: 'tablas', student: 'Alumna Ejemplo', method: 'oracle' })
+    // Otro docente no ve alumnos ajenos; un alumno no accede.
+    expect((await (await request('/review-queue', 'GET', undefined, otherTeacher)).json()).queue).toEqual([])
+    expect((await request('/review-queue', 'GET', undefined, learner)).status).toBe(403)
+
+    const resolve = (body: object, cookie = teacherCookie) => request('/review-queue/resolve', 'POST', { studentId: actor.id, curriculumId: 'sql-basico', nodeId: 'tablas', ...body }, cookie)
+    expect((await resolve({ decision: 'accept' })).status).toBe(422) // aceptar exige evidencia
+    expect((await resolve({ decision: 'accept', evidence: 'Explicó una tabla con un ejemplo propio.' }, otherTeacher)).status).toBeGreaterThanOrEqual(400)
+    const ok = await resolve({ decision: 'accept', evidence: 'Explicó con sus palabras qué es una tabla y dio un ejemplo propio.' })
+    expect(ok.status).toBe(200)
+    expect((await (await request('/review-queue', 'GET', undefined, teacherCookie)).json()).queue).toEqual([])
+    const route = (await (await request('/curricula/sql-basico/route', 'GET', undefined, learner)).json()).route
+    expect(route.nodes.find((n: { id: string }) => n.id === 'tablas').status).toBe('mastered')
+  })
 })
+
