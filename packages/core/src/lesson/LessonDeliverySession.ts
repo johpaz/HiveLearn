@@ -8,7 +8,7 @@ import { runHiveLearnAgent } from '../agent/runner'
 import { runContextFromProfile } from '../agent/policy/age-policy'
 import { rangoEdadForAge } from '../institutional/age'
 import { getDb } from '../storage/hivedb'
-import { buildBrief, getMemory, recordAttempt } from '../storage/student-memory'
+import { buildBrief, getMemory, recordAttempt, recordSessionSummary } from '../storage/student-memory'
 import { AGENT_IDS } from '../agent/registry'
 import { AGENT_PROMPTS } from '../agent/prompts'
 import { LessonPersistence } from '../storage/LessonPersistence'
@@ -29,6 +29,8 @@ export class LessonDeliverySession {
   private persistence: LessonPersistence
   private turnIndex = 0
   private active = false
+  /** La lección ya se entregó (`completar_leccion` se ejecutó). */
+  private completed = false
   private xpAcumulado = 0
 
   constructor(sessionId: string, sendToClient: (msg: object) => void) {
@@ -121,6 +123,7 @@ export class LessonDeliverySession {
   async start(): Promise<void> {
     if (this.active) return
     this.active = true
+    this.completed = false
 
     try {
       log.info(`[delivery] start sessionId=${this.sessionId}`)
@@ -249,8 +252,15 @@ export class LessonDeliverySession {
       }
 
       const completarTool = createCompletarLeccionTool((msg) => {
+        this.completed = true
         this.send(msg)
         this.active = false
+        // Resumen determinista (sin texto libre del alumno ni del modelo) para la memoria de la próxima sesión.
+        const m = msg as { nodosCompletados?: number; totalNodos?: number; xpTotal?: number }
+        void recordSessionSummary(getDb(), full.alumnoId, curriculumId, {
+          sessionId: this.sessionId,
+          text: `Completó ${Number(m.nodosCompletados) || 0} de ${Number(m.totalNodos) || 0} nodos con ${Number(m.xpTotal) || 0} XP.`,
+        }).catch(err => log.warn(`[delivery] no se pudo guardar el resumen de sesión: ${(err as Error).message}`))
       }, {
         buildFinalFeedback: (summary) => this.buildFinalFeedback(summary),
       })
@@ -278,6 +288,13 @@ export class LessonDeliverySession {
 
     } catch (err) {
       const msg = (err as Error).message ?? 'Error desconocido'
+      // Tras `completar_leccion` el modelo suele añadir texto y el loop lo rechaza: la lección ya se entregó
+      // y persistió, así que ese error no debe llegar al alumno.
+      if (this.completed) {
+        log.info(`[delivery] lección completada; se ignora el error posterior sessionId=${this.sessionId}: ${msg.slice(0, 120)}`)
+        this.active = false
+        return
+      }
       log.error(`[delivery] failed sessionId=${this.sessionId}: ${msg}`)
       if (msg !== 'Tiempo de espera agotado') {
         this.send({ type: 'error', message: msg })

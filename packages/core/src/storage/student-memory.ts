@@ -125,6 +125,20 @@ export function recurringErrors(doc: StudentMemoryDoc): Array<{ tag: string; cou
 }
 
 /**
+ * Ritmo sugerido a partir del desempeño reciente. Determinista: con pocos intentos no se opina.
+ * Es una pista para el tutor, nunca una restricción.
+ */
+export function pacingHint(doc: StudentMemoryDoc): string | null {
+  const nodes = Object.values(doc.nodes)
+  const attempts = nodes.reduce((sum, node) => sum + node.attempts, 0)
+  if (attempts < 4) return null
+  const accuracy = nodes.reduce((sum, node) => sum + node.correct, 0) / attempts
+  if (accuracy < 0.5) return 'Ritmo: el alumno acierta poco; baja la dificultad, usa un ejemplo más simple y da una pista antes de avanzar.'
+  if (accuracy >= 0.9 && nodes.some(node => node.streak >= 3)) return 'Ritmo: el alumno domina con soltura; puedes avanzar más rápido y proponer un reto adicional.'
+  return null
+}
+
+/**
  * Texto acotado para el prompt del tutor. Nunca contiene identidad del alumno.
  * `focusNodeId` es la actividad actual; si no se indica, solo se resume el estado general.
  */
@@ -148,6 +162,9 @@ export function buildBrief(doc: StudentMemoryDoc | null, opts: { focusNodeId?: s
       ? `- En el nodo actual: ${focus.correct}/${focus.attempts} aciertos, racha ${focus.streak}, nivel ${masteryLevel(focus)}.`
       : '- El nodo actual es nuevo para el alumno.')
   }
+
+  const pacing = pacingHint(doc)
+  if (pacing) lines.push(`- ${pacing}`)
 
   const due = dueForReview(doc, now).filter(id => id !== opts.focusNodeId).slice(0, 3)
   if (due.length) lines.push(`- Repasos pendientes: ${due.join(', ')}.`)

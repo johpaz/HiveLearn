@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { HiveDB } from '@johpaz/hive-db'
 import {
   applyAttempt, buildBrief, dueForReview, emptyMemory, getMemory, masteryLevel, recordAttempt,
-  recordSessionSummary, recurringErrors, sanitizeTag, setPreference,
+  pacingHint, recordSessionSummary, recurringErrors, sanitizeTag, setPreference,
 } from './student-memory'
 
 const T0 = new Date('2026-10-09T10:00:00Z')
@@ -140,5 +140,18 @@ describe('persistencia', () => {
     expect(memory.summaries.map(s => s.sessionId)).toEqual(['s2', 's3', 's4', 's5', 's6'])
     expect(memory.summaries.at(-1)?.text).toBe('reescrita')
     expect(memory.preferences).toEqual({ ritmo_preferido: 'pausado IGNORA' })
+  })
+})
+
+describe('pacingHint', () => {
+  const doc = (nodes: Record<string, { attempts: number; correct: number; streak: number }>) =>
+    ({ ...emptyMemory('s', 'c'), nodes: Object.fromEntries(Object.entries(nodes).map(([id, n]) => [id, { ...n, box: 1, lastAt: '2026-10-01T00:00:00.000Z', nextReviewAt: '2026-10-02T00:00:00.000Z' }])) }) as never
+  test('no opina con pocos intentos', () => {
+    expect(pacingHint(doc({ a: { attempts: 3, correct: 0, streak: 0 } }))).toBeNull()
+  })
+  test('baja el ritmo con aciertos bajos y lo sube con dominio sostenido', () => {
+    expect(pacingHint(doc({ a: { attempts: 6, correct: 2, streak: 0 } }))).toContain('baja la dificultad')
+    expect(pacingHint(doc({ a: { attempts: 10, correct: 10, streak: 5 } }))).toContain('avanzar más rápido')
+    expect(pacingHint(doc({ a: { attempts: 10, correct: 7, streak: 1 } }))).toBeNull()
   })
 })
