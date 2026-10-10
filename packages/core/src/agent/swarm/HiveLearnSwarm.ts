@@ -20,6 +20,9 @@ import { DAGScheduler, type DAGResult, type NodeSummary } from '../scheduler/dag
 import { buildFullDAG } from '../presets/HiveLearnPreset'
 import { buildLessonProgram, buildNodosBase } from '../orchestrator'
 import { HiveLearnExecutor } from '../executor'
+import { evaluateProgramSafety, summarizeReport } from '../../safety/content-safety'
+import { dossierToText, type Dossier } from '../../research/dossier'
+import { AgentExecutionError } from '../errors'
 import {
   createGenerationRun,
   saveRunBlueprint,
@@ -127,8 +130,12 @@ export class HiveLearnSwarm {
   /** Quién ejecuta esta generación (edad del alumno): condiciona proveedores y oráculo. Una instancia = una generación. */
   private runContext: RunContext = runContextFromProfile(null)
 
-  async run(perfil: StudentProfile, meta: string, opts?: { resumeSessionId?: string }): Promise<LessonProgram> {
+  /** Dossier de investigación de esta generación, si lo hay. */
+  private dossier: Dossier | null = null
+
+  async run(perfil: StudentProfile, meta: string, opts?: { resumeSessionId?: string; dossier?: Dossier }): Promise<LessonProgram> {
     this.runContext = runContextFromProfile(perfil)
+    this.dossier = opts?.dossier ?? null
     // ── Run durable: reanudar uno existente o crear uno nuevo ────────────
     const existingRun = opts?.resumeSessionId ? await getGenerationRun(opts.resumeSessionId) : null
 
@@ -296,7 +303,7 @@ export class HiveLearnSwarm {
         log.info(`[coordinator-flow] resume: ${priorOutputs.size} outputs de nodos reutilizados`)
       } catch { /* non-critical */ }
     }
-    const executor = new HiveLearnExecutor(this.runContext, priorOutputs)
+    const executor = new HiveLearnExecutor(this.runContext, priorOutputs, { dossierText: this.dossier ? dossierToText(this.dossier) : undefined })
 
     this.emit('tier1', 'HiveLearnCoordinator', 15, `Coordinador despachando ${nodosBase.length} nodos al enjambre reducido...`)
     hlSwarmEmitter.emit('coordinator:phase_changed', {
@@ -383,6 +390,20 @@ export class HiveLearnSwarm {
         }),
       }
       log.info(`[coordinator] XP normalized from ${xpSum} → 100`)
+    }
+
+    // Puerta de seguridad ejecutable: un veto impide entregar el programa.
+    const safety = evaluateProgramSafety(reviewed, {
+      ageBand: this.runContext.ageBand,
+      allowedUrls: this.dossier?.sources.map(source => source.url),
+      validClaimIds: this.dossier?.claims.map(claim => claim.id),
+    })
+    if (safety.state === 'veto') {
+      throw new AgentExecutionError('safety_veto', `Contenido bloqueado por la puerta de seguridad: ${summarizeReport(safety)}`)
+    }
+    if (safety.state === 'review') {
+      log.warn(`[safety] programa ${sessionId} requiere revisión docente: ${summarizeReport(safety)}`)
+      reviewed = { ...reviewed, seguridad: { estado: 'review', hallazgos: safety.findings.map(({ code, where, detail }) => ({ code, where, detail })) } }
     }
 
     this.emit('complete', 'HiveLearn', 100, '¡Tu lección está lista! 🐝')

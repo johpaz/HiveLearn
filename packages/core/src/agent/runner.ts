@@ -30,6 +30,8 @@ export async function runHiveLearnAgent(opts: {
   threadId: string
   /** Obligatorio: sin saber quién ejecuta no se puede aplicar la política por edad. */
   runContext: RunContext
+  /** Sustituye el tope de iteraciones (el predeterminado es 6, como el loop propio histórico). */
+  maxIterations?: number
   validationContext?: {
     rangoEdad?: string
     tema?: string
@@ -81,7 +83,7 @@ export async function runHiveLearnAgent(opts: {
         numCtx: providerConfig.numCtx,
         numGpu: providerConfig.numGpu,
         // El loop propio ignoraba `max_iterations` y usaba siempre 6; se conserva ese mínimo.
-        maxIterations: Math.max(agent.max_iterations ?? 0, LEGACY_MAX_ITERATIONS),
+        maxIterations: opts.maxIterations ?? Math.max(agent.max_iterations ?? 0, LEGACY_MAX_ITERATIONS),
         maxTokens: 2048,
         runContext: opts.runContext,
         validationContext,
@@ -99,6 +101,7 @@ export async function runHiveLearnAgent(opts: {
     providerConfig,
     maxTokens: 2048,
     temperature: 0.3,
+    maxIterations: opts.maxIterations,
     validationContext,
   })
 }

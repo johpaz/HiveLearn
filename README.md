@@ -57,6 +57,28 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 - **Oráculo Kev/Jev:** se activa solo si hay API key del proveedor `hiveagents` (Kev) o `openrouter` (Jev). Se apaga con `oracleEnabled: false` en la configuración institucional, y con `allowRemoteProviders: false` solo se admite un endpoint local o de red privada. Del turno solo viaja el objetivo de la tarea; instrucciones, historial y resultados de tools no se comparten.
 - Con el motor `sdk` el servidor cierra ordenadamente al recibir `SIGINT`/`SIGTERM`.
 
+### Currículo para cualquier tema
+
+- Un currículo es un dato validado (`CurriculumDef`, `institutional/curriculum-def.ts`): niveles, nodos con prerrequisitos (grafo acíclico, máx. 20) y banco de preguntas diagnósticas. El de IA actual es el primero y es `canonical`.
+- El agente Arquitecto (`agent/curriculum-architect.ts`) genera el currículo de otro tema con la tool `definir_curriculo`, que devuelve al modelo todos los problemas del grafo para que los corrija. Lo generado se guarda como `generated` y **no acredita dominio**: un docente o administrador debe aprobarlo (`approveCurriculum`) para pasarlo a `reviewed`.
+- Un id canónico no puede ser ocupado por un currículo generado, y la aprobación comprueba el hash del contenido.
+- El portal y el recorrido guiado siguen usando solo el currículo de IA; parametrizarlos por currículo es el siguiente paso.
+
+### Investigador web
+
+- `agent/researcher.ts` (`hl-researcher-agent`) busca y descarga fuentes con **solo** tres tools: `safe_web_search`, `safe_web_fetch` y `definir_dossier`. Se crean por ejecución, con la banda de edad y un presupuesto (6 búsquedas, 8 descargas).
+- `research/net-guard.ts`: solo https en el puerto 443, sin credenciales, bloqueo de IP privada/loopback/enlace local (todas las notaciones y IPv6), resolución DNS validada, redirecciones revalidadas en cada salto, timeout total, tope de bytes en streaming y solo contenido textual. Límite conocido: DNS rebinding entre la comprobación y la conexión; en despliegues institucionales conviene filtrar también el egreso de red.
+- `research/domain-policy.ts`: menores y edad desconocida solo ven dominios de una lista permitida (referencias educativas, `.edu`, `.gov`, ampliable); la búsqueda ni siquiera les muestra el resto.
+- El texto web llega al modelo como dato (`untrusted: true`), sin scripts, comentarios ni elementos ocultos. El dossier toma URL y fecha de las fuentes **realmente descargadas** (el modelo solo cita `sourceId`), y la confianza "alta" exige dos dominios distintos.
+- Dossiers en `hl_research_dossiers`, con caché por tema, idioma y banda (14 días). `generateResearchedCurriculum` investiga y genera el currículo; sus fuentes solo pueden ser URLs del dossier.
+- El proveedor de búsqueda predeterminado raspa DuckDuckGo HTML (`research/search-provider.ts`); es intercambiable y, si cambia su marcado, devuelve cero resultados.
+
+### Puerta de seguridad y citas
+
+- `safety/content-safety.ts` es código determinista (no un agente) y se ejecuta siempre antes de entregar un programa del enjambre. **Veto** (se lanza `safety_veto`): correos, marcado ejecutable, restos de inyección de prompt, URLs http o con IP, dominios no permitidos para menores y citas a afirmaciones inexistentes. **Revisión** (el programa lleva `seguridad.estado = 'review'`): números que parecen teléfono o documento, temas sensibles para menores, URLs fuera del dossier, conceptos sin citas.
+- Con dossier (`HiveLearnSwarm.run(perfil, meta, { dossier })`), los agentes de explicación y ejercicio lo reciben como dato delimitado, la caché por concepto se omite y `generar_explicacion` acepta `claim_ids` verificados contra el dossier.
+- Es una red de seguridad: no sustituye la revisión pedagógica ni la docente.
+
 ### Edad, política y identidad del alumno
 
 - La banda de edad sale de un solo lugar (`institutional/age.ts`). Una edad ausente o inválida cuenta como la banda más restrictiva (`ninez`), nunca como adulto.

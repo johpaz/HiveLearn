@@ -219,7 +219,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<string> {
     // el output estructurado ya es el resultado final y no debe volver al LLM.
     if (
       hasStructuredOutputResult(execResult) &&
-      /^(generar_|revisar_|planificar_|reparar_|actualizar_|validar_|clasificar_)/.test(toolCall.function.name)
+      /^(generar_|revisar_|planificar_|reparar_|actualizar_|validar_|clasificar_|definir_)/.test(toolCall.function.name)
     ) {
       const normalized = typeof execResult.output === 'string' ? execResult.output : JSON.stringify(execResult.output)
       log.info(`[agent-loop] structured output via execute tool=${toolCall.function.name}`)

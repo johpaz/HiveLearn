@@ -7,6 +7,8 @@
 import { runHiveLearnAgent } from '../agent/runner'
 import { runContextFromProfile } from '../agent/policy/age-policy'
 import { rangoEdadForAge } from '../institutional/age'
+import { getDb } from '../storage/hivedb'
+import { buildBrief, getMemory, recordAttempt } from '../storage/student-memory'
 import { AGENT_IDS } from '../agent/registry'
 import { AGENT_PROMPTS } from '../agent/prompts'
 import { LessonPersistence } from '../storage/LessonPersistence'
@@ -161,6 +163,15 @@ export class LessonDeliverySession {
 
       // 3. Construir task description para el coordinador en MODO ENTREGA
       const now = new Date()
+      // Memoria del alumno: lo que ya domina, repasos pendientes y errores recurrentes. Solo contexto.
+      const curriculumId = full.topicSlug ?? 'libre'
+      let memoryBrief = ''
+      try {
+        memoryBrief = buildBrief(await getMemory(getDb(), full.alumnoId, curriculumId))
+      } catch (err) {
+        log.warn(`[delivery] memory unavailable sessionId=${this.sessionId}: ${(err as Error).message}`)
+      }
+
       const taskDescription = [
         `MODO ENTREGA — Conduce esta lección de forma interactiva.`,
         ``,
@@ -172,6 +183,7 @@ export class LessonDeliverySession {
         `- meta: "${full.metaAlumno}"`,
         `- sessionId: "${this.sessionId}"`,
         ``,
+        ...(memoryBrief ? [memoryBrief, `Usa esa memoria para adaptar ritmo y ejemplos (refuerza los errores recurrentes, propone repasar lo pendiente), sin mencionarla literalmente al alumno.`, ``] : []),
         `PROGRAMA COMPLETO (${nodos.length} nodos, XP total = ${nodos.reduce((s, n) => s + (n.xpRecompensa ?? 0), 0)}):`,
         JSON.stringify(nodos.map(n => ({
           id: n.id,
@@ -247,6 +259,10 @@ export class LessonDeliverySession {
         (msg) => this.send(msg),
         () => this.xpAcumulado,
         (n) => { this.xpAcumulado += n },
+        async ({ nodoId, correcto, errorTag }) => {
+          if (!nodoId) return
+          await recordAttempt(getDb(), full.alumnoId, curriculumId, { nodeId: nodoId, correct: correcto, errorTag })
+        },
       )
 
       // 5. Ejecutar coordinador en MODO ENTREGA

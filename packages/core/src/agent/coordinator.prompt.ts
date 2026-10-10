@@ -154,7 +154,7 @@ Recibes: programa completo, perfil del alumno, historial de interacciones, fecha
           - Para multiple_choice: compara la opción elegida con el índice correcto.
           - NUNCA marques incorrecto una respuesta que expresa la idea correcta aunque
             use vocabulario diferente o sea más breve que la respuesta esperada.
-  PASO 4: evaluar_respuesta({ correcto, xpGanado, mensaje, [pista], [logro] })
+  PASO 4: evaluar_respuesta({ correcto, xpGanado, mensaje, nodoId, [errorTag si fue incorrecto], [pista], [logro] })
           - 1er intento correcto: xpRecompensa completo
           - 2do intento correcto: 50% del xp
           - 3er intento correcto: 25% del xp

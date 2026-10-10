@@ -68,6 +68,14 @@ export async function initHiveLearnStorage(): Promise<void> {
     log.warn(`[init] ollama-sync: ${(e as Error).message}`)
   }
 
+  // 5b. Currículo canónico de IA como dato del catálogo (idempotente).
+  try {
+    const { ensureCanonicalCurricula } = await import('../institutional/curriculum-store')
+    await ensureCanonicalCurricula(db)
+  } catch (e) {
+    log.warn(`[init] canonical curricula: ${(e as Error).message}`)
+  }
+
   // 6. Unificación de identidad (opt-in): enlaza perfiles antiguos con su cuenta del portal.
   //    HIVELEARN_MIGRATE_STUDENT_IDS=dry-run solo informa; =true reescribe (con copia de seguridad).
   const migrate = process.env.HIVELEARN_MIGRATE_STUDENT_IDS

@@ -6,11 +6,21 @@ import type { Tool } from '../../types/tool'
  *   { type: "evaluation", correcto, xpGanado, mensaje, pista? }
  *   { type: "xp_award", amount, total }      (si xpGanado > 0)
  *   { type: "logro", logro }                  (si se desbloquea uno)
+ *
+ * `onEvaluated` (opcional) recibe cada intento para alimentar la memoria del alumno. Un fallo ahí
+ * nunca debe romper la lección.
  */
+export interface EvaluatedAttempt {
+  nodoId?: string
+  correcto: boolean
+  errorTag?: string
+}
+
 export function createEvaluarRespuestaTool(
   sendToClient: (msg: object) => void,
   getXpTotal: () => number,
   addXp: (amount: number) => void,
+  onEvaluated?: (attempt: EvaluatedAttempt) => Promise<void> | void,
 ): Tool {
   return {
     name: 'evaluar_respuesta',
@@ -30,6 +40,14 @@ export function createEvaluarRespuestaTool(
         mensaje: {
           type: 'string',
           description: 'Mensaje motivador personalizado para el alumno (celebración si correcto, ánimo si incorrecto)',
+        },
+        nodoId: {
+          type: 'string',
+          description: 'Id del nodo que se acaba de evaluar (el mismo que enviaste con enviar_interaccion)',
+        },
+        errorTag: {
+          type: 'string',
+          description: 'Si fue incorrecto: etiqueta corta del error o concepto confundido, p. ej. "confunde_igualdad_asignacion". Sin frases largas.',
         },
         pista: {
           type: 'string',
@@ -55,6 +73,14 @@ export function createEvaluarRespuestaTool(
 
       addXp(xpGanado)
       const xpTotal = getXpTotal()
+
+      try {
+        await onEvaluated?.({
+          nodoId: args.nodoId ? String(args.nodoId) : undefined,
+          correcto,
+          errorTag: args.errorTag ? String(args.errorTag) : undefined,
+        })
+      } catch { /* la memoria es auxiliar: no debe romper la entrega */ }
 
       sendToClient({
         type: 'evaluation',

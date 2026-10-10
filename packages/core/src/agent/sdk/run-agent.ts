@@ -67,7 +67,7 @@ export interface SdkRunOptions {
   }
 }
 
-const STRUCTURED_OUTPUT_TOOL = /^(generar_|revisar_|planificar_|reparar_|actualizar_|validar_|clasificar_)/
+const STRUCTURED_OUTPUT_TOOL = /^(generar_|revisar_|planificar_|reparar_|actualizar_|validar_|clasificar_|definir_)/
 const DEFAULT_CONTEXT_WINDOW = 32768
 
 /** Ejecuta funciones de una en una, en orden de llegada. */

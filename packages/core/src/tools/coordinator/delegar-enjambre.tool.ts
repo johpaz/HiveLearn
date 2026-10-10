@@ -5,27 +5,11 @@ import { HiveLearnExecutor } from '../../agent/executor'
 import { buildLessonProgram } from '../../agent/orchestrator'
 import { AGENT_IDS } from '../../agent/registry'
 import { logger } from '../../utils/logger'
-import type { PerfilAdaptacion, LessonProgram, NodoLesson } from '../../types'
+import type { PerfilAdaptacion, NodoLesson } from '../../types'
 import { ageBandFromRango } from '../../institutional/age'
-import type { DAGResult } from '../../agent/scheduler/dag'
 
 const log = logger.child('delegar-enjambre')
 
-/**
- * Resultado capturado del último run del enjambre.
- * HiveLearnSwarm.run() lo lee después de que el coordinador LLM llama la tool.
- */
-export interface DelegarResult {
-  program: LessonProgram
-  mergedDagResult: DAGResult
-  rawOutputs: Map<string, string>
-  executor: HiveLearnExecutor
-}
-
-let _lastResult: DelegarResult | null = null
-export function getLastDelegarResult(): DelegarResult | null {
-  return _lastResult
-}
 
 const MAX_WORKERS = Number(process.env.HIVELEARN_MAX_CONCURRENT_WORKERS ?? 2)
 
@@ -93,8 +77,6 @@ export const delegarEnjambreTool: Tool = {
       sessionId: string
       nodos: BlueprintNodo[]
     }
-    _lastResult = null
-
     try {
       // Aquí solo hay el rango del perfil de adaptación, no la edad: se usa la banda más restrictiva compatible.
       const executor = new HiveLearnExecutor({ studentId: alumnoId, ageBand: ageBandFromRango(perfil.rangoEdad) })
@@ -132,13 +114,6 @@ export const delegarEnjambreTool: Tool = {
       log.info(`[delegar] done — ${fullResult.completed.length} completed, ${fullResult.failed.length} failed`)
 
       const program = buildLessonProgram({ dagResult: fullResult, alumnoId, meta, sessionId, perfil })
-
-      const rawOutputs = new Map<string, string>()
-      for (const n of [...fullResult.completed, ...(fullResult.failed ?? [])]) {
-        if (n.result) rawOutputs.set(n.id, n.result)
-      }
-
-      _lastResult = { program, mergedDagResult: fullResult, rawOutputs, executor }
 
       const msg = `${program.nodos.length} nodos generados (${fullResult.completed.length} agentes completados).`
       log.info(`[delegar] ${msg}`)

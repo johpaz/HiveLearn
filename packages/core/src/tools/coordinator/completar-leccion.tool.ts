@@ -10,12 +10,6 @@ export interface LeccionCompletada {
   feedbackFinal?: FeedbackOutput | null
 }
 
-let _completionResult: LeccionCompletada | null = null
-
-export function getCompletionResult(): LeccionCompletada | null {
-  return _completionResult
-}
-
 export function createCompletarLeccionTool(
   sendToClient: (msg: object) => void,
   opts?: {
@@ -74,7 +68,6 @@ export function createCompletarLeccionTool(
         ? await opts.buildFinalFeedback(result).catch(() => null)
         : null
       result.feedbackFinal = feedbackFinal
-      _completionResult = result
 
       sendToClient({
         type: 'lesson_complete',

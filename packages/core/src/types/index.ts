@@ -145,6 +145,8 @@ export interface ExplicacionOutput {
   titulo: string
   explicacion: string
   ejemploConcreto: string
+  /** Afirmaciones del dossier de investigación en que se apoya la explicación (c1, c2…). */
+  claimIds?: string[]
 }
 
 export interface EjercicioOutput {
@@ -246,6 +248,8 @@ export interface LessonProgram {
   gamificacion: GamificacionOutput
   evaluacion: EvaluacionOutput
   perfilAdaptacion: PerfilAdaptacion
+  /** Resultado de la puerta de seguridad. `review` = no acreditar ni publicar sin revisión docente. */
+  seguridad?: { estado: 'ok' | 'review'; hallazgos: Array<{ code: string; where: string; detail: string }> }
 }
 
 export interface SwarmProgress {
