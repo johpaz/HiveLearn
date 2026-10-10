@@ -303,3 +303,47 @@ describe('diagnostic, knowledge graph, learning route and A2UI', () => {
     expect(boundValue({ path: '/title' }, state.two.data)).toBe('second')
   })
 })
+
+describe('currículos de cualquier tema en el portal', () => {
+  const content = {
+    id: 'sql-basico', topic: 'SQL básico', language: 'es', version: 'sql-1', levels: ['inicial', 'avanzado'],
+    nodes: [
+      { id: 'tablas', title: 'Tablas', level: 'inicial', prerequisites: [], objective: 'Explicar una tabla.', evidence: 'Describe una tabla.', tags: [], sources: [] },
+      { id: 'select', title: 'SELECT', level: 'avanzado', prerequisites: ['tablas'], objective: 'Escribir SELECT.', evidence: 'Consulta una tabla.', tags: [], sources: [] },
+    ],
+    questionBank: [
+      { id: 'q1', nodeId: 'tablas', prompt: '¿Qué guarda una fila?', options: ['Un registro', 'Un índice', 'Una vista'], correct: 0 },
+      { id: 'q2', nodeId: 'select', prompt: '¿Qué elige columnas?', options: ['WHERE', 'SELECT', 'ORDER'], correct: 1 },
+    ],
+    sources: {},
+  }
+
+  test('un generado no se ofrece al alumno hasta que un docente lo aprueba; luego diagnóstico, ruta y dominio', async () => {
+    const { saveGeneratedCurriculum } = await import('./curriculum-store')
+    const admin = await institution(), teacherCookie = await teacher(admin), learner = await student(teacherCookie)
+    const { docId } = await saveGeneratedCurriculum(db, content)
+
+    expect((await (await request('/curricula', 'GET', undefined, learner)).json()).curricula).toEqual([])
+    expect((await request('/curricula/sql-basico/diagnostic', 'GET', undefined, learner)).status).toBe(409)
+    expect((await request(`/curricula/${encodeURIComponent(docId)}/approve`, 'POST', undefined, learner)).status).toBe(403)
+
+    const approved = await request(`/curricula/${encodeURIComponent(docId)}/approve`, 'POST', undefined, teacherCookie)
+    expect(approved.status).toBe(200)
+    expect((await approved.json()).curriculum.status).toBe('reviewed')
+
+    const questions = await (await request('/curricula/sql-basico/diagnostic', 'GET', undefined, learner)).json()
+    expect(questions.questions).toHaveLength(2)
+    expect(questions.questions[0].correct).toBeUndefined()
+
+    const answers = { answers: [{ questionId: 'q1', option: 0 }, { questionId: 'q2', option: 0 }] }
+    const route = (await (await request('/curricula/sql-basico/diagnostic', 'POST', answers, learner)).json()).route
+    expect(route).toMatchObject({ curriculumId: 'sql-basico', diagnosticCompleted: true, accredits: true })
+
+    const actor = (await portal.accounts.byUsername('alumna.uno'))!
+    const review = await request(`/students/${actor.id}/curricula/sql-basico/reviews`, 'POST', { nodeId: 'tablas', evidence: 'Explicó con sus palabras qué es una tabla y puso un ejemplo.' }, teacherCookie)
+    expect(review.status).toBe(200)
+    expect((await review.json()).route.nodes.find((n: { id: string }) => n.id === 'tablas').status).toBe('mastered')
+    // El diagnóstico del currículo de IA no se ve afectado.
+    expect((await (await request('/route', 'GET', undefined, learner)).json()).route.diagnosticCompleted).toBe(false)
+  })
+})

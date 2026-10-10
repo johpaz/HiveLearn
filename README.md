@@ -62,7 +62,9 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 - Un currículo es un dato validado (`CurriculumDef`, `institutional/curriculum-def.ts`): niveles, nodos con prerrequisitos (grafo acíclico, máx. 20) y banco de preguntas diagnósticas. El de IA actual es el primero y es `canonical`.
 - El agente Arquitecto (`agent/curriculum-architect.ts`) genera el currículo de otro tema con la tool `definir_curriculo`, que devuelve al modelo todos los problemas del grafo para que los corrija. Lo generado se guarda como `generated` y **no acredita dominio**: un docente o administrador debe aprobarlo (`approveCurriculum`) para pasarlo a `reviewed`.
 - Un id canónico no puede ser ocupado por un currículo generado, y la aprobación comprueba el hash del contenido.
-- El portal y el recorrido guiado siguen usando solo el currículo de IA; parametrizarlos por currículo es el siguiente paso.
+- Progreso por `(alumno, currículo)` en `hl_curriculum_progress` (`institutional/curriculum-progress.ts`): el diagnóstico y los dominios llevan el hash del contenido, así que un currículo que cambia no hereda progreso. El dominio solo lo otorga un docente y solo en currículos `canonical` o `reviewed`.
+- Rutas del portal: `GET /curricula`, `POST /curricula/:docId/approve` (docente/admin), `GET|POST /curricula/:id/diagnostic`, `GET /curricula/:id/route` y `POST /students/:id/curricula/:id/reviews`. Un alumno no ve ni trabaja un currículo sin revisar. El currículo de IA conserva sus rutas históricas.
+- `HiveLearnSwarm.run(perfil, meta, { curriculum, dossier })` valida el blueprint contra la definición del tema. **Pendiente:** el recorrido guiado A2UI (`journey`) y los complementos siguen siendo solo de IA.
 
 ### Investigador web
 

@@ -1,3 +1,6 @@
+import { CurriculumProgressStore } from './curriculum-progress'
+import { approveCurriculum, findCurriculum, CURRICULA_COLLECTION } from './curriculum-store'
+import { canAccredit, type CurriculumDef } from './curriculum-def'
 import type { HiveDB } from '@johpaz/hive-db'
 import { z } from 'zod'
 import { Accounts, digest, publicAccount, roles, usernameSchema, passwordSchema, type Account } from './accounts'
@@ -36,12 +39,14 @@ export class Portal {
   readonly learning: Learning
   readonly supplements: Supplements
   readonly journey: GuidedJourney
+  readonly progress: CurriculumProgressStore
   private attempts = new Map<string, { count: number; until: number }>()
   constructor(readonly db: HiveDB, supplementExecutor: SupplementExecutor = runSupplementWorker) {
     this.accounts = new Accounts(db)
     this.learning = new Learning(db)
     this.supplements = new Supplements(db, supplementExecutor)
     this.journey = new GuidedJourney(db, this.learning)
+    this.progress = new CurriculumProgressStore(db)
   }
   async actor(req: Request) {
     const actor = await this.accounts.session(sessionCookie(req))
@@ -211,6 +216,38 @@ export class Portal {
         this.allow(actor, ['teacher', 'admin'])
         const query = z.object({ age: z.coerce.number().int().min(8).max(120), level: z.enum(['fundamentos', 'usuario_responsable', 'aplicador', 'constructor', 'creador_avanzado']) }).parse({ age: url.searchParams.get('age') ?? 18, level: url.searchParams.get('level') ?? 'fundamentos' })
         return json({ route: curriculumRoute(query.age, query.level) })
+      }
+      // ── Currículos de cualquier tema (el de IA sigue por sus rutas históricas) ──
+      if (path === '/curricula' && method === 'GET') {
+        this.allow(actor, ['teacher', 'admin', 'student'])
+        const defs = (await this.db.collection<CurriculumDef>(CURRICULA_COLLECTION).scan()).map(e => ({ docId: e.id, id: e.doc.id, topic: e.doc.topic, status: e.doc.status, accredits: canAccredit(e.doc), nodes: e.doc.nodes.length, createdAt: e.doc.createdAt }))
+        return json({ curricula: actor.role === 'student' ? defs.filter(d => d.accredits) : defs })
+      }
+      const curriculumPath = path.match(/^\/curricula\/([^/]+)\/(approve|diagnostic|route)$/)
+      if (curriculumPath) {
+        const [, ref, action] = curriculumPath
+        if (action === 'approve') {
+          if (method !== 'POST') throw new HttpError(405, 'Método no permitido')
+          this.allow(actor, ['teacher', 'admin'])
+          const reviewed = await approveCurriculum(this.db, decodeURIComponent(ref), { id: actor.id, role: actor.role, institutionId: actor.institutionId })
+          return json({ curriculum: { id: reviewed.id, status: reviewed.status, reviewedBy: reviewed.reviewedBy, reviewedAt: reviewed.reviewedAt } })
+        }
+        this.allow(actor, ['student'])
+        const found = await findCurriculum(this.db, decodeURIComponent(ref))
+        if (!found) throw new HttpError(404, 'Currículo no encontrado')
+        // Un alumno solo trabaja con currículos que acreditan (canónicos o revisados por un docente).
+        if (!canAccredit(found.def)) throw new HttpError(409, 'Este currículo aún no ha sido revisado por un docente')
+        if (action === 'diagnostic' && method === 'GET') return json({ questions: found.def.questionBank.map(({ correct: _, ...question }) => question) })
+        if (action === 'diagnostic' && method === 'POST') return json({ route: await this.progress.diagnostic(actor, found.def, await body(req)) })
+        if (action === 'route' && method === 'GET') return json({ route: await this.progress.route(actor, found.def) })
+      }
+      const curriculumReview = path.match(/^\/students\/([^/]+)\/curricula\/([^/]+)\/reviews$/)
+      if (curriculumReview && method === 'POST') {
+        this.allow(actor, ['teacher', 'admin'])
+        const student = await this.accessibleStudent(actor, curriculumReview[1])
+        const found = await findCurriculum(this.db, decodeURIComponent(curriculumReview[2]))
+        if (!found) throw new HttpError(404, 'Currículo no encontrado')
+        return json({ route: await this.progress.review(actor, student, found.def, await body(req)) })
       }
       const studentPath = path.match(/^\/students\/([^/]+)\/(route|reviews|evidence)$/)
       if (studentPath) {

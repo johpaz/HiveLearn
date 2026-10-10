@@ -22,6 +22,8 @@ import { buildLessonProgram, buildNodosBase } from '../orchestrator'
 import { HiveLearnExecutor } from '../executor'
 import { evaluateProgramSafety, summarizeReport } from '../../safety/content-safety'
 import { dossierToText, type Dossier } from '../../research/dossier'
+import { routeFor, validateBlueprintFor, type CurriculumDef } from '../../institutional/curriculum-def'
+import { CurriculumProgressStore } from '../../institutional/curriculum-progress'
 import { AgentExecutionError } from '../errors'
 import {
   createGenerationRun,
@@ -132,10 +134,13 @@ export class HiveLearnSwarm {
 
   /** Dossier de investigación de esta generación, si lo hay. */
   private dossier: Dossier | null = null
+  /** Currículo de un tema distinto de IA. Sin él, la ruta es la del currículo canónico de IA. */
+  private curriculumDef: CurriculumDef | null = null
 
-  async run(perfil: StudentProfile, meta: string, opts?: { resumeSessionId?: string; dossier?: Dossier }): Promise<LessonProgram> {
+  async run(perfil: StudentProfile, meta: string, opts?: { resumeSessionId?: string; dossier?: Dossier; curriculum?: CurriculumDef }): Promise<LessonProgram> {
     this.runContext = runContextFromProfile(perfil)
     this.dossier = opts?.dossier ?? null
+    this.curriculumDef = opts?.curriculum ?? null
     // ── Run durable: reanudar uno existente o crear uno nuevo ────────────
     const existingRun = opts?.resumeSessionId ? await getGenerationRun(opts.resumeSessionId) : null
 
@@ -163,6 +168,12 @@ export class HiveLearnSwarm {
     }
   }
 
+  /** Mismo contrato para el currículo de IA y para cualquier otro: ids del currículo y prerrequisitos cumplidos. */
+  private validateBlueprint(blueprint: unknown, route: ReturnType<typeof curriculumRoute>): void {
+    if (this.curriculumDef) validateBlueprintFor(blueprint, route as unknown as ReturnType<typeof routeFor>)
+    else validateCurricularBlueprint(blueprint, route)
+  }
+
   private async runGeneration(
     perfil: StudentProfile,
     meta: string,
@@ -172,7 +183,16 @@ export class HiveLearnSwarm {
 
     const learningRecord = await new Learning(getDb()).record(perfil.alumnoId)
     const run = await getGenerationRun(sessionId)
-    const curriculum = run?.curriculum_json ? JSON.parse(run.curriculum_json) as ReturnType<typeof curriculumRoute> : curriculumRoute(perfil.edad, learningRecord?.level ?? 'fundamentos', learningRecord?.mastered ?? [])
+    let curriculum: ReturnType<typeof curriculumRoute>
+    if (run?.curriculum_json) {
+      curriculum = JSON.parse(run.curriculum_json) as ReturnType<typeof curriculumRoute>
+    } else if (this.curriculumDef) {
+      // Tema distinto de IA: la ruta sale de su definición y de su propio registro de progreso.
+      const progress = await new CurriculumProgressStore(getDb()).record(perfil.alumnoId, this.curriculumDef)
+      curriculum = routeFor(this.curriculumDef, perfil.edad, progress?.level ?? this.curriculumDef.levels[0], progress?.mastered ?? []) as unknown as ReturnType<typeof curriculumRoute>
+    } else {
+      curriculum = curriculumRoute(perfil.edad, learningRecord?.level ?? 'fundamentos', learningRecord?.mastered ?? [])
+    }
     await saveRunCurriculum(sessionId, JSON.stringify(curriculum))
 
     const perfilAdaptacion: PerfilAdaptacion = {
@@ -284,11 +304,11 @@ export class HiveLearnSwarm {
 
       // Checkpoint del blueprint: si el proceso muere durante Tier 1,
       // la reanudación no repite la planificación
-      validateCurricularBlueprint(JSON.parse(structureResult), curriculum)
+      this.validateBlueprint(JSON.parse(structureResult), curriculum)
       await saveRunBlueprint(sessionId, structureResult)
     }
 
-    validateCurricularBlueprint(JSON.parse(structureResult), curriculum)
+    this.validateBlueprint(JSON.parse(structureResult), curriculum)
     const nodosBase = buildNodosBase(structureResult, perfilAdaptacion)
 
     // Outputs de nodos ya generados en un run anterior (reanudación):
