@@ -59,6 +59,27 @@ export class CurriculumProgressStore {
     return this.route(actor, def)
   }
 
+  /**
+   * Dominio por evidencia sostenida (regla híbrida): lo llama el sistema cuando la evidencia confiable ya cubre
+   * varias sesiones. Solo en currículos que acreditan, con diagnóstico hecho y prerrequisitos dominados.
+   * Devuelve false si no procede (no es un error: simplemente aún no).
+   */
+  async masterByEvidence(studentId: string, def: CurriculumDef, nodeId: string): Promise<boolean> {
+    if (!canAccredit(def)) return false
+    const id = key(studentId, def.id)
+    const entry = await this.col().get(id)
+    if (!entry || entry.doc.hash !== def.hash || entry.doc.mastered.includes(nodeId)) return false
+    const node = def.nodes.find(n => n.id === nodeId)
+    if (!node || !node.prerequisites.every(p => entry.doc.mastered.includes(p))) return false
+    const mastered = [...entry.doc.mastered, nodeId]
+    const next = def.nodes.find(n => !mastered.includes(n.id))
+    await this.db.batch([
+      { op: 'put', collection: PROGRESS_COLLECTION, id, doc: { ...entry.doc, mastered, level: next?.level ?? def.levels[def.levels.length - 1] }, expectedVersion: entry.version },
+      { op: 'put', collection: REVIEWS_COLLECTION, id: crypto.randomUUID(), doc: { studentId, reviewerId: 'system:evidence', institutionId: entry.doc.institutionId, curriculumId: def.id, hash: def.hash, nodeId, evidence: 'Evidencia confiable en sesiones distintas', createdAt: new Date().toISOString() }, expectedVersion: 0 },
+    ])
+    return true
+  }
+
   async review(teacher: Account, student: Account, def: CurriculumDef, input: unknown) {
     if (teacher.institutionId !== student.institutionId || !(teacher.role === 'admin' || teacher.role === 'teacher' && student.teacherId === teacher.id)) {
       throw new Error('No autorizado')

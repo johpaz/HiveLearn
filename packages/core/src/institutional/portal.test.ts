@@ -347,3 +347,82 @@ describe('currículos de cualquier tema en el portal', () => {
     expect((await (await request('/route', 'GET', undefined, learner)).json()).route.diagnosticCompleted).toBe(false)
   })
 })
+
+describe('registro autónomo de adultos y recuperación de contraseña', () => {
+  const adult = (extra: Record<string, unknown> = {}) => ({ username: 'ana.adulta', name: 'Ana Adulta', password, age: 30, ...extra })
+  const enable = async (admin: string) => {
+    await db.collection('providers').put('ollama', { name: 'Ollama', base_url: 'http://127.0.0.1:11434' })
+    const response = await request('/settings', 'PUT', { ...DEFAULT_SETTINGS, allowSelfRegistration: true }, admin)
+    expect(response.status).toBe(200)
+  }
+
+  test('está cerrado por defecto y antes de configurar la institución', async () => {
+    expect((await request('/register', 'POST', adult())).status).toBe(409)
+    await institution()
+    expect((await request('/register', 'POST', adult())).status).toBe(409)
+  })
+
+  test('adulto se registra, entra, no tiene docente y no puede repetir usuario; menores y datos inválidos se rechazan', async () => {
+    const admin = await institution()
+    await enable(admin)
+    expect((await request('/register', 'POST', adult({ age: 17 }))).status).toBe(422)
+    expect((await request('/register', 'POST', adult({ password: 'corta' }))).status).toBe(422)
+    expect((await request('/register', 'POST', { ...adult(), role: 'admin' })).status).toBe(422)
+
+    const created = await request('/register', 'POST', adult())
+    expect(created.status).toBe(201)
+    const body = await created.json()
+    expect(body.recoveryCode.length).toBeGreaterThan(20)
+    expect(body.account).toMatchObject({ role: 'student', selfRegistered: true, age: 30 })
+    expect(body.account.passwordHash).toBeUndefined()
+    expect((await request('/register', 'POST', adult())).status).toBe(409)
+
+    const cookie = await login('ana.adulta', 'student')
+    const me = await (await request('/me', 'GET', undefined, cookie)).json()
+    expect(me.account.teacherId).toBeUndefined()
+    // Un adulto no puede usar rutas de docente.
+    expect((await request('/teachers', 'POST', { username: 'x.y.z', name: 'Nadie' }, cookie)).status).toBe(403)
+  })
+
+  test('recuperación: código de un solo uso, cierra sesiones y entrega uno nuevo', async () => {
+    const admin = await institution()
+    await enable(admin)
+    const { recoveryCode } = await (await request('/register', 'POST', adult())).json()
+    const oldSession = await login('ana.adulta', 'student')
+    const newPassword = 'Otra contraseña segura 2026!'
+
+    expect((await request('/recover', 'POST', { username: 'ana.adulta', code: 'codigo-incorrecto-123', password: newPassword })).status).toBe(400)
+    const recovered = await request('/recover', 'POST', { username: 'ana.adulta', code: recoveryCode, password: newPassword })
+    expect(recovered.status).toBe(200)
+    const next = (await recovered.json()).recoveryCode
+    expect(next).not.toBe(recoveryCode)
+
+    // El código usado ya no sirve y la sesión anterior quedó revocada.
+    expect((await request('/recover', 'POST', { username: 'ana.adulta', code: recoveryCode, password: newPassword })).status).toBe(400)
+    expect((await request('/me', 'GET', undefined, oldSession)).status).toBe(401)
+    expect((await request('/login', 'POST', { username: 'ana.adulta', password, role: 'student' })).status).toBe(401)
+    expect((await request('/login', 'POST', { username: 'ana.adulta', password: newPassword, role: 'student' })).status).toBe(200)
+    // El código de otra cuenta no sirve para esta.
+    expect((await request('/recover', 'POST', { username: 'alumna.uno', code: next, password: newPassword })).status).toBe(400)
+  })
+
+  test('restablecimiento por el docente: solo de sus alumnos, código de un solo uso', async () => {
+    const admin = await institution(), teacherCookie = await teacher(admin), learner = await student(teacherCookie)
+    const actor = (await portal.accounts.byUsername('alumna.uno'))!
+    const otherTeacher = await teacher(admin, 'maestro.dos')
+
+    expect((await request(`/accounts/${actor.id}/password-reset`, 'POST', undefined, otherTeacher)).status).toBe(404)
+    expect((await request(`/accounts/${actor.id}/password-reset`, 'POST', undefined, learner)).status).toBe(403)
+    const issued = await request(`/accounts/${actor.id}/password-reset`, 'POST', undefined, teacherCookie)
+    expect(issued.status).toBe(201)
+    const { resetCode } = await issued.json()
+
+    // Un código de restablecimiento no activa cuentas, y activa y restablece son rutas distintas.
+    expect((await request('/activate', 'POST', { code: resetCode, password: 'Nueva contraseña segura 1!' })).status).toBeGreaterThanOrEqual(400)
+    const done = await request('/reset', 'POST', { code: resetCode, password: 'Nueva contraseña segura 1!' })
+    expect(done.status).toBe(200)
+    expect((await request('/me', 'GET', undefined, learner)).status).toBe(401)
+    expect((await request('/reset', 'POST', { code: resetCode, password: 'Nueva contraseña segura 2!' })).status).toBe(400)
+    expect((await request('/login', 'POST', { username: 'alumna.uno', password: 'Nueva contraseña segura 1!', role: 'student' })).status).toBe(200)
+  })
+})

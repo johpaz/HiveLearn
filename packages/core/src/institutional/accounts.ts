@@ -2,6 +2,7 @@ import type { HiveDB, BatchOp } from '@johpaz/hive-db'
 import { createCipheriv, createHash, createHmac, randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { ageBandFor } from './age'
+import { readSettings } from './settings'
 
 export const roles = ['admin', 'teacher', 'student'] as const
 export type Role = typeof roles[number]
@@ -9,8 +10,11 @@ export interface Account {
   id: string; institutionId: string; username: string; name: string; role: Role
   passwordHash: string | null; teacherId?: string; group?: string; age?: number
   createdAt: string; activatedAt?: string
+  /** Cuenta creada por el propio adulto (sin invitación ni docente). */
+  selfRegistered?: boolean
 }
-interface Invitation { accountId: string; expiresAt: number; usedAt?: number }
+interface Invitation { accountId: string; expiresAt: number; usedAt?: number; kind?: 'activate' | 'reset' }
+interface Recovery { accountId: string; createdAt: number; usedAt?: number }
 interface Session { accountId: string; expiresAt: number }
 export const usernameSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,50}$/, 'Usa 3–50 letras sin tildes, números, punto, guion o guion bajo')
 export const passwordSchema = z.string().min(12, 'La contraseña debe tener al menos 12 caracteres').max(128)
@@ -86,7 +90,7 @@ export class Accounts {
   async activate(code: string, password: string) {
     const col = this.db.collection<Invitation>('hl_invitations')
     const invite = await col.get(digest(code.trim()))
-    if (!invite || invite.doc.usedAt || invite.doc.expiresAt < Date.now()) throw new Error('Código inválido, vencido o ya utilizado')
+    if (!invite || invite.doc.kind === 'reset' || invite.doc.usedAt || invite.doc.expiresAt < Date.now()) throw new Error('Código inválido, vencido o ya utilizado')
     const account = await this.db.collection<Account>('hl_accounts').get(invite.doc.accountId)
     if (!account || account.doc.passwordHash) throw new Error('La cuenta ya fue activada')
     const passwordHash = await Bun.password.hash(passwordSchema.parse(password), { algorithm: 'argon2id' })
@@ -96,6 +100,92 @@ export class Accounts {
     ])
     return { username: account.doc.username, role: account.doc.role }
   }
+  /**
+   * Registro autónomo de un ADULTO. Requiere que la institución lo habilite y que el alumno declare ≥ 18 años
+   * (la edad es declarada, no verificada). La cuenta nace sin docente: su evidencia queda como autodeclarada
+   * y no acredita. Devuelve un código de recuperación que se muestra una sola vez.
+   */
+  async register(input: { username: string; name: string; password: string; age: number }) {
+    const installation = await this.db.collection<{ institutionId: string }>('hl_installation').get('main')
+    if (!installation) throw new Error('La institución aún no está configurada')
+    const settings = await readSettings(this.db, installation.doc.institutionId)
+    if (!settings.allowSelfRegistration) throw new Error('El registro autónomo no está habilitado')
+    const age = z.number().int().min(18, 'El registro autónomo es solo para mayores de 18 años').max(120).parse(input.age)
+    const username = usernameSchema.parse(input.username)
+    if (await this.byUsername(username)) throw new Error('Ese nombre de usuario no está disponible')
+    const now = new Date().toISOString()
+    const account: Account = {
+      id: crypto.randomUUID(), institutionId: installation.doc.institutionId, username,
+      name: z.string().trim().min(2).max(120).parse(input.name), role: 'student', age, selfRegistered: true,
+      passwordHash: await Bun.password.hash(passwordSchema.parse(input.password), { algorithm: 'argon2id' }),
+      createdAt: now, activatedAt: now,
+    }
+    const recoveryCode = token()
+    try {
+      await this.db.batch([
+        { op: 'put', collection: 'hl_accounts', id: account.id, doc: account, expectedVersion: 0 },
+        { op: 'put', collection: 'hl_usernames', id: account.username, doc: { accountId: account.id }, expectedVersion: 0 },
+        { op: 'put', collection: 'hl_recovery', id: digest(recoveryCode), doc: { accountId: account.id, createdAt: Date.now() } as Recovery, expectedVersion: 0 },
+      ])
+    } catch {
+      // Carrera por el mismo nombre: la reserva de `hl_usernames` es atómica.
+      throw new Error('Ese nombre de usuario no está disponible')
+    }
+    return { account: publicAccount(account), recoveryCode }
+  }
+
+  private async revokeSessions(accountId: string) {
+    const sessions = this.db.collection<Session>('hl_auth_sessions')
+    for (const entry of await sessions.scan()) if (entry.doc.accountId === accountId) await sessions.delete(entry.id)
+  }
+
+  /** Recuperación con el código entregado al registrarse. Un solo uso; entrega uno nuevo. Mensaje único ante cualquier fallo. */
+  async recover(username: string, code: string, newPassword: string) {
+    const fail = () => new Error('Datos de recuperación inválidos')
+    const account = await this.byUsername(username)
+    if (!account || !account.selfRegistered) throw fail()
+    const col = this.db.collection<Recovery>('hl_recovery')
+    const entry = await col.get(digest(code.trim()))
+    if (!entry || entry.doc.accountId !== account.id || entry.doc.usedAt) throw fail()
+    const passwordHash = await Bun.password.hash(passwordSchema.parse(newPassword), { algorithm: 'argon2id' })
+    const next = token()
+    const current = await this.db.collection<Account>('hl_accounts').get(account.id)
+    if (!current) throw fail()
+    await this.db.batch([
+      { op: 'put', collection: 'hl_recovery', id: entry.id, doc: { ...entry.doc, usedAt: Date.now() }, expectedVersion: entry.version },
+      { op: 'put', collection: 'hl_recovery', id: digest(next), doc: { accountId: account.id, createdAt: Date.now() } as Recovery, expectedVersion: 0 },
+      { op: 'put', collection: 'hl_accounts', id: account.id, doc: { ...current.doc, passwordHash }, expectedVersion: current.version },
+    ])
+    await this.revokeSessions(account.id)
+    return { recoveryCode: next }
+  }
+
+  /** Un administrador (o el docente de ese alumno) emite un código de un solo uso, válido 24 h, para fijar otra contraseña. */
+  async issuePasswordReset(actor: Account, accountId: string) {
+    const target = await this.get(accountId)
+    if (!target || target.institutionId !== actor.institutionId || target.id === actor.id || target.role === 'admin'
+      || !(actor.role === 'admin' || actor.role === 'teacher' && target.teacherId === actor.id)) throw new Error('Cuenta no accesible')
+    if (!target.passwordHash) throw new Error('La cuenta aún no está activada: reemite su invitación')
+    const code = token()
+    await this.db.collection<Invitation>('hl_invitations').put(digest(code), { accountId: target.id, expiresAt: Date.now() + 86400_000, kind: 'reset' }, { expectedVersion: 0 })
+    return { username: target.username, name: target.name, resetCode: code }
+  }
+
+  async completePasswordReset(code: string, newPassword: string) {
+    const col = this.db.collection<Invitation>('hl_invitations')
+    const invite = await col.get(digest(code.trim()))
+    if (!invite || invite.doc.kind !== 'reset' || invite.doc.usedAt || invite.doc.expiresAt < Date.now()) throw new Error('Código inválido, vencido o ya utilizado')
+    const account = await this.db.collection<Account>('hl_accounts').get(invite.doc.accountId)
+    if (!account?.doc.passwordHash) throw new Error('Código inválido, vencido o ya utilizado')
+    const passwordHash = await Bun.password.hash(passwordSchema.parse(newPassword), { algorithm: 'argon2id' })
+    await this.db.batch([
+      { op: 'put', collection: 'hl_accounts', id: account.id, doc: { ...account.doc, passwordHash }, expectedVersion: account.version },
+      { op: 'put', collection: 'hl_invitations', id: invite.id, doc: { ...invite.doc, usedAt: Date.now() }, expectedVersion: invite.version },
+    ])
+    await this.revokeSessions(account.id)
+    return { username: account.doc.username, role: account.doc.role }
+  }
+
   async list(actor: Account) {
     return (await this.db.collection<Account>('hl_accounts').scan()).map(e => e.doc)
       .filter(a => a.institutionId === actor.institutionId && (actor.role === 'admin' || (a.role === 'student' && a.teacherId === actor.id) || a.id === actor.id))

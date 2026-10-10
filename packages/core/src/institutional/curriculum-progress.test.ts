@@ -73,3 +73,26 @@ describe('CurriculumProgressStore', () => {
     expect((await store.route(student, v2)).diagnosticCompleted).toBe(false)
   })
 })
+
+describe('dominio por evidencia (regla híbrida)', () => {
+  test('solo en currículos que acreditan, con diagnóstico y prerrequisitos', async () => {
+    const { recordAssessment } = await import('../grading/assessment')
+    const saved = await saveGeneratedCurriculum(db, content())
+    const store = new CurriculumProgressStore(db)
+    await store.diagnostic(student, saved.def, answers(0, 1))
+    const ok = { correct: true, score: 1, confidence: 1, method: 'deterministic' as const, detail: '' }
+    const evidence = (sessionId: string, nodeId = 'tablas') => recordAssessment(db, { alumnoId: student.id, curriculumId: 'sql-basico', nodeId, sessionId, grade: ok })
+
+    // Generado: nunca domina, por mucha evidencia que haya.
+    await evidence('a'); await evidence('b'); await evidence('c')
+    expect((await store.route(student, saved.def)).nodes.find(n => n.id === 'tablas')?.status).toBe('available')
+
+    // Aprobado por un docente: la evidencia en sesiones distintas ya basta.
+    const reviewed = await approveCurriculum(db, saved.docId, { id: 't1', role: 'teacher' })
+    await evidence('d'); await evidence('e') // lo anterior era autodeclarado: no cuenta
+    expect((await store.route(student, reviewed)).nodes.find(n => n.id === 'tablas')?.status).toBe('mastered')
+    // Un nodo con prerrequisito sin dominar no se da por dominado.
+    await evidence('a', 'select'); await evidence('b', 'select')
+    expect(await store.masterByEvidence(student.id, reviewed, 'tablas')).toBe(false) // ya dominado: idempotente
+  })
+})

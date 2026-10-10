@@ -118,7 +118,7 @@ export class Portal {
         const logo = await this.db.collection<{ png: string }>('hl_branding').get('main')
         return logo ? new Response(Buffer.from(logo.doc.png, 'base64'), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } }) : new Response(null, { status: 404 })
       }
-      if (['/setup', '/login', '/activate'].includes(path) && method === 'POST') this.throttle(`${peer}:auth`)
+      if (['/setup', '/login', '/activate', '/register', '/recover', '/reset'].includes(path) && method === 'POST') this.throttle(`${peer}:auth`)
       if (path === '/setup' && method === 'POST') {
         if (await this.accounts.initialized()) throw new HttpError(409, 'La institución ya está configurada')
         const data = z.object({ name: z.string(), institution: z.string(), username: usernameSchema, password: passwordSchema }).strict().parse(await body(req))
@@ -139,8 +139,38 @@ export class Portal {
         const data = z.object({ code: z.string().min(10).max(100), password: passwordSchema }).strict().parse(await body(req))
         return json(await this.accounts.activate(data.code, data.password))
       }
+      if (path === '/register' && method === 'POST') {
+        const data = z.object({ username: usernameSchema, name: z.string(), password: passwordSchema, age: z.number() }).strict().parse(await body(req))
+        try { return json(await this.accounts.register({ username: data.username!, name: data.name!, password: data.password!, age: data.age! }), 201) }
+        catch (error) {
+          if (error instanceof z.ZodError) throw error
+          throw new HttpError(409, (error as Error).message)
+        }
+      }
+      if (path === '/recover' && method === 'POST') {
+        const data = z.object({ username: usernameSchema, code: z.string().min(10).max(100), password: passwordSchema }).strict().parse(await body(req))
+        try { return json(await this.accounts.recover(data.username!, data.code!, data.password!)) }
+        catch (error) {
+          if (error instanceof z.ZodError) throw error
+          throw new HttpError(400, 'Datos de recuperación inválidos')
+        }
+      }
+      if (path === '/reset' && method === 'POST') {
+        const data = z.object({ code: z.string().min(10).max(100), password: passwordSchema }).strict().parse(await body(req))
+        try { return json(await this.accounts.completePasswordReset(data.code!, data.password!)) }
+        catch (error) {
+          if (error instanceof z.ZodError) throw error
+          throw new HttpError(400, (error as Error).message)
+        }
+      }
       if (path === '/logout' && method === 'POST') { await this.accounts.logout(sessionCookie(req)); return json({ ok: true }, 200, { 'Set-Cookie': cookie(req, '', 0) }) }
       const actor = await this.actor(req)
+      const resetPath = path.match(/^\/accounts\/([^/]+)\/password-reset$/)
+      if (resetPath && method === 'POST') {
+        this.allow(actor, ['teacher', 'admin'])
+        try { return json(await this.accounts.issuePasswordReset(actor, resetPath[1]), 201) }
+        catch (error) { throw new HttpError(404, (error as Error).message) }
+      }
       if (path === '/me' && method === 'GET') return json({ account: publicAccount(actor) })
       if (path === '/profile' && method === 'PATCH') {
         const data = z.object({ name: z.string().trim().min(2).max(120) }).strict().parse(await body(req))

@@ -8,6 +8,8 @@ import { runHiveLearnAgent } from '../agent/runner'
 import { runContextFromProfile } from '../agent/policy/age-policy'
 import { rangoEdadForAge } from '../institutional/age'
 import { getDb } from '../storage/hivedb'
+import { recordAssessment } from '../grading/assessment'
+import { judgedByModel } from '../grading/grade'
 import { buildBrief, getMemory, recordAttempt, recordSessionSummary } from '../storage/student-memory'
 import { AGENT_IDS } from '../agent/registry'
 import { AGENT_PROMPTS } from '../agent/prompts'
@@ -231,6 +233,11 @@ export class LessonDeliverySession {
         {
           getXpTotal: () => this.xpAcumulado,
           addXp: (n) => { this.xpAcumulado += n },
+          // Corrección determinista: alimenta la memoria y la evidencia con el veredicto del código, no del modelo.
+          onGraded: async ({ nodoId, grade }) => {
+            await recordAttempt(getDb(), full.alumnoId, curriculumId, { nodeId: nodoId, correct: grade.correct === true })
+            await recordAssessment(getDb(), { alumnoId: full.alumnoId, curriculumId, nodeId: nodoId, sessionId: this.sessionId, grade })
+          },
         },
       )
 
@@ -272,6 +279,8 @@ export class LessonDeliverySession {
         async ({ nodoId, correcto, errorTag }) => {
           if (!nodoId) return
           await recordAttempt(getDb(), full.alumnoId, curriculumId, { nodeId: nodoId, correct: correcto, errorTag })
+          // Sin clave de respuesta el juicio es del tutor: evidencia de baja confianza (revisión, no acreditación).
+          await recordAssessment(getDb(), { alumnoId: full.alumnoId, curriculumId, nodeId: nodoId, sessionId: this.sessionId, grade: judgedByModel(correcto) })
         },
       )
 

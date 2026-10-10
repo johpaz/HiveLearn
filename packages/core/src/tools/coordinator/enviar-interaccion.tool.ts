@@ -1,3 +1,4 @@
+import { gradeAnswer, type AnswerSpec, type Grade } from '../../grading/grade'
 import type { Tool } from '../../types/tool'
 import { LessonPersistence } from '../../storage/LessonPersistence'
 import type { NodoLesson } from '../../types'
@@ -51,6 +52,8 @@ export function createEnviarInteraccionTool(
   opts?: {
     getXpTotal?: () => number
     addXp?: (amount: number) => void
+    /** Cada respuesta corregida de forma determinista (para memoria y evidencia). Un fallo aquí no rompe la lección. */
+    onGraded?: (event: { nodoId: string; grade: Grade; answer: string }) => Promise<void> | void
   },
 ): Tool {
   const loadCurriculumNodes = async (): Promise<NodoLesson[]> => {
@@ -94,85 +97,49 @@ export function createEnviarInteraccionTool(
     return ''
   }
 
+  /**
+   * Corrección determinista con la clave que trae el nodo (quiz u opciones del ejercicio). Sin clave →
+   * `supported: false`: la respuesta la juzga el tutor, y esa evidencia se registra con baja confianza.
+   */
   const evaluateNodeAnswer = (node: NodoLesson, action: StudentAction): {
     supported: boolean
     correcto: boolean
     mensaje: string
     pista?: string
     xpGanado: number
+    grade?: Grade
+    answer?: string
   } => {
     const answer = extractAnswer(action)
+    let spec: AnswerSpec | null = null
+    let pista: string | undefined
 
-    if (node.tipoPedagogico === 'quiz' && node.contenido?.quiz) {
+    if (node.tipoPedagogico === 'quiz' && node.contenido?.quiz?.opciones?.length) {
       const quiz = node.contenido.quiz
-      const expected = quiz.opciones?.[quiz.indicesCorrecto] ?? ''
-      const correcto = normalizeText(answer) === normalizeText(expected)
-      return {
-        supported: true,
-        correcto,
-        xpGanado: correcto ? node.xpRecompensa ?? 0 : 0,
-        mensaje: correcto
-          ? '¡Muy bien! Esa respuesta es correcta. 🌟'
-          : 'Esa no es la opción correcta todavía. Inténtalo de nuevo.',
-        pista: correcto ? undefined : 'Piensa cuál opción describe mejor qué hace la IA en los juegos.',
-      }
-    }
-
-    if (node.tipoPedagogico === 'exercise' && node.contenido?.ejercicio) {
+      spec = { kind: 'choice', options: quiz.opciones, correctIndex: quiz.indicesCorrecto }
+    } else if (node.tipoPedagogico === 'exercise' && node.contenido?.ejercicio?.opciones?.length) {
       const ej = node.contenido.ejercicio
-      const inferredOptions = ej.opciones?.length
-        ? { options: ej.opciones, correctIndex: typeof ej.indiceCorrecto === 'number' ? ej.indiceCorrecto : 0 }
-        : (() => {
-            const sourceText = `${node.titulo} ${ej.enunciado} ${ej.respuestaCorrecta}`.toLowerCase()
-            if (sourceText.includes('truco') && sourceText.includes('ia')) {
-              return {
-                options: [
-                  'Caminar de forma fija es el truco y perseguirte reaccionando a lo que haces es la IA',
-                  'Caminar de forma fija es la IA y perseguirte reaccionando a lo que haces es el truco',
-                  'Ambas acciones son IA',
-                  'Ambas acciones son trucos',
-                ],
-                correctIndex: 0,
-              }
-            }
-            return null
-          })()
-      if (inferredOptions) {
-        const selected = normalizeText(answer)
-        const expectedCorrect = normalizeText(inferredOptions.options[inferredOptions.correctIndex] ?? '')
-        const keyWordsInfer = expectedCorrect.split(/\s+/).filter(w => w.length > 3)
-        const selectedSet = new Set(selected.split(/\s+/))
-        const inferOverlap = keyWordsInfer.length > 0
-          ? keyWordsInfer.filter(w => selectedSet.has(w)).length / keyWordsInfer.length
-          : 0
-        const correcto = selected.length > 5 && (
-          selected === expectedCorrect ||
-          selected.includes(expectedCorrect) ||
-          expectedCorrect.includes(selected) ||
-          inferOverlap >= 0.4
-        )
-        return {
-          supported: true,
-          correcto,
-          xpGanado: correcto ? node.xpRecompensa ?? 0 : 0,
-          mensaje: correcto
-            ? '¡Correcto! Lo resolviste muy bien. 🚀'
-            : 'Todavía no está correcto. Selecciona otra opción y vuelve a intentarlo.',
-          pista: correcto ? undefined : ej.pistaOpcional,
-        }
+      if (typeof ej.indiceCorrecto === 'number') {
+        spec = { kind: 'choice', options: ej.opciones!, correctIndex: ej.indiceCorrecto }
+        pista = ej.pistaOpcional
       }
-
-      // Ejercicio de texto libre → el coordinador evalúa semánticamente.
-      // No se hace evaluación determinista aquí para evitar falsos negativos
-      // cuando el alumno usa sus propias palabras o un ejemplo diferente.
-      return { supported: false, correcto: false, xpGanado: 0, mensaje: '' }
     }
 
+    // Ejercicio de texto libre o clave ausente → lo evalúa el tutor semánticamente.
+    if (!spec) return { supported: false, correcto: false, xpGanado: 0, mensaje: '' }
+
+    const grade = gradeAnswer(spec, answer)
+    // Una clave inválida o ambigua no se corrige aquí.
+    if (grade.correct === null) return { supported: false, correcto: false, xpGanado: 0, mensaje: '', grade, answer }
+    const correcto = grade.correct
     return {
-      supported: false,
-      correcto: false,
-      xpGanado: 0,
-      mensaje: '',
+      supported: true,
+      correcto,
+      grade,
+      answer,
+      xpGanado: correcto ? node.xpRecompensa ?? 0 : 0,
+      mensaje: correcto ? '¡Muy bien! Esa respuesta es correcta. 🌟' : 'Esa no es la opción correcta todavía. Inténtalo de nuevo.',
+      pista: correcto ? undefined : pista,
     }
   }
 
@@ -264,6 +231,9 @@ export function createEnviarInteraccionTool(
           if (currentNode) {
             const evaluation = evaluateNodeAnswer(currentNode, action)
             if (evaluation.supported) {
+              if (evaluation.grade) {
+                try { await opts?.onGraded?.({ nodoId: currentNodeId, grade: evaluation.grade, answer: evaluation.answer ?? '' }) } catch { /* auxiliar */ }
+              }
               if (evaluation.xpGanado > 0) {
                 opts?.addXp?.(evaluation.xpGanado)
               }

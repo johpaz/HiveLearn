@@ -81,6 +81,21 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 - Con dossier (`HiveLearnSwarm.run(perfil, meta, { dossier })`), los agentes de explicación y ejercicio lo reciben como dato delimitado, la caché por concepto se omite y `generar_explicacion` acepta `claim_ids` verificados contra el dossier.
 - Es una red de seguridad: no sustituye la revisión pedagógica ni la docente.
 
+### Corrección y acreditación híbrida
+
+- `grading/grade.ts`: con clave de respuesta la corrección es código (opción múltiple por índice o texto exacto normalizado, verdadero/falso, numérico con tolerancia y coma decimal, texto con respuestas aceptadas o palabras clave). Sin coincidencias difusas: contener el texto correcto no es acertar. Un fallo en texto libre sale con confianza baja, porque puede ser una paráfrasis.
+- Respuestas abiertas: una rúbrica de criterios que marca el LLM, pero el puntaje lo calcula el código; un criterio solo cuenta si cita un fragmento que aparece en la respuesta, y la confianza del LLM tiene tope 0,9.
+- `grading/evidence.ts`: regla híbrida. Correcto y confiable (≥ 0,8) en un currículo `canonical`/`reviewed` cuenta como evidencia; en uno `generated` es autodeclarado y nunca acredita; con confianza baja va a revisión docente (o autodeclarado si no hay docente). El juicio del tutor sin clave de respuesta cuenta con confianza 0,6, es decir, nunca acredita por sí solo.
+- Dominio: evidencia que cuenta en **≥ 2 sesiones distintas**, solo en currículos que acreditan, con diagnóstico hecho y prerrequisitos dominados (`masterByEvidence`). Queda registro con revisor `system:evidence`. El currículo de IA conserva el dominio solo por revisión docente.
+
+### Registro autónomo y recuperación de contraseña
+
+- **Apagado por defecto.** El administrador lo habilita con `allowSelfRegistration` en la configuración institucional. `POST /api/portal/register` (usuario, nombre, contraseña, edad) solo acepta **mayores de 18 años** — la edad es declarada, no verificada —, con el mismo límite de intentos y comprobación de origen que el inicio de sesión. Los menores con tutor quedan fuera de este flujo.
+- La cuenta nace como alumno de la institución instalada **sin docente**: su evidencia es autodeclarada y no acredita (ver Corrección y acreditación). No existe una "institución personal" por usuario: el administrador de la instalación ve estas cuentas.
+- **Recuperación sin correo:** el registro entrega un código de recuperación que se muestra una vez. `POST /recover` lo canjea por una contraseña nueva, entrega otro código y cierra todas las sesiones de la cuenta. Cualquier fallo responde con el mismo mensaje.
+- **Restablecimiento por personal:** `POST /accounts/:id/password-reset` (administrador, o el docente de ese alumno) emite un código de un solo uso válido 24 h que se canjea en `POST /reset`; también cierra las sesiones. Un código de restablecimiento no sirve para activar cuentas.
+- Sin canal de correo no hay verificación de identidad: quien tenga el código de recuperación controla la cuenta.
+
 ### Edad, política y identidad del alumno
 
 - La banda de edad sale de un solo lugar (`institutional/age.ts`). Una edad ausente o inválida cuenta como la banda más restrictiva (`ninez`), nunca como adulto.

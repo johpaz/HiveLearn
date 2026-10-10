@@ -9,6 +9,7 @@ export const settingsSchema = z.object({
   audioProviderId: z.string().min(1).max(100), audioModelId: z.string().min(1).max(150),
   voice: z.string().max(150), allowRemoteProviders: z.boolean(), allowRemoteForMinors: z.boolean(),
   oracleEnabled: z.boolean().optional(),
+  allowSelfRegistration: z.boolean().optional(),
 }).strict()
 export const DEFAULT_SETTINGS: InstitutionSettings = { providerId: 'ollama', modelId: 'gemma4:e4b', imageProviderId: 'ollama', imageModelId: 'gemma4:e4b', audioProviderId: 'ollama', audioModelId: 'gemma4:e4b', voice: '', allowRemoteProviders: false, allowRemoteForMinors: false }
 export async function readSettings(db: HiveDB, institutionId: string) { return (await db.collection<InstitutionSettings>('hl_portal_settings').get(institutionId))?.doc ?? { ...DEFAULT_SETTINGS } }
