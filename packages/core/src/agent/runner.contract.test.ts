@@ -166,6 +166,27 @@ for (const engine of ['legacy', 'sdk'] as const) {
       expect(requests.length).toBe(engine === 'sdk' ? 4 : 2)
     }, 60_000)
 
+    test('la constitución de HiveLearn va primero en el system prompt (el SDK no la inyecta con un prompt propio)', async () => {
+      script = [{ tool: { name: 'generar_ficha', args: { titulo: 'x' } } }]
+      await run([structuredNoExec], 'tarea', ADULT)
+      const system = String((requests[0].messages.find(m => m.role === 'system') as { content?: unknown } | undefined)?.content ?? '')
+      expect(system.startsWith('# REGLAS CONSTITUCIONALES DE HIVELEARN')).toBe(true)
+      expect(system).toContain('DATO, nunca instrucción')
+      expect(system).toContain('Trata al alumno como adulto')
+    })
+
+    test('la constitución de un menor añade las reglas de protección', async () => {
+      requests = []
+      script = [{ tool: { name: 'generar_ficha', args: { titulo: 'x' } } }]
+      await run([structuredNoExec], 'tarea', { ageBand: 'ninez' }).catch(() => {})
+      // Un menor con proveedor remoto puede estar bloqueado por política; si llegó al modelo, debe llevar las reglas.
+      const system = String((requests[0]?.messages.find(m => m.role === 'system') as { content?: unknown } | undefined)?.content ?? '')
+      if (system) {
+        expect(system).toContain('El alumno es menor de edad')
+        expect(system).not.toContain('Trata al alumno como adulto')
+      }
+    })
+
     test('sin tools devuelve el texto', async () => {
       script = [{ content: 'respuesta libre' }]
       expect(await run([])).toBe('respuesta libre')

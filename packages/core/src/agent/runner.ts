@@ -15,6 +15,7 @@ import { logger } from '../utils/logger'
 import { AGENT_PROMPTS } from './prompts'
 import { getAgentEngine } from './sdk/bootstrap'
 import { assertProviderAllowed, type RunContext } from './policy/age-policy'
+import { constitutionFor } from './policy/constitution'
 import { runViaSdk, SdkEngineUnsupportedError } from './sdk/run-agent'
 
 const log = logger.child('hl-runner')
@@ -64,7 +65,8 @@ export async function runHiveLearnAgent(opts: {
   const canonicalPrompt = AGENT_PROMPTS[opts.agentId]
   const basePrompt = canonicalPrompt ?? agent.system_prompt ?? opts.systemPrompt ?? ''
 
-  const systemPrompt = basePrompt + promptPatch
+  // La constitución va primero: el SDK no la inyecta cuando se le pasa un prompt propio (systemPromptOverride).
+  const systemPrompt = `${constitutionFor(opts.runContext.ageBand)}\n\n${basePrompt}${promptPatch}`
   const validationContext = opts.validationContext ? {
     agenteId: opts.agentId,
     ...opts.validationContext,
