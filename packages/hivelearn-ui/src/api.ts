@@ -1,4 +1,4 @@
-import type { Account, AgentConfig, GatewayProvider, InstallStatus, InstitutionSettings, ModelInfo, PortalProvider, Role } from './types'
+import type { Account, AgentConfig, SyncReport, Invitation, ImportPreview, StudentInput, GatewayProvider, InstallStatus, InstitutionSettings, ModelInfo, PortalProvider, Role } from './types'
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) {
@@ -7,12 +7,12 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+async function request<T>(path: string, init: { method?: string; body?: unknown; form?: FormData } = {}): Promise<T> {
   const response = await fetch(path, {
     method: init.method ?? 'GET',
     credentials: 'same-origin',
     headers: init.body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    body: init.form ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
   })
   const text = await response.text()
   let data: unknown = null
@@ -47,13 +47,38 @@ export const api = {
     request<{ account: Account; recoveryCode: string }>(`${portal}/register`, { method: 'POST', body: input }),
   recover: (input: { username: string; code: string; password: string }) =>
     request<unknown>(`${portal}/recover`, { method: 'POST', body: input }),
-  dashboard: () => request<{ stats: { students: number; teachers: number; diagnosed: number } }>(`${portal}/dashboard`),
+  dashboard: () => request<{ accounts: Account[]; stats: { students: number; teachers: number; diagnosed: number } }>(`${portal}/dashboard`),
+  reset: (input: { code: string; password: string }) => request<unknown>(`${portal}/reset`, { method: 'POST', body: input }),
+
+  createTeacher: (input: { username: string; name: string }) =>
+    request<{ account: Account; activationCode: string }>(`${portal}/teachers`, { method: 'POST', body: input }),
+  createStudents: (rows: StudentInput[]) =>
+    request<{ invitations: Invitation[] }>(`${portal}/students`, { method: 'POST', body: { rows, authorized: true } }).then(r => r.invitations),
+  previewImport: (file: File) => {
+    const form = new FormData()
+    form.set('file', file)
+    return request<ImportPreview>(`${portal}/students/import/preview`, { method: 'POST', form })
+  },
+  importStudents: (file: File) => {
+    const form = new FormData()
+    form.set('file', file)
+    form.set('authorized', 'true')
+    return request<{ invitations: Invitation[] }>(`${portal}/students/import`, { method: 'POST', form }).then(r => r.invitations)
+  },
+  reissueInvitation: (accountId: string) =>
+    request<{ username: string; name: string; activationCode: string }>(`${portal}/accounts/${encodeURIComponent(accountId)}/invitation`, { method: 'POST', body: {} }),
+  issuePasswordReset: (accountId: string) =>
+    request<{ username: string; name: string; resetCode: string }>(`${portal}/accounts/${encodeURIComponent(accountId)}/password-reset`, { method: 'POST', body: {} }),
 
   settings: () => request<{ settings: InstitutionSettings; providers: PortalProvider[] }>(`${portal}/settings`),
   saveSettings: (settings: InstitutionSettings) =>
     request<{ settings: InstitutionSettings }>(`${portal}/settings`, { method: 'PUT', body: settings }).then(r => r.settings),
   saveCredential: (providerId: string, apiKey: string) =>
     request<{ hasApiKey: boolean }>(`${portal}/providers/${encodeURIComponent(providerId)}/credential`, { method: 'PUT', body: { apiKey } }),
+
+  modelSyncStatus: () => request<{ running: boolean; report: SyncReport | null }>(`${portal}/models/sync`),
+  syncModels: (input: { providerId?: string; dryRun?: boolean } = {}) =>
+    request<{ running: boolean; report: SyncReport | null }>(`${portal}/models/sync`, { method: 'POST', body: input }),
 
   gatewayProviders: () => request<{ providers: GatewayProvider[] }>('/api/providers').then(r => r.providers),
   setProviderEnabled: (providerId: string, enabled: boolean) =>

@@ -3,12 +3,10 @@
  */
 import type { LLMProvider } from "./interface"
 import { OllamaProvider } from "./ollama"
-import { LocalLlamaProvider } from "./local-llama"
 import { HiveAgentsProvider } from "./hiveagents"
 
 const providerFactories: Record<string, () => LLMProvider> = {
   ollama:        () => new OllamaProvider(),
-  "local-llama": () => new LocalLlamaProvider(),
   hiveagents:    () => new HiveAgentsProvider(),
 }
 

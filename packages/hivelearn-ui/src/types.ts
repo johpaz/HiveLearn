@@ -8,12 +8,39 @@ export interface Account {
   role: Role
   age?: number
   group?: string
+  teacherId?: string
+  createdAt?: string
+  activatedAt?: string
+  selfRegistered?: boolean
+}
+
+/** Código de activación de una cuenta nueva (se muestra una sola vez). */
+export interface Invitation {
+  username: string
+  name: string
+  activationCode: string
+}
+
+export interface StudentInput {
+  nickname: string
+  nombre: string
+  tipo_documento: 'cc' | 'ti' | 'ce' | 'pasaporte' | 'otro'
+  documento: string
+  edad: number
+  grupo: string
+}
+
+export interface ImportPreview {
+  rows: Array<Omit<StudentInput, 'documento'>>
+  errors: Array<{ row: number; message: string }>
 }
 
 export interface InstallStatus {
   configured: boolean
   institution: string
   hasLogo: boolean
+  /** La institución permite que adultos creen su propia cuenta. */
+  selfRegistration?: boolean
 }
 
 export interface InstitutionSettings {
@@ -57,6 +84,8 @@ export interface ModelInfo {
   name?: string
   active?: number | boolean
   context_window?: number
+  /** `missing`: la sincronización ya no lo ve en el proveedor, pero algo lo usa. */
+  status?: 'ok' | 'missing'
 }
 
 export interface AgentConfig {
@@ -69,4 +98,24 @@ export interface AgentConfig {
   max_iterations: number
   enabled: number
   system_prompt?: string | null
+}
+
+export interface ProviderSyncReport {
+  providerId: string
+  status: 'ok' | 'skipped' | 'error'
+  reason?: string
+  added: string[]
+  updated: string[]
+  removed: string[]
+  protected: Array<{ id: string; usedBy: string[] }>
+  migrated: string[]
+  kept: number
+  deletionsBlocked?: string
+}
+
+export interface SyncReport {
+  startedAt: string
+  finishedAt: string
+  dryRun: boolean
+  providers: ProviderSyncReport[]
 }

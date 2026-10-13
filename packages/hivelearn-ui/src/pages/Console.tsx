@@ -3,20 +3,23 @@ import { api } from '../api'
 import { HexLogo, Notice, Spinner } from '../components/ui'
 import { mergeProviders, type ProviderRow } from '../settings-logic'
 import type { Account, InstitutionSettings } from '../types'
+import { UsersTab } from './UsersTab'
 import { AgentsPanel } from './settings/AgentsPanel'
 import { PolicyPanel } from './settings/PolicyPanel'
 import { ProvidersPanel } from './settings/ProvidersPanel'
 
 const ROLE_LABEL = { admin: 'Administrador', teacher: 'Docente', student: 'Alumno' } as const
 
-export function Console({ account, tab, onLogout }: { account: Account; tab: 'home' | 'settings'; onLogout: () => void }) {
+export function Console({ account, tab, onLogout }: { account: Account; tab: 'home' | 'users' | 'settings'; onLogout: () => void }) {
   const isAdmin = account.role === 'admin'
+  const isStaff = account.role !== 'student'
   return (
     <div className="console">
       <header className="console__bar">
         <a className="brand" href="#/" aria-label="HiveLearn, portada"><HexLogo /> <span>HiveLearn</span></a>
         <nav className="tabs" aria-label="Secciones">
           <a href="#/panel/inicio" className={`tab ${tab === 'home' ? 'tab--active' : ''}`} aria-current={tab === 'home' ? 'page' : undefined}>Inicio</a>
+          {isStaff && <a href="#/panel/usuarios" className={`tab ${tab === 'users' ? 'tab--active' : ''}`} aria-current={tab === 'users' ? 'page' : undefined}>Usuarios</a>}
           {isAdmin && <a href="#/panel/configuracion" className={`tab ${tab === 'settings' ? 'tab--active' : ''}`} aria-current={tab === 'settings' ? 'page' : undefined}>Configuración</a>}
         </nav>
         <div className="console__user">
@@ -25,7 +28,7 @@ export function Console({ account, tab, onLogout }: { account: Account; tab: 'ho
         </div>
       </header>
       <main className="console__main">
-        {tab === 'settings' && isAdmin ? <SettingsTab /> : <Home account={account} />}
+        {tab === 'settings' && isAdmin ? <SettingsTab /> : tab === 'users' && isStaff ? <UsersTab account={account} /> : <Home account={account} />}
       </main>
     </div>
   )
@@ -52,8 +55,10 @@ function Home({ account }: { account: Account }) {
         </ul>
       )}
       {account.role === 'admin'
-        ? <Notice kind="info">Configura los proveedores, las claves y los modelos de los agentes en la pestaña <a href="#/panel/configuracion">Configuración</a>.</Notice>
-        : <Notice kind="info">Tu espacio de aprendizaje está en preparación en esta interfaz. Por ahora puedes seguir usando el portal de tu institución.</Notice>}
+        ? <Notice kind="info">Crea docentes y alumnos en <a href="#/panel/usuarios">Usuarios</a>; configura proveedores, claves y modelos en <a href="#/panel/configuracion">Configuración</a>.</Notice>
+        : account.role === 'teacher'
+          ? <Notice kind="info">Crea y gestiona a tus alumnos en <a href="#/panel/usuarios">Usuarios</a>.</Notice>
+          : <Notice kind="info">Tu espacio de aprendizaje está en preparación en esta interfaz. Por ahora puedes seguir usando el portal de tu institución.</Notice>}
     </section>
   )
 }

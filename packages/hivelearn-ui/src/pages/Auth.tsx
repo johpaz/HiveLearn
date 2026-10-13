@@ -44,7 +44,7 @@ export function Auth({ mode, status, onAuthenticated, onConfigured }: Props) {
               </nav>
               {mode === 'login' && <LoginForm onAuthenticated={onAuthenticated} />}
               {mode === 'activate' && <ActivateForm />}
-              {mode === 'register' && <RegisterForm />}
+              {mode === 'register' && <RegisterForm enabled={status.selfRegistration !== false} />}
               {mode === 'recover' && <RecoverForm />}
             </>}
       </main>
@@ -99,10 +99,20 @@ function ActivateForm() {
   const [password, setPassword] = useState('')
   const [done, setDone] = useState(false)
   const { busy, error, run } = useSubmit()
-  if (done) return <Notice kind="success">Cuenta activada. Ya puedes <a href="#/acceso">ingresar</a> con tu usuario y esa contraseña.</Notice>
+  if (done) return <Notice kind="success">Listo. Ya puedes <a href="#/acceso">ingresar</a> con tu usuario y esa contraseña.</Notice>
   return (
-    <form className="form" onSubmit={e => { e.preventDefault(); void run(async () => { await api.activate({ code: code.trim(), password }); setDone(true) }) }}>
-      <p className="form__intro">Tu docente o administrador te dio un código de activación. Elige tu contraseña para empezar.</p>
+    <form className="form" onSubmit={e => {
+      e.preventDefault()
+      void run(async () => {
+        // El mismo campo sirve para un código de activación (cuenta nueva) y para uno de restablecimiento.
+        const clean = code.trim()
+        try { await api.activate({ code: clean, password }) } catch (activationError) {
+          try { await api.reset({ code: clean, password }) } catch { throw activationError }
+        }
+        setDone(true)
+      })
+    }}>
+      <p className="form__intro">Tu docente o administrador te dio un código de activación (o de restablecimiento de contraseña). Elige tu contraseña.</p>
       <Field label="Código de activación"><input value={code} onChange={e => setCode(e.target.value)} autoComplete="one-time-code" spellCheck={false} required /></Field>
       <Field label="Nueva contraseña" hint="Mínimo 12 caracteres.">
         <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" minLength={12} required />
@@ -113,7 +123,7 @@ function ActivateForm() {
   )
 }
 
-function RegisterForm() {
+function RegisterForm({ enabled }: { enabled: boolean }) {
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
   const [age, setAge] = useState('')
@@ -121,6 +131,16 @@ function RegisterForm() {
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null)
   const { busy, error, run } = useSubmit()
 
+  if (!enabled) {
+    return (
+      <div className="form">
+        <Notice kind="info">Esta institución no tiene habilitado el registro autónomo. Pide un código de activación a tu docente o administrador,
+          o ingresa con tu cuenta. Si eres administrador, actívalo en Configuración → Política y respaldo.</Notice>
+        <a className="btn btn--primary btn--block" href="#/activar">Tengo un código</a>
+        <a className="link" href="#/acceso">Ya tengo cuenta</a>
+      </div>
+    )
+  }
   if (recoveryCode) {
     return (
       <div className="form">

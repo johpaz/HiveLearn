@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 export type Route =
   | { name: 'landing' }
   | { name: 'auth'; mode: 'login' | 'register' | 'activate' | 'recover' }
-  | { name: 'console'; tab: 'home' | 'settings' }
+  | { name: 'console'; tab: 'home' | 'users' | 'settings' }
 
 export function parseHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, '').split('?')[0]
@@ -14,6 +14,7 @@ export function parseHash(hash: string): Route {
     case 'recuperar': return { name: 'auth', mode: 'recover' }
     case 'panel':
     case 'panel/inicio': return { name: 'console', tab: 'home' }
+    case 'panel/usuarios': return { name: 'console', tab: 'users' }
     case 'panel/configuracion': return { name: 'console', tab: 'settings' }
     default: return { name: 'landing' }
   }
@@ -22,7 +23,7 @@ export function parseHash(hash: string): Route {
 export function hrefFor(route: Route): string {
   if (route.name === 'landing') return '#/'
   if (route.name === 'auth') return `#/${{ login: 'acceso', register: 'registro', activate: 'activar', recover: 'recuperar' }[route.mode]}`
-  return route.tab === 'settings' ? '#/panel/configuracion' : '#/panel/inicio'
+  return route.tab === 'settings' ? '#/panel/configuracion' : route.tab === 'users' ? '#/panel/usuarios' : '#/panel/inicio'
 }
 
 export function navigate(route: Route) {

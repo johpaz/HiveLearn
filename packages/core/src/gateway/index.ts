@@ -5,7 +5,7 @@
  * Sin dependencias del repositorio principal de Hive
  */
 import { resolvePort } from "../utils/port";
-import { initializeDatabase } from '../storage/hivedb'
+import { initializeDatabase, getDb } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
 import { logger } from '../utils/logger'
 import { createServer, setBunServer } from './server'
@@ -32,6 +32,10 @@ async function main() {
 
     // Motor de agentes basado en @johpaz/hive-sdk (opt-in): base propia, separada de hl_*.
     if (await startSdkEngineIfEnabled()) log.info('✅ SDK agent engine initialized')
+
+    // Catálogo de modelos al día: actualiza y retira modelos de cada proveedor (ver models/sync.ts).
+    const { startModelSyncScheduler } = await import('../models/scheduler')
+    startModelSyncScheduler(getDb())
 
     // Reconcile de runs de generación huérfanos (larga duración)
     const { reconcileGenerationRuns } = await import('../agent/run-store')

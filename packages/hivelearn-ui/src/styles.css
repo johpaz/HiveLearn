@@ -213,3 +213,29 @@ select:disabled { opacity: 0.6; }
   .segmented__item { white-space: nowrap; border-radius: 10px; }
   .actions .btn { width: 100%; }
 }
+
+/* ── Usuarios ────────────────────────────────────────────── */
+.users__grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); align-items: start; margin-bottom: 1.5rem; }
+.users .card + .card { margin-top: 0; }
+.form__row { display: grid; gap: 0.7rem; grid-template-columns: 1fr 1fr; }
+.link--left { justify-self: start; }
+.codebox { border-color: var(--honey); margin-bottom: 1.2rem; }
+.codebox__head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: center; }
+.codebox__actions { display: flex; gap: 0.5rem; }
+.codebox__list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+.codebox__list li { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: center; padding: 0.6rem 0.8rem; background: #120d06; border-radius: 10px; }
+.codebox__list code { font-size: 1.05rem; color: var(--honey); user-select: all; word-break: break-all; }
+.account-list { list-style: none; padding: 0; margin: 0.8rem 0 0; display: grid; gap: 0.6rem; }
+.account { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.account + .account { margin-top: 0; }
+.account__meta { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.35rem; }
+.errors { margin: 0; padding-left: 1.1rem; color: #ffd2cc; font-size: 0.9rem; }
+.preview { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.9rem; }
+
+/* ── Sincronización de modelos ───────────────────────────── */
+.sync { margin-top: 1rem; }
+.sync__head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+.sync__head > div { flex: 1 1 24rem; }
+.sync__list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+.sync__list li { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+.sync code { background: #120d06; padding: 0.05rem 0.35rem; border-radius: 6px; }

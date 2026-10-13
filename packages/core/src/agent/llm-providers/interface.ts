@@ -20,7 +20,6 @@ export interface LLMProvider {
 export const FIXED_TEMPERATURE_1_MODELS = new Set(["kimi-k2.5", "kimi-k2", "kimi-k2-5"])
 
 export const OPENAI_COMPAT_BASE_URLS: Record<string, string> = {
-  "local-llama": "http://localhost:8080/v1",
   hiveagents: "https://llm.hiveagents.io/v1",
 }
 
@@ -51,7 +50,6 @@ const DEFAULT_PROFILE: ProviderProfile = {
 }
 
 export const PROVIDER_PROFILES: Record<string, ProviderProfile> = {
-  "local-llama": { ...DEFAULT_PROFILE },
   hiveagents: { ...DEFAULT_PROFILE, normalizeToolNames: true },
 }
 

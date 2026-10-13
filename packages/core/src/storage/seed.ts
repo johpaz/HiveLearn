@@ -1,4 +1,5 @@
-import type { IndexDoc } from "@johpaz/hive-db"
+import type { HiveDB, IndexDoc } from "@johpaz/hive-db"
+import { catalogModelKey } from "../models/model-id"
 import { getDb, nowIso } from "./hivedb"
 import { logger } from "../utils/logger"
 import * as toolCatalog from "../tools"
@@ -53,6 +54,11 @@ export interface ModelDoc {
   capabilities: string | null
   enabled: number
   active: number
+  /** `seed` (catálogo inicial), `sync` (sincronización con el proveedor) o `manual`. */
+  source?: 'seed' | 'sync' | 'manual'
+  status?: 'ok' | 'missing'
+  wire_id?: string
+  synced_at?: string
 }
 
 interface TopicDoc {
@@ -102,7 +108,6 @@ export const SEED_DATA: SeedData = {
     { id: "openrouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
     { id: "ollama", name: "Ollama (Local)", baseUrl: "http://localhost:11434" },
     { id: "groq", name: "Groq", baseUrl: "https://api.groq.com/openai/v1" },
-    { id: "local-llama", name: "Local LLM (llama-server)", baseUrl: "http://localhost:8080/v1" },
     { id: "elevenlabs", name: "ElevenLabs", baseUrl: "https://api.elevenlabs.io/v1" },
     { id: "qwen", name: "Qwen (Alibaba)", baseUrl: "https://dashscope.aliyuncs.com/api/v1" },
     { id: "nvidia", name: "NVIDIA NIM", baseUrl: "https://integrate.api.nvidia.com/v1" },
@@ -211,9 +216,6 @@ export const SEED_DATA: SeedData = {
 
     // ── Ollama: models are detected at runtime via /api/setup/ollama-models and inserted dynamically ──
 
-    // ── Local LLM (llama-server): model detected at runtime via sync ──
-    { id: "local-model", providerId: "local-llama", name: "Local Model (auto-detected)", modelType: "llm", contextWindow: 32768, capabilities: JSON.stringify(["chat", "json_mode", "function_calling", "streaming"]) },
-
     // ── ElevenLabs (TTS) ──
     { id: "eleven_flash_v2_5", providerId: "elevenlabs", name: "Eleven Flash V2.5", modelType: "tts", contextWindow: 0, capabilities: JSON.stringify(["tts", "speech", "fast"]) },
     { id: "eleven_turbo_v2_5", providerId: "elevenlabs", name: "Eleven Turbo V2.5", modelType: "tts", contextWindow: 0, capabilities: JSON.stringify(["tts", "speech", "balanced"]) },
@@ -302,6 +304,27 @@ function buildSkillSearchText(skill: SearchSkill): string {
     (skill.triggers ?? []).join(" "),
     (skill.steps ?? []).map(step => `${step.name} ${step.description ?? ""}`).join(" "),
   ].filter(Boolean).join("\n")
+}
+
+/** Proveedores que ya no forman parte del catálogo. */
+const RETIRED_PROVIDERS = ["local-llama"]
+
+async function removeRetiredProviders(db: HiveDB): Promise<void> {
+  for (const providerId of RETIRED_PROVIDERS) {
+    const provider = await db.collection("providers").get(providerId)
+    const models = (await db.collection<ModelDoc>("models").scan()).filter(e => e.doc.provider_id === providerId)
+    if (!provider && models.length === 0) continue
+    const agents = (await db.collection<{ provider_id: string | null }>("hl_agents").scan()).filter(a => a.doc.provider_id === providerId)
+    const settings = (await db.collection<Record<string, unknown>>("hl_portal_settings").scan())
+      .filter(e => Object.values(e.doc).includes(providerId))
+    if (agents.length > 0 || settings.length > 0) {
+      log.warn(`[seed] proveedor retirado "${providerId}" sigue en uso (${agents.length} agentes, ${settings.length} ajustes): elige otro modelo y se eliminará en el próximo arranque`)
+      continue
+    }
+    for (const model of models) await db.collection("models").delete(model.id)
+    if (provider) await db.collection("providers").delete(providerId)
+    log.info(`[seed] proveedor retirado "${providerId}" eliminado con ${models.length} modelos`)
+  }
 }
 
 async function seedSearchIndex(): Promise<void> {
@@ -443,16 +466,40 @@ export async function seedAllData(): Promise<void> {
     }
     log.info(`[seed] ✅ ${providerCount} providers procesados`);
 
-    // 2️⃣ Models (INSERT OR IGNORE)
+    // Proveedores retirados del catálogo (LocalLLM): se quitan con sus modelos si nada los usa.
+    await removeRetiredProviders(db)
+
+    // Los revendedores guardan su id con prefijo (`openrouter/anthropic/claude-…`): se migran los antiguos
+    // antes de sembrar, o el seed volvería a crear las filas sin prefijo.
+    const { migrateResellerIds } = await import("../models/sync")
+    await migrateResellerIds(db)
+
+    // 2️⃣ Models: catálogo inicial, SOLO la primera vez por proveedor.
+    // La fuente de verdad pasa a ser la base, que mantiene `models/sync.ts` con lo que cada proveedor sirve hoy.
+    // Si el seed volviera a insertar esta lista en cada arranque, resucitaría los modelos que la sincronización retiró.
     const models = db.collection<ModelDoc>("models")
+    const seedState = db.collection<{ seededAt: string }>("hl_seed_state")
+    const allModels = await models.scan()
+    const hasRows = new Set(allModels.map(e => e.doc.provider_id))
+    const seededProviders = new Set<string>()
+    for (const providerId of new Set(SEED_DATA.models.map(m => m.providerId))) {
+      const marker = await seedState.get(`models:${providerId}`)
+      if (!marker) {
+        // Primera vez: se siembra solo si el proveedor aún no tiene filas (una base anterior ya las tiene).
+        if (!hasRows.has(providerId)) seededProviders.add(providerId)
+        await seedState.put(`models:${providerId}`, { seededAt: new Date().toISOString() })
+      }
+    }
     let modelCount = 0;
     const insertedModels: string[] = [];
     const skippedModels: string[] = [];
     for (const model of SEED_DATA.models) {
+      if (!seededProviders.has(model.providerId)) continue
       try {
-        const existing = await models.get(model.id)
+        const rowId = catalogModelKey(model.providerId, model.id)
+        const existing = await models.get(rowId)
         if (!existing) {
-          await models.put(model.id, {
+          await models.put(rowId, {
             provider_id: model.providerId,
             name: model.name,
             model_type: model.modelType,
@@ -460,13 +507,15 @@ export async function seedAllData(): Promise<void> {
             capabilities: model.capabilities ?? null,
             enabled: 1,
             active: 0,
-          })
+            source: 'seed',
+            wire_id: model.id,
+          } as ModelDoc)
         }
         modelCount++;
         // Verificar si el modelo existe después del insert
-        const exists = await models.get(model.id);
-        if (exists) insertedModels.push(model.id);
-        else skippedModels.push(model.id);
+        const exists = await models.get(rowId);
+        if (exists) insertedModels.push(rowId);
+        else skippedModels.push(rowId);
       } catch (err) {
         log.error(`[seed] ❌ Error insertando modelo ${model.id}: ${(err as Error).message}`);
         skippedModels.push(model.id);

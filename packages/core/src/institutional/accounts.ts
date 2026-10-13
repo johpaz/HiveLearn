@@ -58,12 +58,21 @@ export async function identityDocument(db: HiveDB, row: StudentRow, account: Acc
 
 export class Accounts {
   constructor(readonly db: HiveDB) {}
-  async initialized() { return !!(await this.db.collection('hl_installation').get('main')) }
+  /**
+   * ¿Hay una institución con al menos una cuenta? Una instalación SIN cuentas (por ejemplo, tras borrarlas) no se
+   * puede usar ni entrar a administrar: se trata como no configurada para que `/setup` cree un nuevo administrador
+   * y conserve la institución, sus ajustes y sus currículos.
+   */
+  async initialized() {
+    if (!(await this.db.collection('hl_installation').get('main'))) return false
+    return (await this.db.collection('hl_accounts').count()) > 0
+  }
   async setup(input: { name: string; institution: string; username: string; password: string }) {
     if (await this.initialized()) throw new Error('La institución ya está configurada')
-    const account: Account = { id: crypto.randomUUID(), institutionId: crypto.randomUUID(), name: z.string().trim().min(2).max(120).parse(input.name), username: usernameSchema.parse(input.username), role: 'admin', passwordHash: await Bun.password.hash(passwordSchema.parse(input.password), { algorithm: 'argon2id' }), createdAt: new Date().toISOString() }
+    const existing = await this.db.collection<{ institutionId: string }>('hl_installation').get('main')
+    const account: Account = { id: crypto.randomUUID(), institutionId: existing?.doc.institutionId ?? crypto.randomUUID(), name: z.string().trim().min(2).max(120).parse(input.name), username: usernameSchema.parse(input.username), role: 'admin', passwordHash: await Bun.password.hash(passwordSchema.parse(input.password), { algorithm: 'argon2id' }), createdAt: new Date().toISOString() }
     await this.db.batch([
-      { op: 'put', collection: 'hl_installation', id: 'main', doc: { institutionId: account.institutionId, name: z.string().trim().min(2).max(120).parse(input.institution) }, expectedVersion: 0 },
+      { op: 'put', collection: 'hl_installation', id: 'main', doc: { institutionId: account.institutionId, name: z.string().trim().min(2).max(120).parse(input.institution) }, expectedVersion: existing?.version ?? 0 },
       { op: 'put', collection: 'hl_accounts', id: account.id, doc: account, expectedVersion: 0 },
       { op: 'put', collection: 'hl_usernames', id: account.username, doc: { accountId: account.id }, expectedVersion: 0 },
     ])

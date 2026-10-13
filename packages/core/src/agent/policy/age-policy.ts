@@ -52,7 +52,7 @@ export function isLocalEndpoint(url: string): boolean {
   return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254)
 }
 
-const LOCAL_BY_DEFAULT = new Set(['ollama', 'local-llama'])
+const LOCAL_BY_DEFAULT = new Set(['ollama'])
 
 /** Un proveedor es local si es de los que corren en la máquina o si su URL apunta a la red local. */
 export function isLocalProvider(provider: string, baseUrl?: string | null): boolean {

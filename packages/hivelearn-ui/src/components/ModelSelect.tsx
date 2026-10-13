@@ -5,6 +5,9 @@ import type { ModelInfo } from '../types'
 
 const cache = new Map<string, Promise<ModelInfo[]>>()
 
+/** Tras sincronizar, las listas guardadas ya no valen. */
+export function clearModelCache() { cache.clear() }
+
 function loadModels(providerId: string): Promise<ModelInfo[]> {
   let pending = cache.get(providerId)
   if (!pending) {
@@ -42,7 +45,7 @@ export function ModelSelect({ providerId, value, onChange, label, id }: {
       {models !== null && !value && <option value="">Elige un modelo</option>}
       {options.map(model => (
         <option key={model.id} value={model.id}>
-          {(model.name ?? model.id)}{model.active ? '' : ' · inactivo'}
+          {(model.name ?? model.id)}{model.status === 'missing' ? ' · ya no lo sirve el proveedor' : ''}
         </option>
       ))}
       {failed && <option value="" disabled>No se pudieron cargar los modelos</option>}

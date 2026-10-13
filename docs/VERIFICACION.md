@@ -23,9 +23,14 @@ Identidad y política por edad, migración de ids, memoria, currículos (validac
 - `bun run typecheck` y `bun test`: 314 pruebas en verde, 7 omitidas. Arranque real del gateway (`/health`, `/api/portal/status`) y `hivelearn --help` sin rutas ni comandos retirados. Cerca de 4 100 líneas netas menos (código muerto, 8 agentes legacy, 10 adaptadores LLM, 2 dependencias de proveedor).
 - **Medido, no supuesto:** con el motor `sdk`, `traces` es la única colección de `sdk-db` con texto de la tarea del alumno; se purga al terminar cada corrida y por edad (`HIVELEARN_SDK_RETENTION_HOURS`). La prueba de integración corre tres corridas (y una fallida) y comprueba que ninguna colección conserva la marca.
 - **Hallazgo corregido:** en el motor `legacy`, `callLLM` descartaba `thinking`, así que la decisión de esfuerzo de Kev nunca llegaba a los proveedores. Ahora se reenvía (y `think` se acepta como alias).
-- **Decisión tras comparar contra el SDK:** el adaptador de HiveAgents del SDK manda `enable_thinking` en `extra_body` (el backend lo ignora) y deja Qwen 3.x razonando por omisión; el de HiveAgents, Ollama y local-llama propios se conservan. El resto de proveedores pasa por `callLLM` del SDK. Los reintentos con backoff del SDK se suman a los del reparto (hasta 3 × 2 intentos ante 5xx persistente).
+- **Decisión tras comparar contra el SDK:** el adaptador de HiveAgents del SDK manda `enable_thinking` en `extra_body` (el backend lo ignora) y deja Qwen 3.x razonando por omisión; los propios de HiveAgents y Ollama se conservan (LocalLLM salió después del catálogo). El resto de proveedores pasa por `callLLM` del SDK. Los reintentos con backoff del SDK se suman a los del reparto (hasta 3 × 2 intentos ante 5xx persistente).
 - Cancelación real por intento, backoff, corte de ronda con `model_not_mounted` y respaldo de modelo bajo la política por edad: cubiertos con pruebas (`swarm/jobs.test.ts`, `runner.contract.test.ts`).
 - Generación de currículos desde el portal y sesiones sobre un currículo: pruebas con generador simulado. **Sin corrida en vivo** (no había modelo montado ni clave de Gemini).
+
+## Sincronización de modelos y retiro de LocalLLM (2026-10-13)
+- Pruebas con servidores simulados (`models/sync.test.ts`): alta de modelos inactivos, actualización, retiro, protección de los que usa un agente, listado sospechoso, modelos manuales, política sin remotos, migración de ids de revendedores con re-apuntado de agentes y ajustes (idempotente).
+- **Sin corrida contra las APIs reales** de los proveedores (formato de los listados tomado de su documentación).
+- LocalLLM salió del catálogo: adaptador, runtime, descargador, rutas `/api/llm/*` y `/ws/llm`, proveedor y modelo sembrados. En una base existente, el seed elimina el proveedor y sus modelos si nada los usa; si algún agente o ajuste los usa, avisa y lo elimina cuando se cambie.
 
 ## No verificado
 - Calidad pedagógica del contenido generado (la puerta de seguridad no es un juicio pedagógico).

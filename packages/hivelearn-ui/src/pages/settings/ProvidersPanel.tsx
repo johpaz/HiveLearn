@@ -1,7 +1,24 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
+import { clearModelCache } from '../../components/ModelSelect'
 import { Notice } from '../../components/ui'
 import type { ProviderRow } from '../../settings-logic'
+import type { ProviderSyncReport, SyncReport } from '../../types'
+
+const STATUS_TEXT: Record<ProviderSyncReport['status'], string> = { ok: 'Al día', skipped: 'Omitido', error: 'Con error' }
+
+/** Resumen de una línea de lo que cambió en un proveedor. */
+export function describeSync(r: ProviderSyncReport): string {
+  if (r.status !== 'ok') return `${STATUS_TEXT[r.status]}${r.reason ? `: ${r.reason}` : ''}`
+  const parts = [
+    r.added.length && `${r.added.length} nuevos`,
+    r.updated.length && `${r.updated.length} actualizados`,
+    r.removed.length && `${r.removed.length} retirados`,
+    r.protected.length && `${r.protected.length} en uso que el proveedor ya no sirve`,
+    r.migrated.length && `${r.migrated.length} ids migrados`,
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : 'Sin cambios'
+}
 
 export function ProvidersPanel({ rows, onChanged }: { rows: ProviderRow[]; onChanged: () => Promise<void> }) {
   return (
@@ -11,10 +28,84 @@ export function ProvidersPanel({ rows, onChanged }: { rows: ProviderRow[]; onCha
         Las claves se guardan en el llavero del servidor y nunca vuelven al navegador. Un proveedor debe estar activo y
         (si es remoto) con clave para poder elegirse en los agentes.
       </p>
+      <SyncAll rows={rows} onChanged={onChanged} />
       <ul className="provider-list">
         {rows.map(row => <ProviderCard key={row.id} row={row} onChanged={onChanged} />)}
       </ul>
     </section>
+  )
+}
+
+function SyncAll({ rows, onChanged }: { rows: ProviderRow[]; onChanged: () => Promise<void> }) {
+  const [report, setReport] = useState<SyncReport | null>(null)
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    api.modelSyncStatus().then(s => { setReport(s.report); if (s.running) { setRunning(true); poll() } }).catch(() => undefined)
+    return () => { if (timer.current) clearTimeout(timer.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function poll() {
+    timer.current = setTimeout(async () => {
+      try {
+        const status = await api.modelSyncStatus()
+        if (status.running) return poll()
+        setRunning(false)
+        setReport(status.report)
+        clearModelCache()
+        await onChanged()
+      } catch (e) {
+        setRunning(false)
+        setError(e instanceof Error ? e.message : 'No se pudo consultar la sincronización')
+      }
+    }, 2500)
+  }
+
+  async function start() {
+    setError(null)
+    setRunning(true)
+    try {
+      await api.syncModels()
+      poll()
+    } catch (e) {
+      setRunning(false)
+      setError(e instanceof Error ? e.message : 'No se pudo iniciar la sincronización')
+    }
+  }
+
+  const names = new Map(rows.map(r => [r.id, r.name]))
+  return (
+    <div className="card sync">
+      <div className="sync__head">
+        <div>
+          <h3>Catálogo de modelos</h3>
+          <p className="muted">
+            Se actualiza solo cada 24 h: agrega los modelos nuevos (inactivos), actualiza contexto y capacidades, y retira los que el
+            proveedor ya no sirve, salvo que un agente los use. Los de OpenRouter llevan el prefijo <code>openrouter/</code>. La corrida automática respeta la política de proveedores remotos; “Actualizar ahora” no.
+          </p>
+        </div>
+        <button className="btn btn--primary" disabled={running} onClick={() => void start()}>{running ? 'Actualizando…' : 'Actualizar ahora'}</button>
+      </div>
+      {error && <Notice kind="error">{error}</Notice>}
+      {report && (
+        <>
+          <p className="muted">Última sincronización: {new Date(report.finishedAt).toLocaleString()}</p>
+          <ul className="sync__list">
+            {report.providers.filter(p => p.status !== 'skipped' || p.reason !== 'sin API de listado').map(p => (
+              <li key={p.providerId}>
+                <strong>{names.get(p.providerId) ?? p.providerId}</strong>
+                <span className={`chip ${p.status === 'ok' ? 'chip--ok' : p.status === 'error' ? 'chip--warn' : ''}`}>{describeSync(p)}</span>
+                {p.protected.length > 0 && <small className="muted">Revisa: {p.protected.map(x => `${x.id} (${x.usedBy.join(', ')})`).join('; ')}</small>}
+                {p.deletionsBlocked && <small className="muted">No se retiró nada: {p.deletionsBlocked}.</small>}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   )
 }
 

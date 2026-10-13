@@ -16,9 +16,11 @@ import { CurriculumNotFoundError, resolveCurriculumContext } from './session'
 beforeAll(async () => { await initializeDatabase() })
 afterAll(() => { closeDatabase(); rmSync(root, { recursive: true, force: true }) })
 
+let tick = 0
+/** `createdAt` forma parte del id del documento: cada dossier de prueba lleva uno distinto. */
 const dossier = (band: Dossier['ageBand'], expiresInMs: number): Dossier => {
   const def = aiCurriculumDef()
-  const now = Date.now()
+  const now = Date.now() + ++tick * 1000
   return {
     key: dossierKey(def.topic, def.language, band), topic: def.topic, language: def.language, ageBand: band,
     queries: [], sources: [], claims: [], createdAt: new Date(now).toISOString(), expiresAt: new Date(now + expiresInMs).toISOString(),
@@ -37,7 +39,7 @@ describe('resolveCurriculumContext', () => {
 
     expect((await resolveCurriculumContext(db, def.id, 30)).dossier).toBeUndefined()
 
-    await saveDossier(db, dossier('adulto', -1000))
+    await saveDossier(db, dossier('adulto', -60_000))
     expect((await resolveCurriculumContext(db, def.id, 30)).dossier).toBeUndefined()
 
     await saveDossier(db, dossier('adulto', DEFAULT_TTL_MS))

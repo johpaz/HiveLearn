@@ -647,3 +647,24 @@ describe('generación de currículos como trabajos', () => {
     expect(view?.error).toContain('reinicio')
   })
 })
+
+describe('instalación sin cuentas', () => {
+  test('si se borraron todas las cuentas, /setup crea un administrador y conserva la institución', async () => {
+    const admin = await institution()
+    const before = (await db.collection<{ institutionId: string; name: string }>('hl_installation').get('main'))!.doc
+    expect((await (await request('/status')).json()).configured).toBe(true)
+
+    for (const name of ['hl_accounts', 'hl_usernames', 'hl_auth_sessions']) {
+      for (const entry of await db.collection(name).scan()) await db.collection(name).delete(entry.id)
+    }
+    expect((await request('/me', 'GET', undefined, admin)).status).toBe(401)
+    expect((await (await request('/status')).json()).configured).toBe(false)
+
+    const again = await request('/setup', 'POST', { name: 'Nueva Admin', institution: 'Institución IA', username: 'nueva.admin', password })
+    expect(again.status).toBe(201)
+    const after = (await db.collection<{ institutionId: string }>('hl_installation').get('main'))!.doc
+    expect(after.institutionId).toBe(before.institutionId)
+    expect((await login('nueva.admin', 'admin')).length).toBeGreaterThan(10)
+    expect((await request('/setup', 'POST', { name: 'Otro', institution: 'X Y', username: 'otro.admin', password })).status).toBe(409)
+  })
+})

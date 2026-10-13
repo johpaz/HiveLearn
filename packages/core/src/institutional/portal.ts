@@ -16,7 +16,7 @@ import { learningSurface } from './a2ui'
 import { GuidedJourney } from './journey'
 import { journeySurface } from './journey-a2ui'
 import { parseStudents, studentTemplate, XLSX_MIME } from './spreadsheet'
-import { saveSettings, setCredential, settingsView } from './settings'
+import { readSettings, saveSettings, setCredential, settingsView } from './settings'
 import { Supplements, runSupplementWorker, type SupplementExecutor } from './supplements'
 import { CurriculumJobs, runCurriculumGeneration, type CurriculumGenerator } from './curriculum-jobs'
 import { normalizeLogo } from './branding'
@@ -183,7 +183,8 @@ export class Portal {
       if (!['GET', 'HEAD'].includes(method)) checkOrigin(req)
       if (path === '/status' && method === 'GET') {
         const entry = await this.db.collection<{ institutionId: string; name: string }>('hl_installation').get('main')
-        return json({ configured: !!entry, institution: entry?.doc.name ?? 'HiveLearn', hasLogo: !!(await this.db.collection('hl_branding').get('main')) })
+        const selfRegistration = entry ? !!(await readSettings(this.db, entry.doc.institutionId)).allowSelfRegistration : false
+        return json({ configured: await this.accounts.initialized(), institution: entry?.doc.name ?? 'HiveLearn', hasLogo: !!(await this.db.collection('hl_branding').get('main')), selfRegistration })
       }
       if (path === '/logo' && method === 'GET') {
         const logo = await this.db.collection<{ png: string }>('hl_branding').get('main')
@@ -259,6 +260,23 @@ export class Portal {
         this.allow(actor, ['admin'])
         if (method === 'GET') return json(await settingsView(this.db, actor.institutionId))
         if (method === 'PUT') return json({ settings: await saveSettings(this.db, actor.institutionId, await body(req)) })
+      }
+      if (path === '/models/sync' && method === 'GET') {
+        this.allow(actor, ['admin'])
+        const { lastSyncReport, isSyncRunning } = await import('../models/sync')
+        return json({ running: isSyncRunning(), report: await lastSyncReport(this.db) })
+      }
+      if (path === '/models/sync' && method === 'POST') {
+        this.allow(actor, ['admin'])
+        this.throttle(`${peer}:models-sync`)
+        const data = z.object({ providerId: z.string().max(100).optional(), dryRun: z.boolean().optional() }).strict().parse(await body(req))
+        const { syncModels } = await import('../models/sync')
+        // Un proveedor: se espera el resultado. Todos: puede tardar minutos, corre aparte y se consulta con GET.
+        // Una petición del administrador es deliberada y solo envía la API key al proveedor (ningún dato de alumnos):
+        // no se frena por la política de proveedores remotos, que sí rige la sincronización automática.
+        if (data.providerId) return json({ running: false, report: await syncModels(this.db, { providerId: data.providerId, dryRun: data.dryRun, ignorePolicy: true }) })
+        void syncModels(this.db, { dryRun: data.dryRun, ignorePolicy: true }).catch(error => log.warn('Sincronización de modelos fallida', { error: (error as Error).message }))
+        return json({ running: true, report: null }, 202)
       }
       if (path === '/branding' && method === 'PUT') {
         this.allow(actor, ['admin'])

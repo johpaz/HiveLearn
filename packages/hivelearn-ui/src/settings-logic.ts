@@ -2,7 +2,7 @@ import type { AgentConfig, GatewayProvider, InstitutionSettings, ModelInfo, Port
 
 /** Un endpoint local no necesita clave ni sale de la red de la institución. */
 export function isLocalBaseUrl(url: string | undefined | null, providerId = ''): boolean {
-  if (providerId === 'ollama' || providerId === 'local-llama') return true
+  if (providerId === 'ollama') return true
   if (!url) return false
   try {
     const host = new URL(url).hostname.toLowerCase()

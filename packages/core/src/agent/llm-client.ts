@@ -97,7 +97,7 @@ export async function resolveProviderConfig(
     try {
       apiKey = decryptApiKey(row.api_key_encrypted, row.api_key_iv)
     } catch {
-      // Key decryption failed — provider may not need a key (ollama, local-llama)
+      // Key decryption failed — provider may not need a key (ollama)
     }
   }
 
@@ -169,10 +169,9 @@ export interface LLMResponse {
  *  - `hiveagents`: `chat_template_kwargs.enable_thinking` en la raíz del cuerpo y Qwen 3.x apagado por omisión
  *    (medido contra el backend; el SDK lo manda en `extra_body`, que el servidor ignora, y deja Qwen razonando).
  *  - `ollama`: `think:false` con reintento, rescate de razonamiento sin respuesta, `num_predict`.
- *  - `local-llama`: arranca el servidor local y describe las tools en el prompt si la plantilla GGUF no las admite.
  * El resto (openai, anthropic, gemini, mistral, groq…) pasa por `callLLM` del SDK, con sus reintentos.
  */
-const OWN_PROVIDERS = new Set(['ollama', 'local-llama', 'hiveagents'])
+const OWN_PROVIDERS = new Set(['ollama', 'hiveagents'])
 
 /** Error de una llamada al SDK, con `status` para que `classifyJobError`/`isAvailabilityError` decidan. */
 export class LLMCallError extends Error {

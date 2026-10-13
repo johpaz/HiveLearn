@@ -13,13 +13,6 @@ import { encryptApiKey } from '../crypto/encrypt'
 import type { ServerWebSocket } from 'bun'
 import { join, extname } from 'path'
 import { existsSync } from 'fs'
-import {
-  handleLLMStatus,
-  handleInstallRuntime,
-  handleStartLocalLLM,
-  handleStopLocalLLM,
-  handleLLMWebSocket,
-} from './llm-local/server'
 import { detectPlatform } from './tts/detect'
 import { synthesize } from './tts/logic'
 import { TTS_MODELS } from './tts/models'
@@ -105,7 +98,6 @@ function isLocalProviderRecord(provider: Record<string, unknown> | undefined): b
   const baseUrl = String(provider.base_url ?? '')
   return (
     id === 'ollama' ||
-    id === 'local-llama' ||
     id === 'local-tts' ||
     baseUrl.includes('localhost') ||
     baseUrl.includes('127.0.0.1')
@@ -1695,62 +1687,6 @@ export function createServer(): Server {
         }
       }
 
-      // GET /api/llm/status
-      if (url.pathname === '/api/llm/status' && req.method === 'GET') {
-        return addCorsHeaders(await handleLLMStatus(), req)
-      }
-
-      // POST /api/llm/install-runtime
-      if (url.pathname === '/api/llm/install-runtime' && req.method === 'POST') {
-        return addCorsHeaders(await handleInstallRuntime(), req)
-      }
-
-      // POST /api/llm/start
-      if (url.pathname === '/api/llm/start' && req.method === 'POST') {
-        return addCorsHeaders(await handleStartLocalLLM(), req)
-      }
-
-      // POST /api/llm/stop
-      if (url.pathname === '/api/llm/stop' && req.method === 'POST') {
-        return addCorsHeaders(await handleStopLocalLLM(), req)
-      }
-
-      // POST /api/llm/download-model
-      if (url.pathname === '/api/llm/download-model' && req.method === 'POST') {
-        try {
-          const body = await req.json() as { model: string }
-          const { downloadModel, MODEL_CATALOG } = await import('./llm-local/downloader')
-          const { registerModelInDB } = await import('./llm-local/server')
-          const modelId = body.model as keyof typeof MODEL_CATALOG
-          if (!MODEL_CATALOG[modelId]) {
-            return addCorsHeaders(
-              new Response(JSON.stringify({ error: `Modelo no encontrado: ${body.model}` }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-              req
-            )
-          }
-          await downloadModel(modelId)
-          await registerModelInDB(modelId)
-          return addCorsHeaders(
-            new Response(JSON.stringify({ ok: true, model: body.model }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-            req
-          )
-        } catch (e) {
-          return addCorsHeaders(
-            new Response(JSON.stringify({ error: (e as Error).message }), {
-              status: 500,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-            req
-          )
-        }
-      }
-
       // GET /api/tts/status
       if (url.pathname === '/api/tts/status' && req.method === 'GET') {
         try {
@@ -2102,9 +2038,7 @@ export function createServer(): Server {
           return
         }
         const search = ws.data.search ?? ''
-        if (path === '/ws/llm') {
-          log.info('[ws] LLM client connected')
-        } else if (path.startsWith('/hivelearn-onboarding')) {
+        if (path.startsWith('/hivelearn-onboarding')) {
           const url = new URL(`http://localhost${path}${search}`)
           const sessionId = url.searchParams.get('sessionId') ?? 'unknown'
           onboardingSessions.set(sessionId, ws)
@@ -2152,10 +2086,6 @@ export function createServer(): Server {
             if (data.userAction?.context?.nodeId !== nodeId) throw new Error('Superficie incorrecta')
             for (const update of await portal.action(actor, data)) ws.send(JSON.stringify(update))
           })().catch(() => ws.send(JSON.stringify({ error: { message: 'No se pudo enviar: comprueba la evidencia y los prerrequisitos' } }))).finally(() => { ws.data.busy = false })
-          return
-        }
-        if (path === '/ws/llm') {
-          handleLLMWebSocket(ws as any, message.toString())
           return
         }
         if (path.startsWith('/hivelearn-onboarding')) {

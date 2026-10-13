@@ -26,7 +26,7 @@ import { bindRunTools } from './tools'
 
 const log = logger.child('hl-sdk-run')
 
-/** Proveedores que el SDK sabe invocar. Cualquier otro (p. ej. `local-llama`) debe usar el loop propio. */
+/** Proveedores que el SDK sabe invocar. Cualquier otro debe usar el loop propio. */
 const SDK_PROVIDERS = new Set([
   'openai', 'anthropic', 'gemini', 'mistral', 'kimi', 'ollama', 'openrouter', 'deepseek', 'nvidia',
   'hiveagents', 'z-ai', 'modelscope', 'minimax', 'qwen', 'groq', 'opencode-go',
