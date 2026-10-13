@@ -2,6 +2,13 @@
 
 Documento de referencia del "cerebro". La interfaz consume estas piezas; no las reimplementa.
 
+## Diagramas
+Editables con draw.io: [`diagramas/proceso-hivelearn.drawio`](diagramas/proceso-hivelearn.drawio) (3 páginas).
+
+1. ![Generación del programa](diagramas/1-generacion-del-programa.png)
+2. ![Respuesta, evidencia y acreditación](diagramas/2-respuesta-evidencia-acreditacion.png)
+3. ![Capas](diagramas/3-capas.png)
+
 ## Principios
 - **Sin grafo de tareas.** Un coordinador reparte el trabajo a especialistas por rondas; no hay dependencias declaradas.
 - **Kev decide, el código garantiza.** El oráculo de decisiones (HiveAgents Kev, o Jev) elige y juzga; toda decisión tiene un respaldo determinista y límites fijados por código.
