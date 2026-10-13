@@ -21,7 +21,7 @@ import { buildWorkPlan } from './work-plan'
 import { buildLessonProgram, buildNodosBase } from '../orchestrator'
 import { evaluateProgramSafety, summarizeReport } from '../../safety/content-safety'
 import { dossierToText, type Dossier } from '../../research/dossier'
-import { routeFor, validateBlueprintFor, type CurriculumDef } from '../../institutional/curriculum-def'
+import { routeFor, routeForDef, validateBlueprintFor, type CurriculumDef } from '../../institutional/curriculum-def'
 import { CurriculumProgressStore } from '../../institutional/curriculum-progress'
 import { AgentExecutionError } from '../errors'
 import { prepareDelegation } from './coordinator-delegation'
@@ -208,7 +208,7 @@ export class HiveLearnSwarm {
     } else if (this.curriculumDef) {
       // Tema distinto de IA: la ruta sale de su definición y de su propio registro de progreso.
       const progress = await new CurriculumProgressStore(getDb()).record(perfil.alumnoId, this.curriculumDef)
-      curriculum = routeFor(this.curriculumDef, perfil.edad, progress?.level ?? this.curriculumDef.levels[0], progress?.mastered ?? []) as unknown as ReturnType<typeof curriculumRoute>
+      curriculum = routeForDef(this.curriculumDef, perfil.edad, progress?.level ?? this.curriculumDef.levels[0], progress?.mastered ?? []) as unknown as ReturnType<typeof curriculumRoute>
     } else {
       curriculum = curriculumRoute(perfil.edad, learningRecord?.level ?? 'fundamentos', learningRecord?.mastered ?? [])
     }

@@ -6,8 +6,6 @@ import { chat } from "./commands/chat";
 import { doctor } from "./commands/doctor";
 import { securityAudit } from "./commands/security";
 import { update } from "./commands/update";
-import { message } from "./commands/message";
-import { agent } from "./commands/agent-run";
 import { migrate } from "./commands/migrate";
 import pkg from "../../../package.json";
 
@@ -20,22 +18,15 @@ Usage: hivelearn <command> [subcommand] [options]
 
 Gateway:
   start [--daemon]           Arrancar el Gateway (abre setup web si es primera vez)
-  dev                        Modo desarrollo con hot-reload (usa ~/.hive-dev)
   stop                       Detener el Gateway
   reload                     Recargar config sin reiniciar
   status                     Estado del Gateway
 
-Chat y mensajes:
+Chat:
   chat [--agent <id>]        Chat directo en terminal
-  message send --to <id> --content <text>
-                             Enviar mensaje por canal
-  agent run --message <text> [--wait]
-                             Ejecutar agente con mensaje
 
 Configuración:
-  config get <key>           Leer valor de config
-  config set <key> <value>   Escribir valor de config
-  config show                Mostrar config completa
+  config show                Mostrar la configuración actual (con secretos redactados)
 
 Sistema:
   doctor                     Diagnóstico completo y auto-reparación
@@ -50,8 +41,6 @@ Options:
 Examples:
   hivelearn start                 Arrancar HiveLearn (el browser se abre automáticamente)
   hivelearn chat                  Chatear con el agente en terminal
-  hivelearn message send --to 123 --content "Hola"
-  hivelearn agent run --message "Analiza README.md" --wait
   hivelearn doctor                Diagnosticar problemas del sistema
   hivelearn update                Actualizar a la última versión
 `;
@@ -84,12 +73,6 @@ async function main(): Promise<void> {
       break;
     case "chat":
       await chat(flags);
-      break;
-    case "message":
-      await message(subcommand, args.slice(2));
-      break;
-    case "agent":
-      await agent(subcommand, args.slice(2));
       break;
     case "config":
       await config(subcommand, args.slice(2));

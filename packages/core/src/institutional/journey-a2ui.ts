@@ -5,9 +5,9 @@ import { teachingMaterial } from './curriculum-content'
 import { INTERESTS, LEARNING_MODES, type JourneyState } from './journey'
 import { QUESTION_BANK } from './learning'
 
-const CATALOG = 'https://github.com/google/A2UI/blob/main/specification/0.8/json/standard_catalog_definition.json'
-const text = (id: string, path: string, usageHint?: string) => ({ id, component: { Text: { text: { path }, usageHint } } as Component })
-const button = (id: string, label: string, action: string, context: NonNullable<Action['context']> = [], primary = false) => [
+export const CATALOG = 'https://github.com/google/A2UI/blob/main/specification/0.8/json/standard_catalog_definition.json'
+export const text = (id: string, path: string, usageHint?: string) => ({ id, component: { Text: { text: { path }, usageHint } } as Component })
+export const button = (id: string, label: string, action: string, context: NonNullable<Action['context']> = [], primary = false) => [
   { id, component: { Button: { child: `${id}-label`, primary, action: { name: action, context } } } as Component },
   { id: `${id}-label`, component: { Text: { text: { literalString: label } } } as Component },
 ]

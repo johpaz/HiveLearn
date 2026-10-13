@@ -42,10 +42,8 @@ En Fedora, `bun run build:desktop` genera `packages/hivelearn-desktop/src-tauri/
 
 ## Configuración y documentación
 
-- [Configuración institucional, seguridad y operación](docs/CONFIGURACION-INSTITUCIONAL.md)
-- [Contrato del grafo y del coordinador](docs/GRAFO-CURRICULAR.md)
-- [Investigación curricular, rutas por edad/nivel y fuentes](docs/INVESTIGACION-CURRICULAR.md)
-- [Resultados y límites de las pruebas](docs/VERIFICACION.md)
+- [Arquitectura del núcleo](docs/ARQUITECTURA.md)
+- [Qué está verificado y qué no](docs/VERIFICACION.md)
 
 La ruta predeterminada de datos es `~/.hivelearn/hivedb`; usa `HIVELEARN_DB_PATH` para una ubicación institucional. No reutilices la base de Hive: HiveLearn conserva una base propia.
 
@@ -113,6 +111,14 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 - **Recuperación sin correo:** el registro entrega un código de recuperación que se muestra una vez. `POST /recover` lo canjea por una contraseña nueva, entrega otro código y cierra todas las sesiones de la cuenta. Cualquier fallo responde con el mismo mensaje.
 - **Restablecimiento por personal:** `POST /accounts/:id/password-reset` (administrador, o el docente de ese alumno) emite un código de un solo uso válido 24 h que se canjea en `POST /reset`; también cierra las sesiones. Un código de restablecimiento no sirve para activar cuentas.
 - Sin canal de correo no hay verificación de identidad: quien tenga el código de recuperación controla la cuenta.
+
+### Recorrido guiado para cualquier tema
+
+- `GET /api/portal/curricula/:id/journey` y `POST …/journey/actions` (alumno): el mismo guion que el de IA (bienvenida → intereses → forma de aprender → diagnóstico → ruta → concepto → práctica → feedback → otra actividad) sobre cualquier `CurriculumDef` que acredite (`canonical` o `reviewed`; uno sin revisar responde 409).
+- El contenido sale de la definición: objetivo, evidencia esperada, fuentes y orientación por edad. La explicación la redacta el especialista y se guarda en caché por (contenido, nodo, banda) en `hl_node_materials`; si no hay modelo, el recorrido usa el objetivo y la evidencia y **no se rompe**.
+- La práctica es una respuesta abierta: el tutor da feedback formativo y Kev la juzga una sola vez; el veredicto queda como evidencia (método `oracle`). «Sesión» a estos efectos es el **día**: repetir el ejercicio en una sentada no cuenta como dominio sostenido.
+- El estado lleva el hash del currículo: si el contenido cambia, el recorrido y el diagnóstico empiezan de nuevo. La superficie A2UI es `journey:<alumno>:<currículo>`; el recorrido de IA conserva `journey:<alumno>`.
+- Pendiente: los complementos (`supplements`) siguen siendo solo del currículo de IA.
 
 ### Onboarding conversacional
 

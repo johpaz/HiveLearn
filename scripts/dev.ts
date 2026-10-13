@@ -5,6 +5,8 @@
  */
 
 import { $ } from 'bun'
+import { existsSync } from 'fs'
+import path from 'path'
 import { logger } from '../packages/core/src/utils/logger'
 
 // Set environment variables
@@ -19,9 +21,11 @@ async function dev() {
 
   // Start both processes in parallel
   const server = $`NODE_ENV=development bun run --cwd packages/core dev`
-  const ui = $`bun run --cwd packages/hivelearn-ui dev`
+  // La UI es un paquete aparte: si no está en el árbol, solo se levanta el servidor.
+  const hasUi = existsSync(path.join(import.meta.dir, '..', 'packages', 'hivelearn-ui', 'package.json'))
+  if (!hasUi) log.info('Sin paquete hivelearn-ui: solo se inicia el servidor')
+  const ui = hasUi ? $`bun run --cwd packages/hivelearn-ui dev` : Promise.resolve()
 
-  // Wait for both
   await Promise.all([server, ui])
 }
 

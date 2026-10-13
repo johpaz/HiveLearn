@@ -1,3 +1,6 @@
+import { CurriculumJourney } from './curriculum-journey'
+import { curriculumJourneySurface, curriculumSurfaceId } from './curriculum-journey-a2ui'
+import { cachedExplanation, nodeMaterial, saveExplanation } from './curriculum-material'
 import { CurriculumProgressStore, LEVEL_REVIEWS_COLLECTION, type LevelReviewRequest } from './curriculum-progress'
 import { kevForRun } from '../agent/kev/client'
 import { listPendingReviews, resolveReview } from '../grading/evidence'
@@ -43,6 +46,7 @@ export class Portal {
   readonly supplements: Supplements
   readonly journey: GuidedJourney
   readonly progress: CurriculumProgressStore
+  readonly curriculumJourney: CurriculumJourney
   private attempts = new Map<string, { count: number; until: number }>()
   constructor(readonly db: HiveDB, supplementExecutor: SupplementExecutor = runSupplementWorker) {
     this.accounts = new Accounts(db)
@@ -50,6 +54,7 @@ export class Portal {
     this.supplements = new Supplements(db, supplementExecutor)
     this.journey = new GuidedJourney(db, this.learning)
     this.progress = new CurriculumProgressStore(db)
+    this.curriculumJourney = new CurriculumJourney(db)
   }
   async actor(req: Request) {
     const actor = await this.accounts.session(sessionCookie(req))
@@ -109,6 +114,66 @@ export class Portal {
       this.supplements.formativeFeedback(actor, nodeId, response, { interest: state.interest, learningMode: state.learningMode }))
     return journeySurface(actor, next)
   }
+  /** Pantalla actual del recorrido de un currículo (cualquier tema). */
+  async curriculumJourneySurface(actor: Account, def: CurriculumDef) {
+    this.allow(actor, ['student'])
+    const state = (await this.curriculumJourney.current(actor, def)).doc
+    const material = state.focusNodeId && ['concept', 'practice'].includes(state.stage)
+      ? await nodeMaterial(this.db, def, state.focusNodeId, ageBandFor(actor.age)) : null
+    return curriculumJourneySurface(actor, def, state, material)
+  }
+
+  async curriculumJourneyAction(actor: Account, def: CurriculumDef, input: unknown) {
+    this.allow(actor, ['student'])
+    const envelope = z.object({ userAction: z.object({
+      name: z.string().max(80), surfaceId: z.string().max(200), sourceComponentId: z.string().max(120),
+      timestamp: z.string().datetime(), context: z.record(z.string(), z.string()).default({}),
+    }).strict() }).strict().parse(input)
+    if (envelope.userAction.surfaceId !== curriculumSurfaceId(actor, def)) throw new HttpError(400, 'La acción no pertenece a este recorrido')
+
+    const band = ageBandFor(actor.age)
+    const runContext = { studentId: actor.id, institutionId: actor.institutionId, ageBand: band }
+    const brief = (nodeId: string) => {
+      const n = def.nodes.find(x => x.id === nodeId)!
+      return { title: n.title, objective: n.objective, evidence: n.evidence }
+    }
+    // Una sola consulta al oráculo por práctica: el feedback y la evidencia comparten el veredicto.
+    let judged: Awaited<ReturnType<typeof import('../agent/kev/judge').judgeAnswer>> | null = null
+    await this.curriculumJourney.transition(actor, def, { name: envelope.userAction.name, context: envelope.userAction.context }, {
+      prepareMaterial: async nodeId => {
+        if (await cachedExplanation(this.db, def, nodeId, band)) return
+        const { generateNodeExplanation } = await import('../agent/curriculum-tutor')
+        const text = await generateNodeExplanation({ topic: def.topic, node: brief(nodeId), runContext })
+        if (text) await saveExplanation(this.db, def, nodeId, band, text)
+      },
+      feedback: async ({ nodeId, response, state }) => {
+        const { tutorFeedback } = await import('../agent/curriculum-tutor')
+        const kev = await kevForRun(runContext)
+        const node = brief(nodeId)
+        const [fb, verdict] = await Promise.all([
+          tutorFeedback({ topic: def.topic, node, response, interest: state.interest, learningMode: state.learningMode, runContext }),
+          kev ? import('../agent/kev/judge').then(m => m.judgeAnswer(kev, { objective: `${node.title}: ${node.objective}`, prompt: node.evidence, answer: response })).catch(() => null) : Promise.resolve(null),
+        ])
+        judged = verdict
+        return { text: fb.hint ? `${fb.text}\n\nPista: ${fb.hint}` : fb.text, verdict: verdict?.verdict }
+      },
+      assess: async ({ nodeId, response, sessionId }) => {
+        let verdict = judged
+        if (!verdict) {
+          const kev = await kevForRun(runContext)
+          if (!kev) return
+          const { judgeAnswer } = await import('../agent/kev/judge')
+          const node = brief(nodeId)
+          verdict = await judgeAnswer(kev, { objective: `${node.title}: ${node.objective}`, prompt: node.evidence, answer: response })
+        }
+        if (!verdict) return
+        const { recordAssessment } = await import('../grading/assessment')
+        await recordAssessment(this.db, { alumnoId: actor.id, curriculumId: def.id, nodeId, sessionId, grade: verdict.grade })
+      },
+    })
+    return this.curriculumJourneySurface(actor, def)
+  }
+
   async handle(req: Request, peer = 'local'): Promise<Response> {
     try {
       const url = new URL(req.url), path = url.pathname.replace(/^\/api\/portal/, ''), method = req.method
@@ -288,6 +353,16 @@ export class Portal {
         const students = new Map((await this.accounts.list(actor)).map(a => [a.id, a]))
         const pending = all.map(e => e.doc).filter(r => r.status === 'pending' && r.institutionId === actor.institutionId && students.has(r.studentId))
         return json({ reviews: pending.map(r => ({ ...r, student: students.get(r.studentId)?.name })) })
+      }
+      const journeyPath = path.match(/^\/curricula\/([^/]+)\/journey(\/actions)?$/)
+      if (journeyPath) {
+        this.allow(actor, ['student'])
+        const found = await findCurriculum(this.db, decodeURIComponent(journeyPath[1]))
+        if (!found) throw new HttpError(404, 'Currículo no encontrado')
+        if (!canAccredit(found.def)) throw new HttpError(409, 'Este currículo aún no ha sido revisado por un docente')
+        if (!journeyPath[2] && method === 'GET') return json({ messages: await this.curriculumJourneySurface(actor, found.def) })
+        if (journeyPath[2] && method === 'POST') return json({ messages: await this.curriculumJourneyAction(actor, found.def, await body(req)) })
+        throw new HttpError(405, 'Método no permitido')
       }
       const curriculumPath = path.match(/^\/curricula\/([^/]+)\/(approve|diagnostic|route|level)$/)
       if (curriculumPath) {

@@ -8,7 +8,7 @@
 import type { HiveDB } from '@johpaz/hive-db'
 import { z } from 'zod'
 import type { Account } from './accounts'
-import { canAccredit, routeFor, scoreDiagnosticFor, type CurriculumDef } from './curriculum-def'
+import { canAccredit, routeForDef, scoreDiagnosticFor, type CurriculumDef } from './curriculum-def'
 import { getEvidence } from '../grading/evidence'
 import type { KevClient } from '../agent/kev/client'
 import { judgeLevel } from '../agent/kev/judge'
@@ -56,7 +56,7 @@ export class CurriculumProgressStore {
 
   async route(actor: Pick<Account, 'id' | 'age'>, def: CurriculumDef) {
     const record = await this.record(actor.id, def)
-    const route = routeFor(def, actor.age ?? 18, record?.level ?? def.levels[0], record?.mastered ?? [])
+    const route = routeForDef(def, actor.age ?? 18, record?.level ?? def.levels[0], record?.mastered ?? [])
     return { ...route, curriculumId: def.id, status: def.status, accredits: canAccredit(def), diagnosticCompleted: !!record, scores: record?.scores ?? {} }
   }
 

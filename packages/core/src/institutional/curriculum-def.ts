@@ -134,7 +134,7 @@ export function validateCurriculumContent(input: unknown): CurriculumContent {
     questionIds.add(question.id)
     if (!ids.has(question.nodeId)) issues.push(`questionBank.${question.id}: nodo inexistente "${question.nodeId}"`)
     covered.add(question.nodeId)
-    if (new Set(question.options.map(option => option.trim().toLowerCase())).size !== 3) issues.push(`questionBank.${question.id}: opciones repetidas`)
+    if (new Set((question.options as string[]).map(option => option.trim().toLowerCase())).size !== 3) issues.push(`questionBank.${question.id}: opciones repetidas`)
   }
   for (const node of def.nodes) if (!covered.has(node.id)) issues.push(`nodes.${node.id}: no tiene ninguna pregunta de diagnóstico`)
 
@@ -196,6 +196,15 @@ export function routeFor<N extends RouteNode>(def: RouteSource<N>, age: number, 
     edges: nodes.flatMap(node => node.prerequisites.map(from => ({ from, to: node.id, relation: 'prerequisite' as const }))),
     sources: { ...def.sources },
   }
+}
+
+/**
+ * `routeFor` sobre una definición completa. El cast vive aquí una sola vez: con `strict: false` (el CLI
+ * tipa estas fuentes así) la inferencia de zod vuelve opcionales los campos y `CurriculumDef` ya no encaja
+ * estructuralmente en `RouteSource`.
+ */
+export function routeForDef(def: CurriculumDef, age: number, level: string, mastered: readonly string[] = []) {
+  return routeFor(def as unknown as RouteSource<RouteNode & { title: string }>, age, level, mastered)
 }
 
 /** Esquema de respuestas del diagnóstico: una por pregunta del banco, ni más ni menos. */

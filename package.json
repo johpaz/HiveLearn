@@ -16,11 +16,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --cwd packages/hivelearn-ui build && HIVE_DEV=true bun run --cwd packages/cli src/index.ts start",
+    "dev": "bun run scripts/dev.ts",
     "dev:ui": "bun run --cwd packages/hivelearn-ui dev",
     "dev:server": "NODE_ENV=development bun run --cwd packages/core dev",
     "dev:cli": "bun run --cwd packages/cli dev",
-    "build": "bun run build:core && bun run build:ui && bun run build:cli && bun run copy:assets",
+    "build": "bun run scripts/build.ts",
     "build:core": "bun build packages/core/src/index.ts --outdir dist/core --target bun --external @johpaz/hive-db && bun build packages/core/src/gateway/index.ts --bundle --outfile dist/server.js --target bun --external @johpaz/hive-db",
     "build:ui": "bun run --cwd packages/hivelearn-ui build",
     "build:desktop": "bun run build:ui && bun run --cwd packages/hivelearn-desktop build",

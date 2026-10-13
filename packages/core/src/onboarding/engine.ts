@@ -46,21 +46,22 @@ export async function advanceOnboarding(
     if (guess) parsed = parseField(field, guess)
   }
   if (!parsed.ok) {
-    return { fields, pending: field, reply: `${parsed.hint} ${FALLBACK_QUESTIONS[field]}`.trim() }
+    return { fields, pending: field, reply: `${(parsed as { hint: string }).hint} ${FALLBACK_QUESTIONS[field]}`.trim() }
   }
 
-  const next: FieldMap = { ...fields, [field]: parsed.value }
+  const value = (parsed as { value: string }).value
+  const next: FieldMap = { ...fields, [field]: value }
   const pending = nextField(next, known)
   if (!pending) {
     return {
-      fields: next, saved: { key: field, value: parsed.value }, pending: null,
+      fields: next, saved: { key: field, value }, pending: null,
       reply: '¡Listo! Ya tengo todo para preparar tu sesión.',
       complete: normalizeOnboardingFields(withKnown(next, known)),
     }
   }
   const fallback = FALLBACK_QUESTIONS[pending]
   const voiced = deps.voice ? safeVoice(await deps.voice({ field: pending, fallback, lastUser: userText, fields: next }).catch(() => null)) : null
-  return { fields: next, saved: { key: field, value: parsed.value }, pending, reply: voiced ?? fallback }
+  return { fields: next, saved: { key: field, value }, pending, reply: voiced ?? fallback }
 }
 
 function withKnown(fields: FieldMap, known?: { nombre?: string; edad?: number | string } | null): FieldMap {

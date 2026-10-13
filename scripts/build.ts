@@ -9,7 +9,11 @@ import { existsSync, rmSync } from 'fs'
 import path from 'path'
 
 const ROOT = path.join(import.meta.dir, '..')
-const PACKAGES = ['core', 'hivelearn-ui']
+// Solo se construyen los paquetes que existen en el árbol (la UI vuelve como paquete aparte).
+const exists = (pkg: string) => existsSync(path.join(ROOT, 'packages', pkg, 'package.json'))
+// El CLI embebe la UI compilada: sin `hivelearn-ui/dist` no se puede empaquetar.
+const uiBuilt = existsSync(path.join(ROOT, 'packages', 'hivelearn-ui', 'dist'))
+const PACKAGES = ['core', 'hivelearn-ui', 'cli'].filter(pkg => exists(pkg) && (pkg !== 'cli' || uiBuilt))
 
 async function build() {
   console.log('🐝 Building HiveLearn...\n')
@@ -26,13 +30,7 @@ async function build() {
     }
     
     try {
-      if (pkg === 'hivelearn-ui') {
-        // Vite build
-        await $`cd ${pkgDir} && bun run build`
-      } else {
-        // Bun build
-        await $`cd ${pkgDir} && bun run build`
-      }
+      await $`cd ${pkgDir} && bun run build`
       console.log(`✅ @hivelearn/${pkg} built successfully\n`)
     } catch (error) {
       console.error(`❌ @hivelearn/${pkg} build failed:`, error)

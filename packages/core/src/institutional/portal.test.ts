@@ -474,3 +474,97 @@ describe('registro autónomo de adultos y recuperación de contraseña', () => {
   })
 })
 
+
+describe('recorrido guiado de un tema que no es IA', () => {
+  const curriculum = {
+    id: 'sql-basico', topic: 'SQL básico', language: 'es', version: 'sql-1', levels: ['inicial', 'avanzado'],
+    nodes: [
+      { id: 'tablas', title: 'Tablas y filas', level: 'inicial', prerequisites: [], objective: 'Explicar qué es una tabla.', evidence: 'Describe una tabla con un ejemplo propio.', tags: [], sources: ['sqlbolt'] },
+      { id: 'select', title: 'Consultar con SELECT', level: 'avanzado', prerequisites: [], objective: 'Escribir un SELECT simple.', evidence: 'Obtiene columnas de una tabla.', tags: [], sources: [] },
+    ],
+    questionBank: [
+      { id: 'q1', nodeId: 'tablas', prompt: '¿Qué guarda una fila?', options: ['Un registro', 'Un índice', 'Una vista'], correct: 0 },
+      { id: 'q2', nodeId: 'select', prompt: '¿Qué elige columnas?', options: ['WHERE', 'SELECT', 'ORDER'], correct: 1 },
+    ],
+    sources: { sqlbolt: 'https://sqlbolt.com/' },
+  }
+
+  async function setup(approve = true) {
+    const { saveGeneratedCurriculum, approveCurriculum } = await import('./curriculum-store')
+    const admin = await institution(), teacherCookie = await teacher(admin), learner = await student(teacherCookie)
+    const actor = (await portal.accounts.byUsername('alumna.uno'))!
+    const saved = await saveGeneratedCurriculum(db, curriculum)
+    if (approve) await approveCurriculum(db, saved.docId, { id: 'x', role: 'teacher' })
+    const surface = `journey:${actor.id}:sql-basico`
+    const act = (name: string, context: Record<string, string> = {}) =>
+      request('/curricula/sql-basico/journey/actions', 'POST', { userAction: { name, surfaceId: surface, sourceComponentId: 'ctl', timestamp: new Date().toISOString(), context } }, learner)
+    const data = async (res: Response) => {
+      const body = await res.json()
+      const model = body.messages?.find((m: any) => m.dataModelUpdate)?.dataModelUpdate.contents ?? []
+      return Object.fromEntries(model.map((e: any) => [e.key, e.valueString])) as Record<string, string>
+    }
+    return { learner, actor, act, data, teacherCookie }
+  }
+
+  test('un currículo sin revisar no se ofrece al alumno', async () => {
+    const { learner } = await setup(false)
+    expect((await request('/curricula/sql-basico/journey', 'GET', undefined, learner)).status).toBe(409)
+  })
+
+  test('recorre bienvenida → diagnóstico → ruta → concepto → práctica → feedback → otra actividad', async () => {
+    const { learner, act, data, actor } = await setup()
+    const first = await request('/curricula/sql-basico/journey', 'GET', undefined, learner)
+    expect(first.status).toBe(200)
+    expect((await data(first)).title).toContain('Hola')
+
+    expect((await act('start_journey')).status).toBe(200)
+    expect((await act('choose_interest', { value: 'ciencia' })).status).toBe(200)
+    const diagnostic = await act('choose_learning_mode', { value: 'retos' })
+    expect((await data(diagnostic)).title).toBe('¿Qué guarda una fila?')
+
+    // Una acción de otra pantalla se rechaza.
+    expect((await act('submit_practice', { nodeId: 'tablas', response: 'x'.repeat(30) })).status).toBe(400)
+    expect((await act('answer_diagnostic', { questionId: 'q1', option: '1' })).status).toBe(200) // falla el primer nodo
+    const ready = await act('answer_diagnostic', { questionId: 'q2', option: '1' })
+    const readyData = await data(ready)
+    expect(readyData.focus).toBe('Tablas y filas')
+
+    const concept = await act('begin_learning')
+    const conceptData = await data(concept)
+    expect(conceptData.title).toBe('Tablas y filas')
+    expect(conceptData.explanation).toContain('Explicar qué es una tabla')
+    expect(conceptData.sources).toContain('https://sqlbolt.com/')
+
+    const practice = await act('continue_to_practice')
+    expect((await data(practice)).practice).toContain('Describe una tabla con un ejemplo propio')
+
+    const fed = await act('submit_practice', { nodeId: 'tablas', response: 'Una tabla guarda registros en filas y columnas, como una lista de alumnos con sus datos.' })
+    expect(fed.status).toBe(200)
+    const fedData = await data(fed)
+    expect(fedData.step).toContain('FEEDBACK')
+    // Sin modelo disponible el recorrido no se rompe: hay un mensaje de respaldo.
+    expect(fedData.feedback.length).toBeGreaterThan(20)
+    expect(await db.collection('hl_student_evidence').scan()).toHaveLength(1)
+    expect((await db.collection<{ curriculumId: string }>('hl_student_evidence').scan())[0].doc.curriculumId).toBe('sql-basico')
+
+    // Con un solo nodo disponible en su nivel no hay "otra" actividad: se explica, no se repite la misma.
+    expect((await act('next_activity')).status).toBe(400)
+    void actor
+  })
+
+  test('la práctica de otro nodo o una acción de otro recorrido se rechazan', async () => {
+    const { learner, act, actor } = await setup()
+    await act('start_journey'); await act('choose_interest', { value: 'arte' }); await act('choose_learning_mode', { value: 'ejemplos' })
+    await act('answer_diagnostic', { questionId: 'q1', option: '0' })
+    await act('answer_diagnostic', { questionId: 'q2', option: '1' })
+    await act('begin_learning'); await act('continue_to_practice')
+    expect((await act('submit_practice', { nodeId: 'select', response: 'x'.repeat(30) })).status).toBeGreaterThanOrEqual(400)
+    // Con los dos nodos disponibles (diagnóstico acertado), "otra actividad" lleva al siguiente.
+    expect((await act('submit_practice', { nodeId: 'tablas', response: 'Una tabla guarda registros en filas y columnas, con ejemplos.' })).status).toBe(200)
+    const other = await act('next_activity')
+    expect(other.status).toBe(200)
+    expect((await other.json()).messages.find((m: any) => m.dataModelUpdate).dataModelUpdate.contents.find((e: any) => e.key === 'title').valueString).toBe('Consultar con SELECT')
+    const wrong = await request('/curricula/sql-basico/journey/actions', 'POST', { userAction: { name: 'start_journey', surfaceId: `journey:${actor.id}`, sourceComponentId: 'c', timestamp: new Date().toISOString(), context: {} } }, learner)
+    expect(wrong.status).toBe(400)
+  })
+})
