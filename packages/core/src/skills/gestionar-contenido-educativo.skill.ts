@@ -7,8 +7,7 @@ export const GESTIONAR_CONTENIDO_SKILL = {
   tools: [
     'disenar_estructura', 'poblar_nodo', 'crear_nodo_canvas', 'conectar_nodos',
     'marcar_completado', 'avanzar_nodo', 'generar_explicacion', 'generar_ejercicio',
-    'generar_quiz', 'generar_reto', 'generar_codigo', 'generar_svg',
-    'generar_frames_gif', 'generar_infografia',
+    'generar_evaluacion', 'generar_infografia',
   ],
   triggers: ['quiero aprender', 'enséñame', 'aprende', 'tutorial', 'curso'],
   steps: [

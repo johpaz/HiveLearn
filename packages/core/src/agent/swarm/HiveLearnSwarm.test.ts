@@ -67,8 +67,7 @@ beforeAll(async () => {
       requested.push(name)
       if (name === 'planificar_programa') planningTasks.push(JSON.stringify(body.messages ?? []))
       if (failTool && name === failTool) return new Response('{"error":"fail"}', { status: 500 })
-      const out = name === 'generar_quiz' ? outputs.generar_evaluacion
-        : name === 'planificar_programa'
+      const out = name === 'planificar_programa'
           ? { ...outputs.planificar_programa, nodos: (outputs.planificar_programa as { nodos: Array<{ concepto: string }> }).nodos.map(n => ({ ...n, concepto: `${n.concepto} (caso ${run})`, ...(badPlans-- > 0 ? { competencyId: 'inventada' } : {}) })) }
           : outputs[name]
       return Response.json(out ? toolCall(name, out) : { id: 'c', object: 'chat.completion', created: 0, model: 'm', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '{}' } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })

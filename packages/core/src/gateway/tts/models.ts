@@ -45,6 +45,3 @@ export const TTS_MODELS: TTSModel[] = [
   },
 ]
 
-export function getModelById(id: string): TTSModel | undefined {
-  return TTS_MODELS.find((m) => m.id === id)
-}

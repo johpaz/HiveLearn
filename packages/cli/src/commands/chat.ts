@@ -1,14 +1,11 @@
-import * as p from "@clack/prompts";
 import * as fs from "fs";
-import * as path from "path";
-import { spawn } from "child_process";
 import * as readline from "readline";
 import { loadConfig, getHiveDir } from "@hivelearn/core";
 
 const getHiveDirConst = () => getHiveDir();
 
 export async function chat(flags: string[]): Promise<void> {
-  const config = loadConfig();
+  const config = await loadConfig();
   const HIVE_DIR = getHiveDirConst();
 
   if (!fs.existsSync(HIVE_DIR)) {

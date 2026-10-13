@@ -9,6 +9,7 @@ import { getDb } from '../storage/hivedb'
 import type { ProviderDoc, ModelDoc } from '../storage/seed'
 import type { AgentDoc } from './registry'
 import { decryptApiKey } from '../crypto/decrypt'
+import { readProviderSecret } from '../institutional/settings'
 import { getProvider } from './llm-providers/factory'
 
 export interface LLMMessage {
@@ -91,9 +92,7 @@ export async function resolveProviderConfig(
   // Leer configuración del provider desde la DB
   const row = (await db.collection<ProviderDoc>('providers').get(provider))?.doc
 
-  let apiKey: string | undefined
-  const portalProvider = (await db.collection<{ portal_secret_name?: string }>('providers').get(provider))?.doc
-  if (portalProvider?.portal_secret_name) apiKey = await Bun.secrets.get({ service: 'hivelearn-institution', name: portalProvider.portal_secret_name }) ?? undefined
+  let apiKey = await readProviderSecret(row as { portal_secret_name?: unknown } | undefined)
   if (!apiKey && row?.api_key_encrypted && row?.api_key_iv) {
     try {
       apiKey = decryptApiKey(row.api_key_encrypted, row.api_key_iv)
@@ -166,7 +165,60 @@ export interface LLMResponse {
 }
 
 /**
- * Llamar a un modelo LLM usando el adapter correcto para el provider.
+ * Proveedores con adaptador propio en `llm-providers/`: lo que el SDK no cubre o lo hace distinto.
+ *  - `hiveagents`: `chat_template_kwargs.enable_thinking` en la raíz del cuerpo y Qwen 3.x apagado por omisión
+ *    (medido contra el backend; el SDK lo manda en `extra_body`, que el servidor ignora, y deja Qwen razonando).
+ *  - `ollama`: `think:false` con reintento, rescate de razonamiento sin respuesta, `num_predict`.
+ *  - `local-llama`: arranca el servidor local y describe las tools en el prompt si la plantilla GGUF no las admite.
+ * El resto (openai, anthropic, gemini, mistral, groq…) pasa por `callLLM` del SDK, con sus reintentos.
+ */
+const OWN_PROVIDERS = new Set(['ollama', 'local-llama', 'hiveagents'])
+
+/** Error de una llamada al SDK, con `status` para que `classifyJobError`/`isAvailabilityError` decidan. */
+export class LLMCallError extends Error {
+  status?: number
+  modelUnavailable?: boolean
+  constructor(message: string, status?: number, modelUnavailable?: boolean) {
+    super(message)
+    this.name = 'LLMCallError'
+    this.status = status
+    this.modelUnavailable = modelUnavailable
+  }
+}
+
+async function callViaSdk(config: ProviderConfig, options: {
+  messages: LLMMessage[]; tools?: LLMToolDef[]; temperature?: number; maxTokens?: number
+  onToken?: (token: string) => void; signal?: AbortSignal; thinking?: { enabled: boolean; budget_tokens?: number }
+}): Promise<LLMResponse> {
+  // HIVE_HOME antes de importar el SDK: su logger y su configuración se resuelven contra él.
+  const { ensureSdkEnv } = await import('./sdk/bootstrap')
+  ensureSdkEnv()
+  const sdk = await import('@johpaz/hive-sdk/agent')
+  const response = await sdk.callLLM({
+    provider: config.provider,
+    model: config.model,
+    apiKey: config.apiKey ?? '',
+    baseUrl: config.baseUrl,
+    numCtx: config.numCtx,
+    numGpu: config.numGpu,
+    messages: options.messages,
+    tools: options.tools?.map(t => ({ type: 'function', function: { name: t.function.name, description: t.function.description ?? '', parameters: t.function.parameters } })),
+    temperature: options.temperature,
+    maxTokens: options.maxTokens,
+    onToken: options.onToken,
+    signal: options.signal,
+    thinking: options.thinking,
+  } as Parameters<typeof sdk.callLLM>[0])
+  // El SDK no lanza: un fallo vuelve como `stop_reason: "error"`. Los llamadores esperan una excepción.
+  if (response.stop_reason === 'error') {
+    throw new LLMCallError(response.error?.message ?? response.content, response.error?.status, response.error?.modelUnavailable)
+  }
+  return response as LLMResponse
+}
+
+/**
+ * Llamar a un modelo LLM: adaptador propio para los proveedores con ajustes medidos, SDK para el resto.
+ * `thinking` (objeto) y `think` (booleano, histórico de Ollama) son la misma decisión: se aceptan ambos.
  */
 export async function callLLM(
   options: {
@@ -182,11 +234,17 @@ export async function callLLM(
     signal?: AbortSignal
     /** Desactiva el modo thinking en modelos que lo soportan (gemma4/Qwen) */
     think?: boolean
+    thinking?: { enabled: boolean; budget_tokens?: number }
   }
 ): Promise<LLMResponse> {
   const config = await resolveProviderConfig(options.providerId, options.modelId)
-  const provider = getProvider(config.provider)
+  const thinking = options.thinking ?? (options.think === undefined ? undefined : { enabled: options.think })
 
+  if (!OWN_PROVIDERS.has(config.provider)) {
+    return callViaSdk(config, { ...options, thinking })
+  }
+
+  const provider = getProvider(config.provider)
   return provider.call({
     model: config.model,
     messages: options.messages,
@@ -199,6 +257,7 @@ export async function callLLM(
     numGpu: config.numGpu,
     onToken: options.onToken,
     signal: options.signal,
-    think: options.think,
+    think: options.think ?? thinking?.enabled,
+    thinking,
   } as LLMCallOptions)
 }

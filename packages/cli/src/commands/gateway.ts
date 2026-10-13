@@ -16,22 +16,7 @@ import pkg from "../../package.json";
 const VERSION = pkg.version;
 
 // Import adapter system
-import {
-  detectAdapter,
-  DockerAdapter,
-  BunGlobalAdapter,
-  BinaryAdapter,
-  type InstallationAdapter,
-  type GatewayConfig,
-  DEFAULT_GATEWAY_CONFIG,
-  PORTS,
-  getHiveDir as getAdapterHiveDir,
-  findFreePort,
-  waitForHttpPort,
-  isDevMode,
-  isChildProcess,
-  getDistDir,
-} from "../adapters";
+import { detectAdapter, type InstallationAdapter, type GatewayConfig, PORTS, waitForHttpPort, isDevMode, isChildProcess, getDistDir } from "../adapters"
 
 const children: ChildProcess[] = [];
 
@@ -46,64 +31,6 @@ async function getAdapter(): Promise<InstallationAdapter> {
     _adapter = await detectAdapter({ verbose: false });
   }
   return _adapter;
-}
-
-/**
- * Reset the cached adapter (for testing or forced re-detection)
- */
-export function resetAdapter(): void {
-  _adapter = null;
-}
-
-/**
- * Start UI server with embedded or filesystem assets
- */
-function startUIServer(
-  uiDir: string | null,
-  gatewayPort: number,
-  uiPort: number
-): void {
-  const configScript = `<script>window.__HIVE_CONFIG__={"apiUrl":"http://localhost:${gatewayPort}","wsUrl":"ws://localhost:${gatewayPort}"}</script>`;
-  const useEmbedded = embeddedUI.size > 0;
-
-  Bun.serve({
-    hostname: "0.0.0.0",
-    port: uiPort,
-    async fetch(req) {
-      const url = new URL(req.url);
-      let subPath = url.pathname === "/" ? "/index.html" : url.pathname;
-      // SPA fallback: rutas sin extensión → index.html
-      if (!path.extname(subPath)) subPath = "/index.html";
-
-      if (useEmbedded) {
-        const isIndex = subPath === "/index.html" || !embeddedUI.has(subPath);
-        const entry = embeddedUI.get(subPath) ?? embeddedUI.get("/index.html")!;
-        if (isIndex) {
-          const html = entry.data.toString("utf8").replace("</head>", `${configScript}</head>`);
-          return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
-        }
-        // Convert Buffer to Uint8Array for Response
-        return new Response(entry.data as unknown as Uint8Array, { headers: { "Content-Type": entry.mime } });
-      }
-
-      // Filesystem path (npm / Docker)
-      const filePath = path.join(uiDir!, subPath);
-      const file = Bun.file(filePath);
-      if (!(await file.exists())) {
-        const index = Bun.file(path.join(uiDir!, "index.html"));
-        if (await index.exists()) {
-          const html = (await index.text()).replace("</head>", `${configScript}</head>`);
-          return new Response(html, { headers: { "Content-Type": "text/html" } });
-        }
-        return new Response("Not found", { status: 404 });
-      }
-      if (subPath === "/index.html") {
-        const html = (await file.text()).replace("</head>", `${configScript}</head>`);
-        return new Response(html, { headers: { "Content-Type": "text/html" } });
-      }
-      return new Response(file);
-    },
-  });
 }
 
 /**
@@ -236,35 +163,6 @@ async function isRunning(): Promise<boolean> {
     } catch { }
     return false;
   }
-}
-
-/**
- * Wait for gateway port to be ready
- */
-async function waitForPort(port: number, timeout: number = 30000): Promise<boolean> {
-  return waitForHttpPort(port, "/health", timeout);
-}
-
-/**
- * Wait for Vite dev server
- */
-async function waitForVite(port: number, timeout: number = 30000): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}`, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(200),
-      });
-      if (response.ok || response.status === 200) {
-        return true;
-      }
-    } catch {
-      // Port not ready yet
-    }
-    await Bun.sleep(200);
-  }
-  return false;
 }
 
 /**

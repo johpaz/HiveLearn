@@ -18,6 +18,7 @@ import { journeySurface } from './journey-a2ui'
 import { parseStudents, studentTemplate, XLSX_MIME } from './spreadsheet'
 import { saveSettings, setCredential, settingsView } from './settings'
 import { Supplements, runSupplementWorker, type SupplementExecutor } from './supplements'
+import { CurriculumJobs, runCurriculumGeneration, type CurriculumGenerator } from './curriculum-jobs'
 import { normalizeLogo } from './branding'
 import { logger } from '../utils/logger'
 
@@ -44,14 +45,16 @@ export class Portal {
   readonly accounts: Accounts
   readonly learning: Learning
   readonly supplements: Supplements
+  readonly curriculumJobs: CurriculumJobs
   readonly journey: GuidedJourney
   readonly progress: CurriculumProgressStore
   readonly curriculumJourney: CurriculumJourney
   private attempts = new Map<string, { count: number; until: number }>()
-  constructor(readonly db: HiveDB, supplementExecutor: SupplementExecutor = runSupplementWorker) {
+  constructor(readonly db: HiveDB, supplementExecutor: SupplementExecutor = runSupplementWorker, curriculumGenerator: CurriculumGenerator = runCurriculumGeneration) {
     this.accounts = new Accounts(db)
     this.learning = new Learning(db)
     this.supplements = new Supplements(db, supplementExecutor)
+    this.curriculumJobs = new CurriculumJobs(db, curriculumGenerator)
     this.journey = new GuidedJourney(db, this.learning)
     this.progress = new CurriculumProgressStore(db)
     this.curriculumJourney = new CurriculumJourney(db)
@@ -320,6 +323,28 @@ export class Portal {
         this.allow(actor, ['teacher', 'admin', 'student'])
         const defs = (await this.db.collection<CurriculumDef>(CURRICULA_COLLECTION).scan()).map(e => ({ docId: e.id, id: e.doc.id, topic: e.doc.topic, status: e.doc.status, accredits: canAccredit(e.doc), nodes: e.doc.nodes.length, createdAt: e.doc.createdAt }))
         return json({ curricula: actor.role === 'student' ? defs.filter(d => d.accredits) : defs })
+      }
+      if (path === '/curricula/generate' && method === 'POST') {
+        this.allow(actor, ['teacher', 'admin'])
+        this.throttle(`${peer}:generate:${actor.id}`)
+        const data = z.object({
+          topic: z.string().trim().min(3).max(160),
+          audience: z.enum(['ninez', 'adolescencia_temprana', 'adolescencia', 'adulto']),
+          language: z.enum(['es', 'en']).optional(), research: z.boolean().optional(),
+        }).strict().parse(await body(req))
+        try { return json({ job: await this.curriculumJobs.request(actor, { topic: data.topic!, audience: data.audience!, language: data.language, research: data.research }) }, 202) }
+        catch (error) { throw new HttpError(429, error instanceof Error ? error.message : 'No se pudo encolar la generación') }
+      }
+      if (path === '/curricula/jobs' && method === 'GET') {
+        this.allow(actor, ['teacher', 'admin'])
+        return json({ jobs: await this.curriculumJobs.list(actor) })
+      }
+      const jobPath = path.match(/^\/curricula\/jobs\/([^/]+)$/)
+      if (jobPath && method === 'GET') {
+        this.allow(actor, ['teacher', 'admin'])
+        const job = await this.curriculumJobs.get(actor, decodeURIComponent(jobPath[1]))
+        if (!job) throw new HttpError(404, 'Trabajo no encontrado')
+        return json({ job })
       }
       if (path === '/review-queue' && method === 'GET') {
         this.allow(actor, ['teacher', 'admin'])

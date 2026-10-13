@@ -1,8 +1,5 @@
 export { generarExplicacionTool } from './content/generar-explicacion.tool'
 export { generarEjercicioTool } from './content/generar-ejercicio.tool'
-export { generarQuizTool } from './content/generar-quiz.tool'
-export { generarSvgTool } from './content/generar-svg.tool'
-export { generarFramesGifTool } from './content/generar-frames-gif.tool'
 export { generarInfografiaTool } from './content/generar-infografia.tool'
 
 export { generarEvaluacionTool } from './evaluation/generar-evaluacion.tool'

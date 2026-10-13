@@ -140,6 +140,15 @@ describe('provider policy and durable Bun workers', () => {
     await expect(jobs.request(actor, 'ai-agency')).rejects.toThrow('política')
     expect(await db.collection('hl_supplement_jobs').scan()).toHaveLength(0)
   })
+  test('el modelo de respaldo exige proveedor y modelo y un proveedor registrado', async () => {
+    await institution()
+    const institutionId = (await db.collection<{ institutionId: string }>('hl_installation').get('main'))!.doc.institutionId
+    await db.collection('providers').put('ollama', { base_url: 'http://127.0.0.1:11434' })
+    await expect(saveSettings(db, institutionId, { ...DEFAULT_SETTINGS, fallbackProviderId: 'ollama' })).rejects.toThrow('respaldo')
+    await expect(saveSettings(db, institutionId, { ...DEFAULT_SETTINGS, fallbackProviderId: 'no-existe', fallbackModelId: 'm' })).rejects.toThrow('no registrado')
+    const saved = await saveSettings(db, institutionId, { ...DEFAULT_SETTINGS, fallbackProviderId: 'ollama', fallbackModelId: 'llama3.2' })
+    expect(saved.fallbackModelId).toBe('llama3.2')
+  })
   test('queued jobs resume, retain version and do not duplicate completed work', async () => {
     const admin = await institution(), learner = await student(admin), actor = (await portal.accounts.byUsername('alumna.uno'))!
     await request('/diagnostic', 'POST', diagnostic(), learner)
@@ -566,5 +575,75 @@ describe('recorrido guiado de un tema que no es IA', () => {
     expect((await other.json()).messages.find((m: any) => m.dataModelUpdate).dataModelUpdate.contents.find((e: any) => e.key === 'title').valueString).toBe('Consultar con SELECT')
     const wrong = await request('/curricula/sql-basico/journey/actions', 'POST', { userAction: { name: 'start_journey', surfaceId: `journey:${actor.id}`, sourceComponentId: 'c', timestamp: new Date().toISOString(), context: {} } }, learner)
     expect(wrong.status).toBe(400)
+  })
+})
+
+describe('generación de currículos como trabajos', () => {
+  type Gen = import('./curriculum-jobs').CurriculumGenerator
+  const waitFor = async (cookie: string, id: string, status: string) => {
+    for (let i = 0; i < 200; i++) {
+      const job = (await (await request(`/curricula/jobs/${id}`, 'GET', undefined, cookie)).json()).job
+      if (job.status === status) { await portal.curriculumJobs.idle(); return job }
+      await Bun.sleep(10)
+    }
+    throw new Error(`el trabajo no llegó a ${status}`)
+  }
+
+  test('el docente lo solicita, consulta el estado y el alumno no puede', async () => {
+    const seen: Array<Parameters<Gen>[1]> = []
+    const generator: Gen = async (_db, input) => { seen.push(input); return { docId: 'sql@abc123def456', def: { id: 'sql' } as never, dossierCached: false } }
+    portal = new Portal(db, undefined, generator)
+    const admin = await institution(), teacherCookie = await teacher(admin), studentCookie = await student(teacherCookie)
+
+    expect((await request('/curricula/generate', 'POST', { topic: 'SQL básico', audience: 'adulto' }, studentCookie)).status).toBe(403)
+    expect((await request('/curricula/generate', 'POST', { topic: 'x', audience: 'adulto' }, teacherCookie)).status).toBe(422)
+
+    const response = await request('/curricula/generate', 'POST', { topic: '  SQL   básico ', audience: 'adulto', research: false }, teacherCookie)
+    expect(response.status).toBe(202)
+    const { job } = await response.json()
+    expect(job.topic).toBe('SQL básico')
+
+    const done = await waitFor(teacherCookie, job.id, 'done')
+    expect(done).toMatchObject({ docId: 'sql@abc123def456', curriculumId: 'sql', audience: 'adulto', research: false })
+    expect(seen[0]).toMatchObject({ topic: 'SQL básico', ageBand: 'adulto', research: false, runContext: { ageBand: 'adulto' } })
+    expect((await request(`/curricula/jobs/${job.id}`, 'GET', undefined, studentCookie)).status).toBe(403)
+    expect((await (await request('/curricula/jobs', 'GET', undefined, teacherCookie)).json()).jobs).toHaveLength(1)
+  })
+
+  test('un fallo queda registrado con un mensaje acotado y no tumba el servicio', async () => {
+    portal = new Portal(db, undefined, async () => { throw new Error('modelo no disponible '.repeat(40)) })
+    const admin = await institution()
+    const { job } = await (await request('/curricula/generate', 'POST', { topic: 'Cocina molecular', audience: 'adulto' }, admin)).json()
+    const failed = await waitFor(admin, job.id, 'failed')
+    expect(failed.error.length).toBeLessThanOrEqual(300)
+    expect(failed.error).toContain('modelo no disponible')
+  })
+
+  test('la misma solicitud activa no se duplica', async () => {
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let calls = 0
+    portal = new Portal(db, undefined, async () => { calls++; await gate; return { docId: 'a@1', def: { id: 'a' } as never } })
+    const admin = await institution()
+    const first = (await (await request('/curricula/generate', 'POST', { topic: 'Álgebra', audience: 'adolescencia' }, admin)).json()).job
+    const second = (await (await request('/curricula/generate', 'POST', { topic: 'álgebra', audience: 'adolescencia' }, admin)).json()).job
+    expect(second.id).toBe(first.id)
+    release()
+    await waitFor(admin, first.id, 'done')
+    expect(calls).toBe(1)
+  })
+
+  test('un trabajo "running" huérfano tras un reinicio se marca fallido', async () => {
+    portal = new Portal(db, undefined, async () => ({ docId: 'z@1', def: { id: 'z' } as never }))
+    await institution()
+    const institutionId = (await db.collection<{ institutionId: string }>('hl_installation').get('main'))!.doc.institutionId
+    const admin = (await portal.accounts.byUsername('admin.ia'))!
+    await db.collection('hl_curriculum_jobs').put('huerfano', {
+      institutionId, requestedBy: admin.id, topic: 'Huérfano', audience: 'adulto', language: 'es', research: true,
+      status: 'running', createdAt: new Date().toISOString(), startedAt: new Date().toISOString(),
+    })
+    const view = await portal.curriculumJobs.get(admin, 'huerfano')
+    expect(view?.status).toBe('failed')
+    expect(view?.error).toContain('reinicio')
   })
 })

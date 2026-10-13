@@ -20,9 +20,6 @@ import {
   // Content — structured output
   generarExplicacionTool,
   generarEjercicioTool,
-  generarQuizTool,
-  generarSvgTool,
-  generarFramesGifTool,
   generarInfografiaTool,
   generarImagenTool,
   // Evaluation — structured output
@@ -38,9 +35,6 @@ export const AGENT_EXECUTABLE_TOOLS: Record<string, Tool[]> = {
   [AGENT_IDS.coordinator]:  [planificarProgramaTool, delegarEnjambreTool, revisarProgramaTool, buscarEnHiveLearnTool, repararNodoCompletoTool, actualizarPromptAgenteTool],
   [AGENT_IDS.explanation]:  [generarExplicacionTool],
   [AGENT_IDS.exercise]:     [generarEjercicioTool],
-  [AGENT_IDS.quiz]:         [generarQuizTool],
-  [AGENT_IDS.svg]:          [generarSvgTool],
-  [AGENT_IDS.gif]:          [generarFramesGifTool],
   [AGENT_IDS.infographic]:  [generarInfografiaTool],
   [AGENT_IDS.image]:        [generarImagenTool],
   [AGENT_IDS.evaluation]:   [generarEvaluacionTool],

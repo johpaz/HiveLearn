@@ -78,3 +78,30 @@ export function askJev(
   questions: Record<string, JevQuestion>,
   options?: { fetcher?: typeof fetch; signal?: AbortSignal; jev?: JevOption },
 ): Promise<JevResult | null>
+
+/** `callLLM` del SDK: un proveedor, una llamada. No lanza: un fallo vuelve como `stop_reason: "error"`. */
+export interface SdkLLMCallOptions {
+  provider: string
+  model: string
+  apiKey: string
+  baseUrl?: string
+  numCtx?: number
+  numGpu?: number
+  messages: unknown[]
+  tools?: unknown[]
+  temperature?: number
+  maxTokens?: number
+  onToken?: (token: string) => void
+  signal?: AbortSignal
+  thinking?: { enabled: boolean; budget_tokens?: number }
+}
+export interface SdkLLMResponse {
+  content: string
+  tool_calls?: Array<{ id: string; type: 'function'; thought_signature?: string; function: { name: string; arguments: string } }>
+  stop_reason: 'stop' | 'tool_calls' | 'max_tokens' | 'error'
+  usage?: { input_tokens: number; output_tokens: number; thinking_tokens?: number }
+  reasoning_content?: string
+  thinking_content?: string
+  error?: { message: string; status?: number; modelUnavailable?: boolean }
+}
+export function callLLM(options: SdkLLMCallOptions): Promise<SdkLLMResponse>

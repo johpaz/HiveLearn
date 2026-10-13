@@ -23,7 +23,7 @@ import { createEvaluarRespuestaTool } from '../tools/coordinator/evaluar-respues
 import { calificarRespuestaTool } from '../tools/evaluation/calificar-evaluacion.tool'
 import type { StudentAction } from '../tools/coordinator/enviar-interaccion.tool'
 import type { LeccionCompletada } from '../tools/coordinator/completar-leccion.tool'
-import type { NodoLesson, StudentProfile, FeedbackOutput } from '../types'
+import type { NodoLesson, FeedbackOutput } from '../types'
 import { logger } from '../utils/logger'
 
 const log = logger.child('lesson-delivery')

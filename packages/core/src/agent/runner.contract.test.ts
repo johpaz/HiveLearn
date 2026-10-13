@@ -25,6 +25,7 @@ import { closeSdkEngine } from './sdk/bootstrap'
 import { hiveAgentsBase, isLocalEndpoint, resolveOracleOption } from './sdk/oracle'
 import type { RunContext } from './policy/age-policy'
 import { _resetToolBridgeForTests } from './sdk/tools'
+import { _resetFallbackStateForTests, isModelDown, markModelDown } from './fallback'
 
 type ChatRequest = { tools?: Array<{ function: { name: string } }>; messages: Array<{ role: string; content?: unknown }> }
 type Reply = { content?: string | null; tool?: { name: string; args: object } }
@@ -194,6 +195,56 @@ for (const engine of ['legacy', 'sdk'] as const) {
   })
 }
 
+describe('retención de datos del motor sdk', () => {
+  const MARK = 'ZZ-RESPUESTA-ALUMNO-7731'
+
+  /** Texto del alumno que queda en cualquier colección de `sdk-db` (las del SDK que guardan datos de corridas). */
+  async function leftovers(): Promise<string[]> {
+    const storage = await import('@johpaz/hive-sdk/storage')
+    const found: string[] = []
+    for (const name of ['traces', 'usageRecords', 'reflections', 'summaries', 'memory', 'conversations', 'conversationThreads', 'agentRuns', 'taskRuns', 'scratchpad', 'narrationEvents']) {
+      const rows = await (await (storage.col as unknown as (n: string) => Promise<{ scan(o?: object): Promise<Array<{ doc: unknown }>> }>)(name)).scan({})
+      if (rows.some(r => JSON.stringify(r.doc).includes(MARK))) found.push(name)
+    }
+    return found
+  }
+
+  test('tras varias corridas no queda texto del alumno en sdk-db', async () => {
+    process.env.HIVELEARN_AGENT_ENGINE = 'sdk'
+    for (let i = 0; i < 3; i++) {
+      script = [{ tool: { name: 'generar_ficha', args: { titulo: `ficha ${i}` } } }]
+      await run([structuredNoExec], `El alumno respondió: ${MARK} (${i})`)
+    }
+    expect(await leftovers()).toEqual([])
+  }, 60_000)
+
+  test('también se purga cuando la corrida falla', async () => {
+    process.env.HIVELEARN_AGENT_ENGINE = 'sdk'
+    script = [{ content: '' }, { content: '' }, { content: '' }]
+    await run([structuredNoExec], `El alumno respondió: ${MARK} (falla)`).catch(() => {})
+    expect(await leftovers()).toEqual([])
+  }, 60_000)
+
+  test('el barrido por edad elimina trazas y usos vencidos y respeta los recientes', async () => {
+    process.env.HIVELEARN_AGENT_ENGINE = 'sdk'
+    const { initSdkEngine } = await import('./sdk/bootstrap')
+    await initSdkEngine()
+    const storage = await import('@johpaz/hive-sdk/storage')
+    const traces = await (storage.col as unknown as (n: string) => Promise<{ put(id: string, doc: object): Promise<unknown>; get(id: string): Promise<unknown> }>)('traces')
+    const now = Date.now()
+    const base = { thread_id: 't', agent_id: 'a', agent_name: 'a', tool_used: null, input_summary: MARK, output_summary: '', success: true, error_message: null, duration_ms: 1, tokens_used: 1 }
+    await traces.put('old-1', { ...base, id: 'old-1', created_at: now - 48 * 3_600_000 })
+    await traces.put('new-1', { ...base, id: 'new-1', created_at: now - 3_600_000 })
+    const { sweepSdkData } = await import('./sdk/retention')
+    expect(await sweepSdkData(now)).toBeGreaterThanOrEqual(1)
+    expect(await traces.get('old-1')).toBeUndefined()
+    expect(await traces.get('new-1')).toBeDefined()
+    expect(await leftovers()).toEqual(['traces'])
+    // limpieza para no contaminar otras pruebas
+    await (traces as unknown as { delete(id: string): Promise<boolean> }).delete('new-1')
+  }, 60_000)
+})
+
 describe('oráculo Kev/Jev', () => {
   test('isLocalEndpoint distingue loopback y redes privadas de internet', () => {
     expect(isLocalEndpoint('http://localhost:8080/v1/systemone')).toBe(true)
@@ -319,4 +370,78 @@ describe('política de proveedores por edad en runHiveLearnAgent', () => {
     const error = await run([structuredNoExec], 'tarea', ADULT).catch(e => e)
     expect((error as AgentExecutionError).code).toBe('provider_not_allowed')
   })
+})
+
+describe('respaldo de modelo', () => {
+  const settings = { providerId: 'caido', modelId: 'm', imageProviderId: 'caido', imageModelId: 'm', audioProviderId: 'caido', audioModelId: 'm', voice: '', allowRemoteProviders: true, allowRemoteForMinors: false, fallbackProviderId: 'respaldo', fallbackModelId: 'contract-model' }
+
+  async function setup(fallbackBaseUrl: string, withFallback = true) {
+    const db = getDb()
+    const openai = (await db.collection<Record<string, unknown>>('providers').get('openai'))!.doc
+    await db.collection('providers').put('caido', { ...openai, name: 'Caído', base_url: 'http://127.0.0.1:1/v1' })
+    await db.collection('providers').put('respaldo', { ...openai, name: 'Respaldo', base_url: fallbackBaseUrl })
+    const agent = (await db.collection<Record<string, unknown>>('hl_agents').get(AGENT))!
+    await db.collection('hl_agents').put(AGENT, { ...agent.doc, provider_id: 'caido' })
+    await db.collection('hl_installation').put('main', { institutionId: 'inst-fb', name: 'Colegio' })
+    const { fallbackProviderId, fallbackModelId, ...withoutFallback } = settings
+    await db.collection('hl_portal_settings').put('inst-fb', withFallback ? settings : withoutFallback)
+    _resetFallbackStateForTests()
+  }
+
+  afterAll(async () => {
+    const db = getDb()
+    const agent = (await db.collection<Record<string, unknown>>('hl_agents').get(AGENT))!
+    await db.collection('hl_agents').put(AGENT, { ...agent.doc, provider_id: 'openai' })
+    await db.collection('hl_installation').delete('main')
+    _resetFallbackStateForTests()
+  })
+
+  for (const engine of ['legacy', 'sdk'] as const) {
+    test(`motor ${engine}: con el principal caído usa el respaldo y entrega el resultado`, async () => {
+      process.env.HIVELEARN_AGENT_ENGINE = engine
+      await setup(`http://localhost:${server.port}/v1`)
+      script = [{ tool: { name: 'generar_ficha', args: { titulo: 'con respaldo' } } }]
+      const result = await run([structuredNoExec], 'tarea', ADULT)
+      expect(JSON.parse(result)).toEqual({ titulo: 'con respaldo' })
+      expect(requests.length).toBe(1)
+      expect(isModelDown('caido', 'contract-model')).toBe(true)
+    }, 60_000)
+
+    test(`motor ${engine}: un menor NO puede caer a un respaldo remoto`, async () => {
+      process.env.HIVELEARN_AGENT_ENGINE = engine
+      await setup('https://api.example-llm.com/v1')
+      script = [{ tool: { name: 'generar_ficha', args: { titulo: 'x' } } }]
+      const error = await run([structuredNoExec], 'tarea', MINOR).catch(e => e)
+      expect(error).toBeInstanceOf(AgentExecutionError)
+      expect((error as AgentExecutionError).code).toBe('provider_not_allowed')
+      expect(requests.length).toBe(0)
+    }, 60_000)
+  }
+
+  test('sin respaldo configurado el fallo del principal se propaga', async () => {
+    process.env.HIVELEARN_AGENT_ENGINE = 'legacy'
+    await setup(`http://localhost:${server.port}/v1`, false)
+    const error = await run([structuredNoExec], 'tarea', ADULT).catch(e => e)
+    expect(error).toBeInstanceOf(Error)
+    expect(requests.length).toBe(0)
+  }, 60_000)
+
+  test('el principal caído se salta durante la ventana de enfriamiento', async () => {
+    process.env.HIVELEARN_AGENT_ENGINE = 'legacy'
+    await setup(`http://localhost:${server.port}/v1`)
+    markModelDown('caido', 'contract-model')
+    const realFetch = globalThis.fetch
+    let primaryHits = 0
+    globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      if (String((input as Request)?.url ?? input).includes('127.0.0.1:1/')) primaryHits++
+      return realFetch(input, init)
+    }) as typeof fetch
+    try {
+      script = [{ tool: { name: 'generar_ficha', args: { titulo: 'directo' } } }]
+      expect(JSON.parse(await run([structuredNoExec], 'tarea', ADULT))).toEqual({ titulo: 'directo' })
+    } finally {
+      globalThis.fetch = realFetch
+    }
+    expect(primaryHits).toBe(0)
+  }, 60_000)
 })

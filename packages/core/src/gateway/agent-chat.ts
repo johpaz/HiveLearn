@@ -172,15 +172,3 @@ export function closeAgentChatWS(ws: ServerWebSocket<{ path: string; search?: st
   if (sessions.delete(ws)) log.info("agent-chat closed")
 }
 
-/** Export para tests/uso interno — devuelve ID HL del agente. */
-export function resolveHlAgentId(agentIdGame: GameHiveAgentId): string {
-  return GAME_AGENT_TO_HL[agentIdGame]
-}
-
-/**
- * Devuelve system prompt del agente + sufijo conversacional.
- * Útil para construir conversaciones ad-hoc sin WS (p.ej. fallback HTTP).
- */
-export function withConversationSuffix(prompt: string): string {
-  return `${prompt}${CONVERSATION_SUFFIX}`
-}

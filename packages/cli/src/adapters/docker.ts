@@ -14,14 +14,7 @@ import type {
   GatewayConfig,
   ValidationResult,
 } from "./types";
-import {
-  getHiveDir,
-  getDefaultPaths,
-  loadEnvFile,
-  mergeEnv,
-  expandPath,
-  waitForHttpPort,
-} from "./config";
+import { getHiveDir, getDefaultPaths, loadEnvFile, mergeEnv, waitForHttpPort } from "./config"
 import { PORTS } from "./types";
 
 /**

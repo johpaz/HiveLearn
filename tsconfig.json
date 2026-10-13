@@ -6,19 +6,13 @@
     "paths": {
       "@johpaz/hivelearn-core": ["./packages/core/src/index.ts"],
       "@johpaz/hivelearn-core/*": ["./packages/core/src/*"],
-      "@johpaz/hivelearn-ui": ["./packages/hivelearn-ui/src/main.tsx"],
-      "@johpaz/hivelearn-ui/*": ["./packages/hivelearn-ui/src/*"],
       "@johpaz/hivelearn-cli": ["./packages/cli/src/index.ts"],
-      "@johpaz/hivelearn-cli/*": ["./packages/cli/src/*"],
-      "@johpaz/hivelearn-tts": ["./packages/tts/src/index.ts"],
-      "@johpaz/hivelearn-tts/*": ["./packages/tts/src/*"]
+      "@johpaz/hivelearn-cli/*": ["./packages/cli/src/*"]
     }
   },
   "files": [],
   "references": [
     { "path": "./packages/core" },
-    { "path": "./packages/hivelearn-ui" },
-    { "path": "./packages/cli" },
-    { "path": "./packages/tts" }
+    { "path": "./packages/cli" }
   ]
 }

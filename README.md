@@ -4,9 +4,8 @@ Plataforma institucional de formación en inteligencia artificial. La interfaz e
 
 ## Requisitos y arranque
 
-- Bun **1.4.2**; HiveDB **0.5.0** instalado por el workspace.
-- UI independiente en `packages/hivelearn-ui`: React, Vite 8 y TypeScript 7.
-- Escritorio independiente en `packages/hivelearn-desktop`: instalador Tauri con UI, gateway y HiveDB incluidos. El usuario final no instala herramientas de desarrollo ni introduce tokens técnicos.
+- Bun **1.4.2**; HiveDB **0.7.0** y `@johpaz/hive-sdk` **0.7.3** instalados por el workspace (el SDK ya no incluye DAG ni enjambre por roles; HiveLearn tampoco usa ninguno).
+- Este repositorio contiene el núcleo (`packages/core`), el CLI (`packages/cli`) y la UI web (`packages/hivelearn-ui`: React 19, Vite 8 y Three.js). El escritorio vive fuera del workspace y consume el gateway por HTTP/WebSocket.
 
 ```bash
 bun install
@@ -14,7 +13,15 @@ bun run build:ui
 HIVELEARN_HOST=127.0.0.1 bun run dev:server
 ```
 
-Abre `http://127.0.0.1:8787`. En el primer acceso se configuran la institución y el primer administrador sin tokens ni contraseñas predeterminadas. Después del alta, la ruta de configuración queda cerrada. Para desarrollar la UI: `bun run dev:ui` con el gateway activo.
+Abre `http://127.0.0.1:8787`. En el primer acceso se configuran la institución y el primer administrador sin tokens ni contraseñas predeterminadas. Después del alta, la ruta de configuración queda cerrada. Para desarrollar la UI: `bun run dev:ui` (Vite en :5173 con proxy al gateway en :8787; reescribe `Origin` para pasar la comprobación de origen).
+
+## Interfaz web (`packages/hivelearn-ui`)
+
+- **Portada** con escena WebGL (Three.js): un panal de hexágonos que reacciona al cursor y un grafo de nodos flotantes. Respeta `prefers-reduced-motion` (cuadro fijo), se pausa con la pestaña oculta y, sin WebGL, cae a un degradado CSS. three.js se carga en un chunk aparte para que el texto pinte primero.
+- **Acceso:** ingresar (alumno/docente/administrador), activar con código, crear cuenta de adulto (muestra el código de recuperación una sola vez), recuperar contraseña y, en la primera ejecución, configurar la institución.
+- **Configuración** (administrador): *APIs y proveedores* (clave por proveedor, que nunca vuelve al navegador, y activar/desactivar), *Modelos de los agentes* (proveedor y modelo por agente) y *Política y respaldo* (modelos por defecto, proveedores remotos, oráculo, registro autónomo y modelo de respaldo).
+- Habla con el portal (`/api/portal/*`, cookie de sesión) y, para proveedores y agentes, con `/api/providers` y `/api/hivelearn/agents`, que aceptan la sesión de administrador.
+- Guardar los valores por defecto aplica el modelo a **todos** los agentes (comportamiento del portal); las elecciones por agente se hacen después.
 
 ## Perfiles y recorrido
 
@@ -32,13 +39,9 @@ La plantilla contiene `nickname,nombre,tipo_documento,documento,edad,grupo`. El 
 bun run typecheck
 bun test
 bun run build
-bun run build:desktop
-bun run test:webview
 ```
 
-`bun test` ejecuta pruebas unitarias e integración con HiveDB temporal. Las pruebas gráficas web son optativas: `test:webview` usa Bun.WebView y requiere Chrome/Chromium en el equipo de desarrollo. El shell Tauri tiene pruebas Rust independientes en `packages/hivelearn-desktop/src-tauri`.
-
-En Fedora, `bun run build:desktop` genera `packages/hivelearn-desktop/src-tauri/target/release/bundle/rpm/HiveLearn-0.1.0-1.x86_64.rpm`. El RPM contiene el shell, el gateway compilado, la UI y el binding de HiveDB; el gestor de paquetes resuelve GTK/WebKitGTK durante la instalación.
+`bun test` ejecuta pruebas unitarias e integración con HiveDB temporal.
 
 ## Configuración y documentación
 
@@ -65,6 +68,10 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 
 - El SDK usa una base **separada** (`sdk-db` y `sdk-home`, junto a la de HiveLearn). Se puede mover con `HIVELEARN_SDK_DB_PATH` y `HIVELEARN_SDK_HOME`.
 - **Oráculo Kev/Jev:** se activa solo si hay API key del proveedor `hiveagents` (Kev) o `openrouter` (Jev). Se apaga con `oracleEnabled: false` en la configuración institucional, y con `allowRemoteProviders: false` solo se admite un endpoint local o de red privada. Del turno solo viaja el objetivo de la tarea; instrucciones, historial y resultados de tools no se comparten.
+- **Proveedores LLM:** `agent/llm-client.ts` resuelve la configuración (base de HiveLearn + llavero) y llama a `callLLM` del SDK para openai, anthropic, gemini, mistral, groq, openrouter, deepseek, kimi, nvidia y qwen (con sus reintentos con backoff). Tres adaptadores propios en `agent/llm-providers/` se conservan porque llevan ajustes medidos que el SDK no tiene: `hiveagents` (`chat_template_kwargs.enable_thinking` en la raíz del cuerpo —el SDK lo manda en `extra_body`, que el backend ignora— y Qwen 3.x sin razonamiento por omisión), `ollama` (`think:false` con reintento, rescate de razonamiento sin respuesta) y `local-llama` (arranque del servidor local, tools en el prompt). `thinking` ya llega a los proveedores en ambos motores.
+- **Resiliencia del reparto:** cada intento de un trabajo tiene su propia señal de cancelación (`AbortController`): al agotarse el tiempo (`HIVELEARN_JOB_TIMEOUT_MS`) se corta la petición y no queda una segunda ejecución en paralelo. Los reintentos esperan con backoff exponencial y jitter; no se reintentan los bloqueos de política ni los 4xx (salvo 408/429). Con `model_not_mounted` se reintenta una vez y, si persiste, se corta el resto de la ronda y la ronda final no se intenta.
+- **Modelo de respaldo:** `fallbackProviderId` y `fallbackModelId` en la configuración institucional. Si el principal no está disponible (modelo no montado, 5xx, sin conexión) y aún no se ejecutó ninguna tool, la corrida se repite una vez con el respaldo —que pasa por la misma política por edad, así que un menor no cae a un proveedor remoto— y el principal se salta 60 s.
+- **Retención de datos:** el SDK guarda en `sdk-db` un resumen de la tarea (respuestas del alumno) en `traces`. HiveLearn borra las trazas de cada corrida al terminar y barre por edad `traces`, `usageRecords` y `reflections` al arrancar y cada hora (`HIVELEARN_SDK_RETENTION_HOURS`, 24 por defecto). `usageRollups` (solo agregados) se conserva.
 - Con el motor `sdk` el servidor cierra ordenadamente al recibir `SIGINT`/`SIGTERM`.
 - **Verificado con HiveAgents (Qwen3.5-9B, 2026-10-10):** ambos motores generan un currículo con tool calling (45–57 s), completan una lección interactiva (30–43 s) y el investigador web produce un dossier real (3 fuentes, 9 afirmaciones, ~200 s). Con Qwen el razonamiento va **apagado por defecto** (`chat_template_kwargs.enable_thinking`): una respuesta corta pasa de 14 s a 1,4 s; actívalo con `thinking.enabled = true`.
 - **Kev como oráculo de decisiones** (`agent/kev/`): consultas cerradas (elegir o probabilidad) de ~0,1 s por pregunta. Sin oráculo (sin clave, política, caída) todo cae a una ruta determinista; el sistema nunca depende de él.
@@ -80,7 +87,9 @@ El motor predeterminado es el loop propio (`legacy`). Con `HIVELEARN_AGENT_ENGIN
 - Un id canónico no puede ser ocupado por un currículo generado, y la aprobación comprueba el hash del contenido.
 - Progreso por `(alumno, currículo)` en `hl_curriculum_progress` (`institutional/curriculum-progress.ts`): el diagnóstico y los dominios llevan el hash del contenido, así que un currículo que cambia no hereda progreso. El dominio solo lo otorga un docente y solo en currículos `canonical` o `reviewed`.
 - Rutas del portal: `GET /curricula`, `POST /curricula/:docId/approve` (docente/admin), `GET|POST /curricula/:id/diagnostic`, `GET /curricula/:id/route` y `POST /students/:id/curricula/:id/reviews`. Un alumno no ve ni trabaja un currículo sin revisar. El currículo de IA conserva sus rutas históricas.
-- `HiveLearnSwarm.run(perfil, meta, { curriculum, dossier })` valida el blueprint contra la definición del tema. **Pendiente:** el recorrido guiado A2UI (`journey`) y los complementos siguen siendo solo de IA.
+- **Generar desde el portal** (docente/admin): `POST /api/portal/curricula/generate` `{topic, audience, language?, research?}` encola un trabajo persistente (`hl_curriculum_jobs`, uno a la vez, máx. 3 activos por institución, repetidos no se duplican) y responde 202 con el id; `GET /curricula/jobs/:id` (y `GET /curricula/jobs`) informa `queued|running|done|failed` y, al terminar, `docId`/`curriculumId`. Con `research` (por defecto) el investigador arma un dossier y el arquitecto solo puede citar sus fuentes. El resultado nace `generated` y se aprueba con `POST /curricula/:docId/approve`. Un trabajo que quedó `running` por un reinicio se marca `failed` en vez de repetirse solo.
+- **Sesiones sobre ese currículo:** `runHiveLearnSession(perfil, meta, { curriculumId })` y `POST /api/hivelearn/generate` con `curriculumId` cargan la definición y su dossier vigente (primero el de la banda del alumno); un currículo sin revisar se practica pero no acredita. Un id inexistente responde 404.
+- `HiveLearnSwarm.run(perfil, meta, { curriculum, dossier })` valida el blueprint contra la definición del tema. El recorrido guiado A2UI de otros temas ya está en `GET|POST /curricula/:id/journey`; los complementos (`supplements`) siguen siendo solo de IA.
 
 ### Investigador web
 

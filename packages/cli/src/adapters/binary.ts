@@ -8,7 +8,7 @@
 
 import { spawn, execSync } from "node:child_process";
 import * as path from "node:path";
-import { existsSync, readFileSync, unlinkSync, chmodSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs"
 import type {
   InstallationAdapter,
   InstallationConfig,

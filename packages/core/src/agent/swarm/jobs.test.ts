@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { mergeRounds, resultsOf, runRound, type Job, type JobExecutor } from './jobs'
+import { classifyJobError, mergeRounds, resultsOf, runRound, type Job, type JobExecutor } from './jobs'
 import { buildWorkPlan } from './work-plan'
 import { AGENT_IDS } from '../registry'
 
 const job = (id: string, extra: Partial<Job> = {}): Job => ({ id, agentId: 'a', name: id, taskDescription: id, ...extra })
-const base = { sessionId: 's', coordinatorId: 'c' }
+const base = { sessionId: 's', coordinatorId: 'c', backoff: { initialMs: 5, maxMs: 10 } }
 
 describe('runRound', () => {
   test('respeta el tope de concurrencia y recoge todos los resultados', async () => {
@@ -59,6 +59,73 @@ describe('runRound', () => {
   })
 })
 
+describe('cancelación y resiliencia', () => {
+  test('al agotarse el tiempo se aborta la señal del intento y no hay dos ejecuciones simultáneas', async () => {
+    let active = 0, peak = 0
+    const signals: AbortSignal[] = []
+    const executor: JobExecutor = {
+      execute: (_j, _p, _t, signal) => new Promise<string>((resolve, reject) => {
+        signals.push(signal!)
+        active++; peak = Math.max(peak, active)
+        signal!.addEventListener('abort', () => { active--; reject(new Error('abortado')) }, { once: true })
+        if (signals.length >= 2) { active--; resolve('ok') }
+      }),
+    }
+    const r = await runRound([job('a', { maxRetries: 1 })], { ...base, executor, timeoutMs: 30 })
+    expect(r.success).toBe(true)
+    expect(signals).toHaveLength(2)
+    expect(signals[0].aborted).toBe(true)
+    expect(peak).toBe(1)
+  })
+
+  test('un error fatal (política de edad) no se reintenta', async () => {
+    let calls = 0
+    const executor: JobExecutor = { execute: async () => { calls++; throw Object.assign(new Error('bloqueado'), { code: 'provider_not_allowed' }) } }
+    const r = await runRound([job('a', { maxRetries: 3 })], { ...base, executor })
+    expect(calls).toBe(1)
+    expect(r.failed[0].error).toBe('bloqueado')
+  })
+
+  test('modelo no montado: un reintento y se corta el resto de la ronda sin pedirle más trabajo', async () => {
+    const started: string[] = []
+    const executor: JobExecutor = {
+      execute: async j => {
+        started.push(j.id)
+        throw new Error('HTTP 503 {"error":"model_not_mounted"}')
+      },
+    }
+    const r = await runRound([job('a', { maxRetries: 3 }), job('b'), job('c'), job('d')], { ...base, executor, concurrency: 1 })
+    expect(started).toEqual(['a', 'a'])
+    expect(r.completed).toHaveLength(0)
+    expect(r.failed).toHaveLength(4)
+    expect(r.failed.every(j => j.error!.includes('model_not_mounted'))).toBe(true)
+  })
+
+  test('cancelar la ronda aborta el trabajo en curso y no arranca los pendientes', async () => {
+    const started: string[] = []
+    const controller = new AbortController()
+    const executor: JobExecutor = {
+      execute: (j, _p, _t, signal) => new Promise<string>((_, reject) => {
+        started.push(j.id)
+        signal!.addEventListener('abort', () => reject(new Error('cancelado')), { once: true })
+        setTimeout(() => controller.abort(), 10)
+      }),
+    }
+    const r = await runRound([job('a'), job('b')], { ...base, executor, concurrency: 1, signal: controller.signal, timeoutMs: 5_000 })
+    expect(started).toEqual(['a'])
+    expect(r.failed.map(j => j.id).sort()).toEqual(['a', 'b'])
+  })
+
+  test('classifyJobError', () => {
+    expect(classifyJobError(new Error('tiempo agotado'))).toBe('transient')
+    expect(classifyJobError(Object.assign(new Error('x'), { status: 429 }))).toBe('transient')
+    expect(classifyJobError(Object.assign(new Error('x'), { status: 400 }))).toBe('fatal')
+    expect(classifyJobError(Object.assign(new Error('x'), { status: 503 }))).toBe('transient')
+    expect(classifyJobError(new Error('model_not_mounted'))).toBe('model_down')
+    expect(classifyJobError(Object.assign(new Error('x'), { code: 'missing_tool_call' }))).toBe('transient')
+  })
+})
+
 describe('buildWorkPlan', () => {
   const nodo = (id: string, tipoPedagogico: string, tipoVisual: string) => ({
     id, titulo: id, concepto: id, tipoPedagogico, tipoVisual, nivel: 'principiante', rangoEdad: 'adulto', estado: 'disponible', xpRecompensa: 10,
@@ -74,5 +141,17 @@ describe('buildWorkPlan', () => {
     expect(plan.finalJobs.map(j => j.id)).toEqual(['evaluation'])
     // Ningún trabajo declara dependencias: el orden lo da la ronda.
     expect(JSON.stringify(plan)).not.toContain('deps')
+  })
+})
+
+describe('runWorkPlan', () => {
+  test('si el modelo cae en la ronda de nodos, la ronda final no se intenta', async () => {
+    const started: string[] = []
+    const executor: JobExecutor = { execute: async j => { started.push(j.id); throw new Error('model_not_mounted') } }
+    const { runWorkPlan } = await import('./jobs')
+    const r = await runWorkPlan({ nodeJobs: [job('n1', { maxRetries: 2 })], finalJobs: [job('final')] }, { ...base, executor })
+    expect(started).toEqual(['n1', 'n1'])
+    expect(r.modelDown).toBe(true)
+    expect(r.failed.map(j => j.id)).toEqual(['n1', 'final'])
   })
 })

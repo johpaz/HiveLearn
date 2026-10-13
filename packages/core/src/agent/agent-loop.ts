@@ -37,6 +37,8 @@ export interface AgentLoopOptions {
   temperature?: number
   /** Razonamiento del modelo en esta corrida; sin indicar, lo decide el proveedor (Qwen/Gemma: apagado/encendido). */
   thinking?: boolean
+  /** Cancela la corrida: se corta la petición en curso y no se inicia otra iteración. */
+  signal?: AbortSignal
   /** Contexto para validación pedagógica */
   validationContext?: {
     agenteId: string
@@ -99,6 +101,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<string> {
   ]
 
   for (let i = 0; i < maxIter; i++) {
+    if (opts.signal?.aborted) throw new AgentExecutionError('aborted', 'Corrida cancelada')
     const response = await callLLM({
       providerId: opts.providerConfig.provider || 'ollama',
       modelId: opts.providerConfig.model || 'gemma4-e4b',
@@ -106,6 +109,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<string> {
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       maxTokens: opts.maxTokens ?? 2048,
       temperature: opts.temperature ?? 0.3,
+      signal: opts.signal,
       ...(opts.thinking === undefined ? {} : { thinking: { enabled: opts.thinking } }),
       ...opts.providerConfig,
     })

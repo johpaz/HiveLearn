@@ -6,7 +6,6 @@ import type {
   LessonProgram, NodoLesson, NodoContenido, GamificacionOutput, EvaluacionOutput,
   PerfilAdaptacion, RangoEdad, TipoPedagogico, TipoVisual, EstadoNodo, NivelPrevio
 } from '../types'
-import { nodeCache } from '../cache/NodeCache'
 import { logger } from '../utils/logger'
 
 const log = logger.child('orchestrator')

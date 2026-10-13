@@ -3,16 +3,7 @@ import { homedir } from "os"
 import { extname, join } from "path"
 import { logger } from "../../utils/logger"
 import { LessonPersistence } from "../../storage/LessonPersistence"
-import {
-  BIN_DIR,
-  MODELS_DIR,
-  ensureModelAssets,
-  findInstalledLlamaCppCLI,
-  getMMProjPath,
-  getModelPath,
-  installLlamaCppCLI,
-  type ModelId,
-} from "./downloader"
+import { ensureModelAssets, findInstalledLlamaCppCLI, getMMProjPath, getModelPath, installLlamaCppCLI, type ModelId } from "./downloader"
 import { getModelConfig } from "./models"
 
 const log = logger.child("llm-local:runtime")

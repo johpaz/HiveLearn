@@ -16,7 +16,7 @@ import { LessonPersistence } from '../../storage/LessonPersistence'
 import { logger } from '../../utils/logger'
 import { hlSwarmEmitter } from '../../events/swarm-events'
 import type { StudentProfile, PerfilAdaptacion, LessonProgram, SwarmProgress } from '../../types'
-import { runRound, mergeRounds, resultsOf, type DelegationResult, type JobSummary } from './jobs'
+import { runWorkPlan, type DelegationResult, type JobSummary } from './jobs'
 import { buildWorkPlan } from './work-plan'
 import { buildLessonProgram, buildNodosBase } from '../orchestrator'
 import { evaluateProgramSafety, summarizeReport } from '../../safety/content-safety'
@@ -233,16 +233,7 @@ export class HiveLearnSwarm {
       timestamp: Date.now(),
     })
 
-    // Consultar efectividad previa (non-critical)
     const persistence = new LessonPersistence()
-    let efectividadCtx = ''
-    try {
-      const intentSlug = meta.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 30)
-      const efectividad = await persistence.getTopicEffectiveness(intentSlug)
-      if (efectividad.nodosConMasFallas.length > 0) {
-        efectividadCtx = `\nDATOS PREVIOS sobre este tema: aprobación ${efectividad.nivelPromedioAprobacion}%. Nodos difíciles: ${efectividad.nodosConMasFallas.join(', ')}.`
-      }
-    } catch { /* non-critical */ }
 
     // ── Instrucción para el coordinador LLM ─────────────────────────────
     const now = new Date()
@@ -263,7 +254,7 @@ export class HiveLearnSwarm {
       `- estilo: ${perfilAdaptacion.estilo}`,
       `- tono: ${perfilAdaptacion.tono}`,
       ``,
-      `META DE APRENDIZAJE: "${meta}"${efectividadCtx}`,
+      `META DE APRENDIZAJE: "${meta}"`,
       `SESSION_ID: "${sessionId}"`,
       ``,
       `ACCIÓN REQUERIDA:`,
@@ -388,9 +379,7 @@ export class HiveLearnSwarm {
       sessionId,
       coordinatorId: AGENT_IDS.coordinator,
     }
-    const nodeRound = await runRound(workPlan.nodeJobs, roundOptions)
-    const finalRound = await runRound(workPlan.finalJobs, { ...roundOptions, priorResults: resultsOf(nodeRound) })
-    const fullResult = mergeRounds([nodeRound, finalRound])
+    const fullResult = await runWorkPlan(workPlan, roundOptions)
 
     log.info(`[coordinator-flow] reduced swarm finished. ${fullResult.completed.length} completed, ${fullResult.failed.length} failed`)
 

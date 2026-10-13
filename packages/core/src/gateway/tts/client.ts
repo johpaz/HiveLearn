@@ -35,17 +35,6 @@ export async function synthesize(
   }
 }
 
-export async function synthesizeToFile(
-  text: string,
-  outputPath: string,
-  voice?: string
-): Promise<boolean> {
-  const audio = await synthesize(text, voice)
-  if (!audio) return false
-  await Bun.write(outputPath, audio)
-  return true
-}
-
 export async function listVoices(): Promise<string[]> {
   try {
     const res = await fetch(`${TTS_URL}/voices`, {

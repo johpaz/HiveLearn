@@ -17,6 +17,7 @@ import { getAgentEngine } from './sdk/bootstrap'
 import { assertProviderAllowed, type RunContext } from './policy/age-policy'
 import { constitutionFor } from './policy/constitution'
 import { runViaSdk, SdkEngineUnsupportedError } from './sdk/run-agent'
+import { fallbackFor, isAvailabilityError, isModelDown, markModelDown } from './fallback'
 
 const log = logger.child('hl-runner')
 
@@ -35,21 +36,51 @@ export async function runHiveLearnAgent(opts: {
   maxIterations?: number
   /** Razonamiento del modelo en esta corrida (decidido por el oráculo por especialista). */
   thinking?: boolean
+  /** Aborta la corrida (tiempo agotado del trabajo o ronda cancelada). */
+  signal?: AbortSignal
   validationContext?: {
     rangoEdad?: string
     tema?: string
     nodoId?: string
   }
 }): Promise<string> {
-  const db = getDb()
-
-  const agentEntry = await db.collection<AgentDoc>('hl_agents').get(opts.agentId)
+  const agentEntry = await getDb().collection<AgentDoc>('hl_agents').get(opts.agentId)
   const agent = agentEntry?.doc
   if (!agent) throw new Error(`HiveLearn agent not found in DB: ${opts.agentId}`)
 
   // agents.model_id es el nombre real de la API (ej. "gemini-3-flash-preview")
-  const modelId = agent.model_id ?? 'llama3.2'
-  const providerId = agent.provider_id || 'ollama'
+  const primary = { providerId: agent.provider_id || 'ollama', modelId: agent.model_id ?? 'llama3.2' }
+  const fallback = await fallbackFor(primary)
+
+  // Se cuentan las tools ejecutadas: con efectos ya producidos no se cambia de modelo ni se repite la corrida.
+  let toolsExecuted = 0
+  const tools = opts.tools.map(tool => tool.execute
+    ? { ...tool, execute: (async (...args: Parameters<NonNullable<Tool['execute']>>) => { toolsExecuted++; return tool.execute!(...args) }) as Tool['execute'] }
+    : tool)
+  const run = (target: { providerId: string; modelId: string }) => runWithModel({ ...opts, tools }, agent, target)
+
+  if (fallback && isModelDown(primary.providerId, primary.modelId)) {
+    log.warn(`[hl-runner] ${primary.providerId}/${primary.modelId} marcado caído; usando respaldo ${fallback.providerId}/${fallback.modelId}`)
+    return run(fallback)
+  }
+  try {
+    return await run(primary)
+  } catch (error) {
+    if (!fallback || toolsExecuted > 0 || !isAvailabilityError(error)) throw error
+    markModelDown(primary.providerId, primary.modelId)
+    log.warn(`[hl-runner] ${opts.agentId}: ${primary.providerId}/${primary.modelId} no disponible (${(error as Error).message.slice(0, 120)}); respaldo ${fallback.providerId}/${fallback.modelId}`)
+    return run(fallback)
+  }
+}
+
+async function runWithModel(
+  opts: Parameters<typeof runHiveLearnAgent>[0],
+  agent: AgentDoc,
+  target: { providerId: string; modelId: string },
+): Promise<string> {
+  const modelId = target.modelId
+  const providerId = target.providerId
+  const db = getDb()
 
   const providerConfig = await resolveProviderConfig(providerId, modelId)
 
@@ -91,6 +122,7 @@ export async function runHiveLearnAgent(opts: {
         maxTokens: 2048,
         runContext: opts.runContext,
         thinking: opts.thinking,
+        signal: opts.signal,
         validationContext,
       })
     } catch (error) {
@@ -108,6 +140,7 @@ export async function runHiveLearnAgent(opts: {
     temperature: 0.3,
     maxIterations: opts.maxIterations,
     thinking: opts.thinking,
+    signal: opts.signal,
     validationContext,
   })
 }

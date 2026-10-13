@@ -1,4 +1,3 @@
-import * as p from "@clack/prompts";
 import { loadConfig } from "@hivelearn/core";
 
 export async function config(subcommand: string | undefined, args: string[]): Promise<void> {
@@ -42,7 +41,7 @@ function redactSecrets(obj: any, depth = 0): any {
 }
 
 async function showConfig(): Promise<void> {
-  const config = loadConfig();
+  const config = await loadConfig();
   console.log("\n⚙️  Configuración Actual (Redactada):\n");
   console.log(JSON.stringify(redactSecrets(config), null, 2));
   console.log();

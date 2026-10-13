@@ -71,11 +71,6 @@ export function resolveAgentVoice(agentId: GameHiveAgentId): string {
   return available[idx]!
 }
 
-export function resetAgentVoiceCache(): void {
-  cachedAvailable = null
-  cacheTs = 0
-}
-
 const VALID_IDS: GameHiveAgentId[] = [
   "coordinator", "content", "practice", "assessment",
   "image", "infographic", "audio", "gamification",

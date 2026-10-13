@@ -1,7 +1,7 @@
 import type { HiveDB } from '@johpaz/hive-db'
 import { Accounts, digest, type Account } from './accounts'
 import { Learning } from './learning'
-import { readSettings } from './settings'
+import { readProviderSecret, readSettings } from './settings'
 import { isMinorAge } from './age'
 
 export interface SupplementJob {
@@ -65,8 +65,7 @@ export class Supplements {
     if (!node) throw new Error('Competencia no encontrada')
     const ollama = settings.providerId === 'ollama'
     url.pathname = ollama ? '/api/chat' : `${url.pathname.replace(/\/$/, '')}/chat/completions`
-    let apiKey: string | undefined
-    if (typeof provider.portal_secret_name === 'string') apiKey = await Bun.secrets.get({ service: 'hivelearn-institution', name: provider.portal_secret_name }) ?? undefined
+    const apiKey = await readProviderSecret(provider)
     return { url: url.href, ollama, model: settings.modelId!, apiKey, prompt: `Eres un tutor de IA. Complementa el material canónico con una explicación y una práctica breve, máximo 250 palabras. No acredites dominio ni inventes fuentes. No solicites datos personales ni incluyas juegos, XP o premios. El texto será mostrado como complemento generado, sujeto a revisión docente.\nVersión: ${route.version}\nCompetencia: ${JSON.stringify(node)}\nContexto: ${route.guidance.context}\nSupervisión: ${route.guidance.supervision}` }
   }
   async formativeFeedback(actor: Account, nodeId: string, response: string, context: { interest?: string; learningMode?: string } = {}) {

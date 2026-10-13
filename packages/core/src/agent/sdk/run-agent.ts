@@ -20,6 +20,7 @@ import { AgentExecutionError } from '../errors'
 import { validatePedagogicalContent } from '../validation/pedagogical-validation'
 import { initSdkEngine } from './bootstrap'
 import { resolveOracleOption } from './oracle'
+import { purgeRunTraces } from './retention'
 import type { RunContext } from '../policy/age-policy'
 import { bindRunTools } from './tools'
 
@@ -44,6 +45,8 @@ export function isSdkProvider(provider: string): boolean {
 }
 
 export interface SdkRunOptions {
+  /** Aborta la corrida: corta el loop del SDK y no se reintenta. */
+  signal?: AbortSignal
   agentId: string
   systemPrompt: string
   taskDescription: string
@@ -208,6 +211,7 @@ export async function runViaSdk(opts: SdkRunOptions): Promise<string> {
     return await executeWithRetry(opts, runKey, sdkAgentId)
   } finally {
     await removeSdkAgent(sdkAgentId)
+    await purgeRunTraces(sdkAgentId)
   }
 }
 
@@ -218,7 +222,9 @@ async function executeWithRetry(opts: SdkRunOptions, runKey: string, sdkAgentId:
   let task = opts.taskDescription
   const attempts = hasTools ? 2 : 1
   for (let attempt = 0; attempt < attempts; attempt++) {
+    if (opts.signal?.aborted) throw new AgentExecutionError('aborted', 'Corrida cancelada')
     const outcome = await runOnce(opts, task, runKey, sdkAgentId)
+    if (opts.signal?.aborted && outcome.final === null) throw new AgentExecutionError('aborted', 'Corrida cancelada')
     if (outcome.error) throw outcome.error
     if (outcome.final !== null) return outcome.final
 
@@ -254,6 +260,10 @@ async function runOnce(opts: SdkRunOptions, task: string, runKey: string, sdkAge
   const state: RunState = { final: null, error: null }
   const controller = new AbortController()
   const mutex = new Mutex()
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort()
+    else opts.signal.addEventListener('abort', () => controller.abort(), { once: true })
+  }
 
   const finish = (value: string) => {
     state.final = value

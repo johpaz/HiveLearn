@@ -6,7 +6,7 @@
  * Ideal para el chat de onboarding donde el agente necesita ver toda la conversación.
  */
 import { resolveProviderConfig, callLLM } from './llm-client'
-import type { LLMMessage, LLMToolDef, LLMToolCall } from './llm-client'
+import type { LLMMessage, LLMToolDef } from './llm-client'
 import { getDb } from '../storage/hivedb'
 import type { AgentDoc } from './registry'
 import { logger } from '../utils/logger'

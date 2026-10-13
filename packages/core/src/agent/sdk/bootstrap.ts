@@ -12,6 +12,7 @@ import { dirname, join } from 'path'
 import { closeDatabase, getDbPath } from '../../storage/hivedb'
 import { logger } from '../../utils/logger'
 import { installSdkToolPolicy, removeSdkToolPolicy } from '../policy/sdk-hook'
+import { startRetentionSweeper, stopRetentionSweeper } from './retention'
 
 const log = logger.child('hl-sdk-engine')
 
@@ -35,6 +36,20 @@ export function sdkPaths(): { home: string; dbPath: string } {
 }
 
 /**
+ * Fija HIVE_HOME y HIVE_DB_PATH hacia el directorio propio del SDK, sin abrir la base.
+ * Debe ejecutarse antes de importar cualquier módulo del SDK: su logger y su configuración se resuelven
+ * contra HIVE_HOME, que de otro modo sería la instalación de Hive (`~/.hive`).
+ */
+export function ensureSdkEnv(): { home: string; dbPath: string } {
+  const paths = sdkPaths()
+  mkdirSync(paths.home, { recursive: true })
+  mkdirSync(paths.dbPath, { recursive: true })
+  process.env.HIVE_HOME = paths.home
+  process.env.HIVE_DB_PATH = paths.dbPath
+  return paths
+}
+
+/**
  * Abre la base del SDK. Idempotente. Debe ejecutarse antes del primer uso del SDK.
  * HIVE_HOME y HIVE_DB_PATH se fijan SIEMPRE aquí: si el entorno apuntara a la instalación de Hive,
  * el SDK compartiría su base con otra aplicación.
@@ -42,15 +57,12 @@ export function sdkPaths(): { home: string; dbPath: string } {
 export function initSdkEngine(): Promise<void> {
   if (ready) return ready
   ready = (async () => {
-    const { home, dbPath } = sdkPaths()
-    mkdirSync(home, { recursive: true })
-    mkdirSync(dbPath, { recursive: true })
-    process.env.HIVE_HOME = home
-    process.env.HIVE_DB_PATH = dbPath
+    const { dbPath } = ensureSdkEnv()
 
     const storage = await import('@johpaz/hive-sdk/storage')
     await storage.ensureHiveDb({ specialists: 'none' })
     await installSdkToolPolicy()
+    startRetentionSweeper()
     started = true
     log.info(`SDK engine ready (db=${dbPath})`)
   })().catch((error) => {
@@ -66,15 +78,12 @@ export async function closeSdkEngine(): Promise<void> {
   started = false
   ready = null
   removeSdkToolPolicy()
+  stopRetentionSweeper()
   const agent = await import('@johpaz/hive-sdk/agent')
   const storage = await import('@johpaz/hive-sdk/storage')
   await agent.flushTraces()
   storage.closeHiveDb()
   log.info('SDK engine closed')
-}
-
-export function isSdkEngineStarted(): boolean {
-  return started
 }
 
 /**

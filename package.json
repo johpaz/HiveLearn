@@ -23,20 +23,16 @@
     "build": "bun run scripts/build.ts",
     "build:core": "bun build packages/core/src/index.ts --outdir dist/core --target bun --external @johpaz/hive-db && bun build packages/core/src/gateway/index.ts --bundle --outfile dist/server.js --target bun --external @johpaz/hive-db",
     "build:ui": "bun run --cwd packages/hivelearn-ui build",
-    "build:desktop": "bun run build:ui && bun run --cwd packages/hivelearn-desktop build",
     "build:cli": "bun run --cwd packages/cli build",
-    "copy:assets": "mkdir -p dist/ui && cp -r packages/hivelearn-ui/dist/* dist/ui/",
     "start": "bun run --cwd packages/cli src/index.ts start",
     "test": "bun test",
-    "test:webview": "bun run build:desktop && RUN_WEBVIEW_TESTS=1 bun test tests/webview.test.ts --timeout 30000",
     "typecheck": "bun run --filter '*' typecheck",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist"
   },
   "dependencies": {
-    "@johpaz/hive-db": "0.6.1"
+    "@johpaz/hive-db": "0.7.0"
   },
   "devDependencies": {
-    "@tailwindcss/typography": "^0.5.19",
     "@types/bun": "^1.4.1",
     "@types/node": "latest",
     "typescript": "^6.0.0"

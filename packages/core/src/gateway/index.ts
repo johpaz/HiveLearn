@@ -5,7 +5,7 @@
  * Sin dependencias del repositorio principal de Hive
  */
 import { resolvePort } from "../utils/port";
-import { initializeDatabase, getDb } from '../storage/hivedb'
+import { initializeDatabase } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
 import { logger } from '../utils/logger'
 import { createServer, setBunServer } from './server'
@@ -70,9 +70,7 @@ async function main() {
   log.info('   GET  /api/hivelearn/config')
   log.info('   POST /api/hivelearn/config')
   log.info('   POST /api/hivelearn/generate')
-  log.info('   POST /api/hivelearn/feedback')
   log.info('   GET  /api/hivelearn/sessions')
-  log.info('   GET  /api/hivelearn/session/:id')
   log.info('🔌 WebSocket endpoints:')
   log.info('   /hivelearn-onboarding')
   log.info('   /hivelearn-lesson')

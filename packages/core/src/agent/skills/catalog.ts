@@ -85,7 +85,6 @@ export const SKILLS: readonly PedagogySkill[] = [
 ]
 
 const byId = new Map(SKILLS.map(skill => [skill.id, skill]))
-export const skillById = (id: string): PedagogySkill | undefined => byId.get(id)
 
 export function eligibleSkills(agentId: string, band: AgeBand, ctx: SkillContext): { mandatory: PedagogySkill[]; optional: PedagogySkill[] } {
   const fits = SKILLS.filter(s => s.agents.includes(agentId) && (!s.bands || s.bands.includes(band)))

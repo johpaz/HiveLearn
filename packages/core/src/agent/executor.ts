@@ -83,7 +83,8 @@ export class HiveLearnExecutor implements JobExecutor {
   async execute(
     node: Job,
     depResults: Record<string, string>,
-    threadId: string
+    threadId: string,
+    signal?: AbortSignal,
   ): Promise<string> {
     // ── Reanudación: reutilizar output persistido de un run anterior ─────
     const prior = this.priorOutputs?.get(node.id)
@@ -151,6 +152,7 @@ export class HiveLearnExecutor implements JobExecutor {
         threadId,
         runContext: this.runContext,
         validationContext,
+        signal,
       })
     } catch (err) {
       status = 'failed'

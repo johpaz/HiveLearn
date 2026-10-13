@@ -5,8 +5,6 @@
  * 1. Perfil del alumno → hl_student_profiles
  * 2. Curriculum generado → hl_curricula
  * 3. Sesión de aprendizaje → hl_sessions
- * 4. Métricas de la sesión → hl_session_metrics
- * 5. Efectividad por nodo → hl_node_effectiveness
  *
  * Motor: @johpaz/hive-db (colecciones de documentos). Los IDs numéricos
  * autoincrementales del schema sqlite anterior se emulan con la colección
@@ -29,38 +27,6 @@ export interface SessionData {
   nodosCompletados: number
   evaluacionPuntaje: number | null
   completada: boolean
-}
-
-export interface SessionMetrics {
-  sessionId: string
-  alumnoId: string
-  curriculoId: number
-  tema: string
-  duracionRealSeg: number
-  nodosTotal: number
-  nodosCompletados: number
-  puntajeEvaluacion: number | null
-  intentosPorNodo: string
-  nodosDominados: string
-  nodosDificiles: string
-  logrosDesbloqueados: string
-  xpGanado: number
-  completada: boolean
-}
-
-export interface NodeEffectiveness {
-  id: string
-  nodoContentHash: string
-  agenteTipo: string
-  tema: string
-  tipoPedagogico: string
-  tipoVisual: string
-  rangoEdad: string
-  intentosPromedio: number
-  tasaAbandono: number
-  tiempoPromedio: number
-  vecesVisto: number
-  vecesCompletado: number
 }
 
 // ─── Document shapes (snake_case, igual que las columnas sqlite anteriores) ──
@@ -118,38 +84,6 @@ interface SessionDoc {
   last_node_id: string | null
   session_state_json: string | null
   created_at: string
-  updated_at: string
-}
-
-interface SessionMetricsDoc {
-  alumno_id: string
-  curriculo_id: number
-  tema: string
-  duracion_real_seg: number
-  nodos_total: number
-  nodos_completados: number
-  puntaje_evaluacion: number | null
-  intentos_por_nodo: string
-  nodos_dominados: string
-  nodos_dificiles: string
-  logros_desbloqueados: string
-  xp_ganado: number
-  completada: number
-  created_at: string
-}
-
-interface NodeEffectivenessDoc {
-  nodo_content_hash: string
-  agente_tipo: string
-  tema: string
-  tipo_pedagogico: string
-  tipo_visual: string
-  rango_edad: string
-  intentos_promedio: number
-  tasa_abandono: number
-  tiempo_promedio: number
-  veces_visto: number
-  veces_completado: number
   updated_at: string
 }
 
@@ -266,7 +200,7 @@ export class LessonPersistence {
 
   /** Verifica si los agentes de HiveLearn ya tienen provider/model configurados */
   async getHiveLearnProviderModel(): Promise<{ providerId: string; modelId: string } | null> {
-    const entry = await this.col<AgentDoc>('hl_agents').get('hl-profile-agent')
+    const entry = await this.col<AgentDoc>('hl_agents').get('hl-coordinator-agent')
 
     if (entry?.doc.provider_id && entry?.doc.model_id) {
       return { providerId: entry.doc.provider_id, modelId: entry.doc.model_id }
@@ -495,12 +429,6 @@ export class LessonPersistence {
     }
   }
 
-  async getSession(sessionId: string): Promise<SessionData | null> {
-    const entry = await this.col<SessionDoc>('hl_sessions').get(sessionId)
-    if (!entry) return null
-    return this.toSessionData(entry.id, entry.doc)
-  }
-
   async getActiveSession(alumnoId: string): Promise<SessionData | null> {
     const entries = await this.col<SessionDoc>('hl_sessions').findBy('alumno_id', alumnoId)
     const active = entries
@@ -513,58 +441,7 @@ export class LessonPersistence {
 
   // ─── Session Metrics ────────────────────────────────────────────────
 
-  async saveSessionMetrics(metrics: SessionMetrics): Promise<void> {
-    await this.col<SessionMetricsDoc>('hl_session_metrics').put(metrics.sessionId, {
-      alumno_id: metrics.alumnoId,
-      curriculo_id: metrics.curriculoId,
-      tema: metrics.tema,
-      duracion_real_seg: metrics.duracionRealSeg,
-      nodos_total: metrics.nodosTotal,
-      nodos_completados: metrics.nodosCompletados,
-      puntaje_evaluacion: metrics.puntajeEvaluacion,
-      intentos_por_nodo: metrics.intentosPorNodo,
-      nodos_dominados: metrics.nodosDominados,
-      nodos_dificiles: metrics.nodosDificiles,
-      logros_desbloqueados: metrics.logrosDesbloqueados,
-      xp_ganado: metrics.xpGanado,
-      completada: metrics.completada ? 1 : 0,
-      created_at: nowIso(),
-    })
-  }
-
   // ─── Node Effectiveness ─────────────────────────────────────────────
-
-  async trackNodeInteraction(nodoId: string, agenteTipo: string, tema: string, tipoPedagogico: string, tipoVisual: string, rangoEdad: string, completado: boolean, tiempoSeg: number): Promise<void> {
-    // Generar hash del contenido como ID
-    const contentHash = `${nodoId}-${agenteTipo}`
-    const col = this.col<NodeEffectivenessDoc>('hl_node_effectiveness')
-
-    const existing = await col.get(contentHash)
-
-    if (existing) {
-      await col.put(contentHash, {
-        ...existing.doc,
-        veces_visto: existing.doc.veces_visto + 1,
-        veces_completado: existing.doc.veces_completado + (completado ? 1 : 0),
-        updated_at: nowIso(),
-      })
-    } else {
-      await col.put(contentHash, {
-        nodo_content_hash: contentHash,
-        agente_tipo: agenteTipo,
-        tema,
-        tipo_pedagogico: tipoPedagogico,
-        tipo_visual: tipoVisual,
-        rango_edad: rangoEdad,
-        intentos_promedio: 1,
-        tasa_abandono: completado ? 0 : 1,
-        tiempo_promedio: tiempoSeg,
-        veces_visto: 1,
-        veces_completado: completado ? 1 : 0,
-        updated_at: nowIso(),
-      })
-    }
-  }
 
   // ─── Agent Output Traceability ─────────────────────────────────────
 
@@ -670,75 +547,7 @@ export class LessonPersistence {
 
   // ─── Student Responses ──────────────────────────────────────────────
 
-  async saveStudentResponse(sessionId: string, nodeId: string, tipoPedagogico: string, respuesta: string, feedbackJson: string, xpAwarded: number, esCorrecto: boolean): Promise<void> {
-    // Calculate attempt number
-    const prevEntries = await this.col<StudentResponseDoc>('hl_student_responses').scan({ prefix: `${sessionId}:` })
-    const prevCount = prevEntries.filter(e => e.doc.node_id === nodeId).length
-
-    const seq = await nextSessionSeq('hl_student_responses', sessionId)
-    await this.col<StudentResponseDoc>('hl_student_responses').put(`${sessionId}:${seq}`, {
-      session_id: sessionId,
-      node_id: nodeId,
-      attempt_num: prevCount + 1,
-      tipo_pedagogico: tipoPedagogico,
-      respuesta_texto: respuesta,
-      feedback_json: feedbackJson,
-      xp_awarded: xpAwarded,
-      es_correcto: esCorrecto ? 1 : 0,
-      created_at: nowIso(),
-    })
-
-    // Update node effectiveness
-    await this.updateNodeEffectiveness(nodeId, tipoPedagogico, esCorrecto)
-  }
-
-  async updateNodeEffectiveness(nodeId: string, tipoPedagogico: string, esCorrecto: boolean): Promise<void> {
-    const col = this.col<NodeEffectivenessDoc>('hl_node_effectiveness')
-    const existing = await col.get(nodeId)
-
-    if (existing) {
-      await col.put(nodeId, {
-        ...existing.doc,
-        veces_visto: existing.doc.veces_visto + 1,
-        veces_completado: existing.doc.veces_completado + (esCorrecto ? 1 : 0),
-        updated_at: nowIso(),
-      })
-    } else {
-      await col.put(nodeId, {
-        nodo_content_hash: nodeId,
-        agente_tipo: 'feedback',
-        tema: '',
-        tipo_pedagogico: tipoPedagogico,
-        tipo_visual: 'text_card',
-        rango_edad: '',
-        intentos_promedio: 1,
-        tasa_abandono: esCorrecto ? 0 : 1,
-        tiempo_promedio: 0,
-        veces_visto: 1,
-        veces_completado: esCorrecto ? 1 : 0,
-        updated_at: nowIso(),
-      })
-    }
-  }
-
-  /** Agrega un logro a la lista de logros desbloqueados de la sesión */
-  async saveLogro(sessionId: string, logroId: string): Promise<void> {
-    const col = this.col<SessionDoc>('hl_sessions')
-    const existing = await col.get(sessionId)
-    if (!existing) return
-
-    const logros: string[] = JSON.parse(existing.doc.logros_json ?? '[]')
-    if (!logros.includes(logroId)) {
-      logros.push(logroId)
-      await col.put(sessionId, {
-        ...existing.doc,
-        logros_json: JSON.stringify(logros),
-        updated_at: nowIso(),
-      })
-    }
-  }
-
-  // ─── Pause / Restore ────────────────────────────────────────────────
+    // ─── Pause / Restore ────────────────────────────────────────────────
 
   async pauseSession(sessionId: string, lastNodeId: string | null, stateJson: string): Promise<void> {
     const col = this.col<SessionDoc>('hl_sessions')
@@ -1030,37 +839,6 @@ export class LessonPersistence {
     return { alumnoId, perfil: perfilFinal, meta: metaFinal }
   }
 
-  /**
-   * Verifica si hay un onboarding incompleto para un alumno.
-   * Permite reanudar donde se quedó.
-   */
-  async hasIncompleteOnboarding(alumnoId: string): Promise<boolean> {
-    const rows = await this.col<OnboardingProgressDoc>('hl_onboarding_progress').findBy('alumno_id', alumnoId)
-    return rows.some(r => !r.doc.completed)
-  }
-
-  /**
-   * Obtiene la sesión de onboarding incompleta para reanudar.
-   */
-  async getIncompleteOnboardingSession(alumnoId: string): Promise<string | null> {
-    const rows = await this.col<OnboardingProgressDoc>('hl_onboarding_progress').findBy('alumno_id', alumnoId)
-    const incomplete = rows
-      .filter(r => !r.doc.completed)
-      .sort((a, b) => (b.doc.updated_at ?? '').localeCompare(a.doc.updated_at ?? ''))
-    return incomplete[0]?.doc.session_id ?? null
-  }
-
-  async rateSession(sessionId: string, rating: number, comentario?: string): Promise<void> {
-    const col = this.col<SessionDoc>('hl_sessions')
-    const existing = await col.get(sessionId)
-    if (!existing) return
-    await col.put(sessionId, {
-      ...existing.doc,
-      rating,
-      rating_comentario: comentario ?? null,
-    })
-  }
-
   /** Devuelve sesión + curriculo completo (nodos_json) para el gateway */
   async getSessionWithCurriculum(sessionId: string): Promise<(SessionData & { nodosJson: string; topicSlug: string | null; metaAlumno: string }) | null> {
     const session = await this.col<SessionDoc>('hl_sessions').get(sessionId)
@@ -1125,67 +903,7 @@ export class LessonPersistence {
     return max + 1
   }
 
-  async getTopicEffectiveness(topicSlug: string | null): Promise<{ nodosConMasFallas: string[]; nivelPromedioAprobacion: number }> {
-    if (!topicSlug) return { nodosConMasFallas: [], nivelPromedioAprobacion: 0 }
-
-    const rows = await this.col<NodeEffectivenessDoc>('hl_node_effectiveness').findBy('tema', topicSlug)
-
-    const rate = (doc: NodeEffectivenessDoc) => doc.veces_completado / Math.max(doc.veces_visto, 1)
-
-    const worst = [...rows]
-      .sort((a, b) => rate(a.doc) - rate(b.doc))
-      .slice(0, 5)
-
-    const nodosConMasFallas = worst
-      .filter(r => r.doc.veces_visto > 2)
-      .map(r => r.doc.tipo_pedagogico)
-
-    const avgRate = rows.length > 0
-      ? rows.reduce((acc, r) => acc + rate(r.doc), 0) / rows.length
-      : null
-
-    return {
-      nodosConMasFallas,
-      nivelPromedioAprobacion: avgRate != null ? Math.round(avgRate * 100) : 0,
-    }
-  }
-
   // ─── Metrics Dashboard ──────────────────────────────────────────────
-
-  async getAggregateMetrics(): Promise<Record<string, any>> {
-    const metricsEntries = await this.col<SessionMetricsDoc>('hl_session_metrics').scan()
-    const all = metricsEntries.map(e => e.doc)
-    const completed = all.filter(m => m.completada === 1)
-
-    const avg = (values: number[]): number | null =>
-      values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null
-
-    const avgScore = avg(completed.map(m => m.puntaje_evaluacion).filter((v): v is number => v != null))
-    const avgXP = avg(completed.map(m => m.xp_ganado))
-
-    const effectiveness = await this.col<NodeEffectivenessDoc>('hl_node_effectiveness').scan()
-    const hardestNodes = effectiveness
-      .map(e => e.doc)
-      .filter(d => d.veces_visto > 0)
-      .map(d => ({
-        tema: d.tema,
-        tipo_pedagogico: d.tipo_pedagogico,
-        veces_visto: d.veces_visto,
-        veces_completado: d.veces_completado,
-        tasa_abandono: 1.0 - (d.veces_completado / d.veces_visto),
-      }))
-      .sort((a, b) => b.tasa_abandono - a.tasa_abandono)
-      .slice(0, 10)
-
-    return {
-      totalLessons: all.length,
-      completedLessons: completed.length,
-      completionRate: all.length > 0 ? (completed.length / all.length * 100).toFixed(1) : 0,
-      avgScore: avgScore != null ? Number(avgScore).toFixed(1) : null,
-      avgXP: avgXP != null ? Math.round(avgXP) : 0,
-      hardestNodes,
-    }
-  }
 
   async getSessionsByAlumno(alumnoId: string): Promise<SessionData[]> {
     const entries = await this.col<SessionDoc>('hl_sessions').findBy('alumno_id', alumnoId)

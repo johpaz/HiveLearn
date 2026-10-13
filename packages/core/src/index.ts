@@ -35,7 +35,7 @@ export type { CalificacionOutput, CalificacionInput } from './tools/evaluation/c
 // ─── Contrato del juego de plataformas (LevelSpec) ───────────────────────────
 export type { LevelSpec, WorldSpec, ConceptBlock, BossSpec, BossQuestion, WorldTheme } from './lesson/levelSpec'
 export { lessonToLevelSpecs, themeForSlug, WORLD_THEMES } from './lesson/levelSpec'
-export type { SessionData, SessionMetrics } from './storage/LessonPersistence'
+export type { SessionData } from './storage/LessonPersistence'
 
 // ─── Swarm y sesión ───────────────────────────────────────────────────────────
 export { HiveLearnSwarm } from './agent/swarm/HiveLearnSwarm'
@@ -71,7 +71,6 @@ export { hlSwarmEmitter } from './events/swarm-events'
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 export { nodeCache } from './cache/NodeCache'
-export { cacheInvalidator } from './cache/CacheInvalidator'
 
 // ─── Storage init (llamar desde el server al arrancar) ────────────────────────
 export { initHiveLearnStorage } from './storage/init'
@@ -92,7 +91,7 @@ export { loadConfig, getHiveDir, resetConfig } from './config/loader'
 export type { HiveLearnConfig } from './config/loader'
 
 // ─── Gateway Manager ──────────────────────────────────────────────────────────
-export { startGateway, stopGateway, getGatewayStatus, getServerInstance } from './gateway/manager'
+export { startGateway } from './gateway/manager'
 export { registerEmbeddedUI } from './gateway/server'
 
 // ─── Tipos de herramientas ────────────────────────────────────────────────────

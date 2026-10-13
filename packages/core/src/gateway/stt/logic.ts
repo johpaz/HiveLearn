@@ -10,7 +10,7 @@
 
 import { homedir } from "os"
 import { join } from "path"
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs"
+import { existsSync, mkdirSync, writeFileSync } from "fs"
 
 const ROOT = join(homedir(), ".hivelearn", "stt")
 const STATUS_CACHE_MS = 30_000

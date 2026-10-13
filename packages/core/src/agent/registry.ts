@@ -1,7 +1,7 @@
 /**
- * Registry histórico de agentes HiveLearn.
- * El sistema mantiene varios agentes legacy en BD por compatibilidad,
- * pero el pipeline activo de generación usa solo el subconjunto reducido.
+ * Registro de agentes HiveLearn.
+ * Los agentes del pipeline legacy (profile, intent, structure, quiz, challenge, code, svg, gif) ya no
+ * existen: `registerHiveLearnAgents` borra sus filas de `hl_agents` (lista cerrada `RETIRED_AGENT_IDS`).
  *
  * Motor: @johpaz/hive-db — los agentes viven en la colección `hl_agents`.
  */
@@ -10,16 +10,8 @@ import type { Collection } from '@johpaz/hive-db'
 const HIVELEARN_PROVIDER_ID = 'ollama'
 const HIVELEARN_MODEL_ID = 'gemma4-e4b'
 import { COORDINATOR_PROMPT } from './coordinator.prompt'
-import { PROFILE_PROMPT } from './prompts/profile.prompt'
-import { INTENT_PROMPT } from './prompts/intent.prompt'
-import { STRUCTURE_PROMPT } from './prompts/structure.prompt'
 import { EXPLANATION_PROMPT } from './prompts/explanation.prompt'
 import { EXERCISE_PROMPT } from './prompts/exercise.prompt'
-import { QUIZ_PROMPT } from './prompts/quiz.prompt'
-import { CHALLENGE_PROMPT } from './prompts/challenge.prompt'
-import { CODE_PROMPT } from './prompts/code.prompt'
-import { SVG_PROMPT } from './prompts/svg.prompt'
-import { GIF_PROMPT } from './prompts/gif.prompt'
 import { INFOGRAPHIC_PROMPT } from './prompts/infographic.prompt'
 import { GAMIFICATION_PROMPT } from './prompts/gamification.prompt'
 import { EVALUATION_PROMPT } from './prompts/evaluation.prompt'
@@ -32,16 +24,8 @@ import { RESEARCHER_PROMPT } from './prompts/researcher.prompt'
 export const AGENT_IDS = {
   coordinator: 'hl-coordinator-agent',
   onboarding: 'hl-onboarding-agent',
-  profile: 'hl-profile-agent',
-  intent: 'hl-intent-agent',
-  structure: 'hl-structure-agent',
   explanation: 'hl-explanation-agent',
   exercise: 'hl-exercise-agent',
-  quiz: 'hl-quiz-agent',
-  challenge: 'hl-challenge-agent',
-  code: 'hl-code-agent',
-  svg: 'hl-svg-agent',
-  gif: 'hl-gif-agent',
   infographic: 'hl-infographic-agent',
   image: 'hl-image-agent',
   audio: 'hl-audio-agent',
@@ -81,16 +65,8 @@ export interface AgentDoc {
 const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.coordinator, name: 'HiveLearnCoordinator', description: 'Coordina el enjambre educativo completo', systemPrompt: COORDINATOR_PROMPT, maxIterations: 10 },
   { id: AGENT_IDS.onboarding, name: 'OnboardingAgent', description: 'Conversación inicial adaptativa para conocer al alumno', systemPrompt: ONBOARDING_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.profile, name: 'ProfileAgent', description: 'Construye el perfil de adaptación del alumno', systemPrompt: PROFILE_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.intent, name: 'IntentAgent', description: 'Extrae tema, nivel y tono de la meta del alumno', systemPrompt: INTENT_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.structure, name: 'StructureAgent', description: 'Diseña el esqueleto completo del programa de estudio', systemPrompt: STRUCTURE_PROMPT, maxIterations: 10 },
   { id: AGENT_IDS.explanation, name: 'ExplanationAgent', description: 'Genera explicaciones de conceptos (máx 70 palabras)', systemPrompt: EXPLANATION_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.exercise, name: 'ExerciseAgent', description: 'Crea ejercicios prácticos con pistas', systemPrompt: EXERCISE_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.quiz, name: 'QuizAgent', description: 'Legacy worker de quiz; reemplazado por AssessmentAgent en el pipeline activo', systemPrompt: QUIZ_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.challenge, name: 'ChallengeAgent', description: 'Diseña retos prácticos con pasos y criterios', systemPrompt: CHALLENGE_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.code, name: 'CodeAgent', description: 'Genera bloques de código (máx 15 líneas)', systemPrompt: CODE_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.svg, name: 'SVGAgent', description: 'Legacy worker visual; reemplazado por ImageAgent en el pipeline activo', systemPrompt: SVG_PROMPT, maxIterations: 3 },
-  { id: AGENT_IDS.gif, name: 'GifAgent', description: 'Legacy worker visual; reemplazado por ImageAgent en el pipeline activo', systemPrompt: GIF_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.infographic, name: 'InfographicAgent', description: 'Crea infografías con 3-5 secciones de datos clave', systemPrompt: INFOGRAPHIC_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.image, name: 'ImageAgent', description: 'Único worker visual del pipeline activo; genera apoyo visual educativo del nodo', systemPrompt: `Eres ImageAgent de HiveLearn. Usa SOLO la tool generar_imagen. Eres el único worker visual general del pipeline. Genera una imagen educativa clara y simple para el concepto indicado. Si no puedes producir bitmap real, crea una representación visual educativa equivalente y simple como fallback. Responde SOLO con una tool call.`, maxIterations: 3 },
   { id: AGENT_IDS.gamification, name: 'GamificationAgent', description: 'Asigna XP, logros y gamificación adaptada por edad', systemPrompt: GAMIFICATION_PROMPT, maxIterations: 3 },
@@ -102,6 +78,9 @@ const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.researcher, name: 'ResearcherAgent', description: 'Investiga un tema en la web y entrega un dossier de afirmaciones con fuentes', systemPrompt: RESEARCHER_PROMPT, maxIterations: 14 },
   { id: AGENT_IDS.safety, name: 'SafetyPolicyAgent', description: 'Verifica seguridad, edad, privacidad y consentimiento', systemPrompt: 'Revisa contenido educativo para edad, privacidad, sesgos y consentimiento. Señala bloqueos explícitamente.', maxIterations: 3 },
 ]
+
+/** Agentes retirados del pipeline: sus documentos en `hl_agents` se eliminan al registrar. Lista cerrada. */
+const RETIRED_AGENT_IDS = ['hl-profile-agent', 'hl-intent-agent', 'hl-structure-agent', 'hl-quiz-agent', 'hl-challenge-agent', 'hl-code-agent', 'hl-svg-agent', 'hl-gif-agent'] as const
 
 const ACTIVE_AGENT_IDS = new Set<string>([
   AGENT_IDS.coordinator,
@@ -126,6 +105,10 @@ function agentsCollection(): Collection<AgentDoc> {
 export async function registerHiveLearnAgents(): Promise<void> {
   const agents = agentsCollection()
   const now = nowIso()
+
+  for (const id of RETIRED_AGENT_IDS) {
+    if (await agents.get(id)) await agents.delete(id)
+  }
 
   // Upsert de cada agente conocido (INSERT ... ON CONFLICT DO UPDATE del schema anterior):
   // - name/description/system_prompt/max_iterations se refrescan siempre

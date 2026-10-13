@@ -5,7 +5,7 @@
  */
 
 import { resolvePort } from "../utils/port";
-import { initializeDatabase, getDb } from '../storage/hivedb'
+import { initializeDatabase } from '../storage/hivedb'
 import { initHiveLearnStorage } from '../storage/init'
 import { closeSdkEngine, installShutdownHandlers, startSdkEngineIfEnabled } from '../agent/sdk/bootstrap'
 import { logger } from '../utils/logger'
@@ -101,16 +101,3 @@ export async function stopGateway(): Promise<void> {
   log.info('✅ Gateway stopped')
 }
 
-/**
- * Check if gateway is running
- */
-export function getGatewayStatus(): boolean {
-  return isRunning
-}
-
-/**
- * Get the current server instance (for advanced usage)
- */
-export function getServerInstance(): ReturnType<typeof Bun.serve> | null {
-  return serverInstance
-}

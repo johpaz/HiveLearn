@@ -1,6 +1,6 @@
 import type { Tool } from '../../types/tool'
 import { buildWorkPlan } from '../../agent/swarm/work-plan'
-import { runRound, mergeRounds, resultsOf } from '../../agent/swarm/jobs'
+import { runWorkPlan } from '../../agent/swarm/jobs'
 import { prepareDelegation } from '../../agent/swarm/coordinator-delegation'
 import { buildLessonProgram } from '../../agent/orchestrator'
 import { AGENT_IDS } from '../../agent/registry'
@@ -102,9 +102,7 @@ export const delegarEnjambreTool: Tool = {
 
       const workPlan = buildWorkPlan(workInput, nodosBase)
       const roundOptions = { executor, concurrency: MAX_WORKERS, sessionId, coordinatorId: AGENT_IDS.coordinator }
-      const nodeRound = await runRound(workPlan.nodeJobs, roundOptions)
-      const finalRound = await runRound(workPlan.finalJobs, { ...roundOptions, priorResults: resultsOf(nodeRound) })
-      const fullResult = mergeRounds([nodeRound, finalRound])
+      const fullResult = await runWorkPlan(workPlan, roundOptions)
       log.info(`[delegar] done — ${fullResult.completed.length} completed, ${fullResult.failed.length} failed`)
 
       const program = buildLessonProgram({ delegation: fullResult, alumnoId, meta, sessionId, perfil })

@@ -9,7 +9,7 @@
  */
 
 import * as fs from "node:fs";
-import { getHiveDir, getDbPath } from "@hivelearn/core";
+import { getDbPath } from "@hivelearn/core"
 
 export async function migrate(): Promise<void> {
   console.log("\n🔄 Aplicando bootstrap de HiveDB (HiveLearn)...\n");

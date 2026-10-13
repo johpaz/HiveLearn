@@ -16,18 +16,3 @@ declare module 'openai' {
   }
 }
 
-declare module '@anthropic-ai/sdk' {
-  export default class Anthropic {
-    constructor(opts?: { apiKey?: string; baseURL?: string })
-    messages: {
-      create(opts: any): Promise<any>
-    }
-  }
-}
-
-declare module '@google/genai' {
-  export class GoogleAI {
-    constructor(apiKey: string)
-    // ...
-  }
-}

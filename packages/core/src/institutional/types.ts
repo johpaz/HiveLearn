@@ -8,6 +8,8 @@ export interface InstitutionSettings {
   allowRemoteProviders: boolean; allowRemoteForMinors: boolean
   /** Oráculo de decisiones (Kev/Jev). Activo cuando hay API key salvo que sea `false`. */
   oracleEnabled?: boolean
+  /** Modelo de respaldo si el principal no está disponible. Pasa por la misma política por edad. */
+  fallbackProviderId?: string; fallbackModelId?: string
   /** Permite que adultos (≥ 18) creen su propia cuenta de alumno sin invitación. Apagado por defecto. */
   allowSelfRegistration?: boolean
 }

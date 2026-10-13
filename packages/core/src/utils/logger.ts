@@ -330,10 +330,6 @@ export class ChildLogger {
     return this;
   }
 
-  setContext(context: Partial<LogMeta>): void {
-    this.correlationContext = { ...this.correlationContext, ...context };
-  }
-
   debug(message: string, meta?: unknown): void {
     this.parent.debug(this.prefix(message), this.mergeMeta(meta));
   }

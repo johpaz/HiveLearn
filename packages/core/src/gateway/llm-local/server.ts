@@ -4,16 +4,7 @@
 
 import type { ServerWebSocket } from "bun"
 import { detectGPU } from "./detector"
-import {
-  MODEL_CATALOG,
-  downloadModel,
-  findInstalledLlamaCppCLI,
-  installLlamaCppCLI,
-  isMMProjDownloaded,
-  isModelDownloaded,
-  listLocalModels,
-  type ModelId,
-} from "./downloader"
+import { MODEL_CATALOG, downloadModel, installLlamaCppCLI, isModelDownloaded, listLocalModels, type ModelId } from "./downloader"
 import {
   buildDataUrlForFile,
   getLocalLLMRuntimeStatus,

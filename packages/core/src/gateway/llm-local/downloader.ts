@@ -19,12 +19,6 @@ export const MODELS_DIR = join(ROOT, "models")
 export const ASSISTANTS_DIR = join(MODELS_DIR, "assistants")
 const LLAMA_CPP_DIR = join(BIN_DIR, "llama.cpp")
 
-export function ensureHiveDirs(): void {
-  mkdirSync(BIN_DIR, { recursive: true })
-  mkdirSync(MODELS_DIR, { recursive: true })
-  mkdirSync(ASSISTANTS_DIR, { recursive: true })
-}
-
 export type ModelId =
   | "e2b_Q4_K_XL"
   | "e4b_Q4_K_XL"

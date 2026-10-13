@@ -34,10 +34,6 @@ export function resolveStudentAction(sessionId: string, action: StudentAction): 
   return true
 }
 
-export function hasPendingAction(sessionId: string): boolean {
-  return pendingStudentResponse.has(sessionId)
-}
-
 export function cancelPendingAction(sessionId: string): void {
   const resolve = pendingStudentResponse.get(sessionId)
   if (resolve) {

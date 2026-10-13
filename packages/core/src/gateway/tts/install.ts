@@ -5,7 +5,7 @@
  * Solo descarga si no están ya presentes en packages/tts/bin/ y voices/
  */
 
-import { existsSync, mkdirSync, readdirSync, renameSync } from "fs"
+import { existsSync, readdirSync, renameSync } from "fs"
 import { homedir } from "os"
 import { join } from "path"
 import {
@@ -19,11 +19,6 @@ import {
 const ROOT = join(homedir(), ".hivelearn", "tts")
 const BIN_DIR = join(ROOT, "bin")
 const VOICES_DIR = join(ROOT, "voices")
-
-export function ensureTTSDirs() {
-  mkdirSync(BIN_DIR, { recursive: true })
-  mkdirSync(VOICES_DIR, { recursive: true })
-}
 
 export function checkTTSInstallation(): { installed: boolean; piper: boolean; voices: string[] } {
   const platform = detectPlatform()

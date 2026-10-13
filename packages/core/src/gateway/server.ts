@@ -4,13 +4,12 @@
  * Gateway independiente con rutas API, WebSocket y serving de UI
  */
 import { getDb } from '../storage/hivedb'
+import { findCurriculum } from '../institutional/curriculum-store'
 import { Portal, checkOrigin, sessionCookie } from '../institutional/portal'
-import { rangoEdadForAge } from '../institutional/age'
 import { LessonDeliverySession, LessonPersistence, runHiveLearnSession, updateHiveLearnAgentsProviderModel, hlSwarmEmitter } from '../index'
 import { getGenerationRun, listGenerationRuns, type GenerationRunStatus } from '../agent/run-store'
 import { logger } from '../utils/logger'
 import { encryptApiKey } from '../crypto/encrypt'
-import { decryptApiKey } from '../crypto/decrypt'
 import type { ServerWebSocket } from 'bun'
 import { join, extname } from 'path'
 import { existsSync } from 'fs'
@@ -37,9 +36,8 @@ import {
   closeAgentChatWS,
   isValidGameAgentId,
 } from './agent-chat'
-import type { LLMMessage } from '../agent/llm-client'
 import type { StudentProfile, SwarmTimelineEvent } from '../types'
-import { LEVEL_CATALOG, createDiagnostic, saveStudentIdentity } from '../institutional'
+import { LEVEL_CATALOG } from '../institutional'
 
 interface WSData {
   path: string
@@ -571,42 +569,6 @@ export function createServer(): Server {
 
       if (url.pathname === '/api/hivelearn/levels' && req.method === 'GET') {
         return addCorsHeaders(new Response(JSON.stringify({ levels: LEVEL_CATALOG, curriculumVersion: 'unesco-ai-v1' }), { status: 200, headers: { 'Content-Type': 'application/json' } }), req)
-      }
-
-      if (url.pathname === '/api/hivelearn/identity' && req.method === 'POST') {
-        try {
-          const body = await req.json() as Record<string, any>
-          for (const field of ['studentId', 'institutionId', 'accountId', 'nickname', 'displayName', 'legalName', 'documentType', 'documentNumber', 'age']) {
-            if (body[field] === undefined || body[field] === '') throw new Error(`${field} requerido`)
-          }
-          const identity = await saveStudentIdentity({
-            studentId: String(body.studentId),
-            institutionId: String(body.institutionId),
-            accountId: String(body.accountId),
-            nickname: String(body.nickname),
-            displayName: String(body.displayName),
-            legalName: String(body.legalName),
-            documentType: body.documentType,
-            documentNumber: String(body.documentNumber),
-            ageBand: body.ageBand ?? 'adulto',
-            role: 'student',
-          })
-          const { documentFingerprint: _fingerprint, documentCiphertext: _ciphertext, documentIv: _iv, ...publicIdentity } = identity
-          return addCorsHeaders(new Response(JSON.stringify({ ok: true, identity: publicIdentity }), { status: 201, headers: { 'Content-Type': 'application/json' } }), req)
-        } catch (e) {
-          return addCorsHeaders(new Response(JSON.stringify({ error: (e as Error).message }), { status: 400, headers: { 'Content-Type': 'application/json' } }), req)
-        }
-      }
-
-      if (url.pathname === '/api/hivelearn/diagnostic' && req.method === 'POST') {
-        try {
-          const body = await req.json() as { id?: string; studentId?: string; institutionId?: string; age?: number; answers?: any[]; curriculumVersion?: string }
-          if (!body.id || !body.studentId || !body.institutionId || typeof body.age !== 'number' || !Array.isArray(body.answers)) throw new Error('id, studentId, institutionId, age y answers son requeridos')
-          const diagnostic = await createDiagnostic({ id: body.id, studentId: body.studentId, institutionId: body.institutionId, age: body.age, answers: body.answers, curriculumVersion: body.curriculumVersion })
-          return addCorsHeaders(new Response(JSON.stringify({ ok: true, diagnostic }), { status: 201, headers: { 'Content-Type': 'application/json' } }), req)
-        } catch (e) {
-          return addCorsHeaders(new Response(JSON.stringify({ error: (e as Error).message }), { status: 400, headers: { 'Content-Type': 'application/json' } }), req)
-        }
       }
 
       // GET /api/providers
@@ -1225,6 +1187,7 @@ export function createServer(): Server {
             meta?: string
             /** Reanuda un run interrumpido: perfil/meta se cargan del run persistido */
             resumeSessionId?: string
+            curriculumId?: string
           }
 
           // Reanudación: cargar perfil/meta del run persistido
@@ -1243,6 +1206,15 @@ export function createServer(): Server {
             }
             perfil = perfil ?? JSON.parse(run.perfil_json)
             meta = meta ?? run.meta
+          }
+
+          const curriculumId: string | null = typeof body.curriculumId === 'string' && body.curriculumId.length <= 80 ? body.curriculumId : null
+          if (body.curriculumId !== undefined && curriculumId === null) {
+            return addCorsHeaders(new Response(JSON.stringify({ error: 'curriculumId inválido' }), { status: 400, headers: { 'Content-Type': 'application/json' } }), req)
+          }
+
+          if (curriculumId && !(await findCurriculum(getDb(), curriculumId))) {
+            return addCorsHeaders(new Response(JSON.stringify({ error: 'Currículo no encontrado' }), { status: 404, headers: { 'Content-Type': 'application/json' } }), req)
           }
 
           if (!perfil || !meta) {
@@ -1285,6 +1257,7 @@ export function createServer(): Server {
               const program = await runHiveLearnSession(perfil, meta, {
                 onProgress: (progress) => send({ type: 'progress', payload: progress }),
                 resumeSessionId: body.resumeSessionId,
+                curriculumId: curriculumId ?? undefined,
               })
               const persistence = new LessonPersistence()
               const curriculum = await persistence.getCurriculumBySessionId(program.sessionId)

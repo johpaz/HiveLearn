@@ -1,14 +1,8 @@
-import * as p from "@clack/prompts";
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import { loadConfig, getHiveDir, getDbPath } from "@hivelearn/core";
-import {
-  detectAdapter,
-  detectAllAdapters,
-  INSTALLATION_TYPE_NAMES,
-  type InstallationAdapter,
-} from "../adapters";
+import { detectAdapter, detectAllAdapters, type InstallationAdapter } from "../adapters"
 
 const getHiveDirConst = () => getHiveDir();
 const getPidFile = () => path.join(getHiveDirConst(), "gateway.pid");
