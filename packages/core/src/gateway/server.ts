@@ -11,6 +11,7 @@ import { getGenerationRun, listGenerationRuns, type GenerationRunStatus } from '
 import { logger } from '../utils/logger'
 import { encryptApiKey } from '../crypto/encrypt'
 import type { ServerWebSocket } from 'bun'
+import type { EngineDeps } from '../institutional/program/engine'
 import { join, extname } from 'path'
 import { existsSync } from 'fs'
 import { detectPlatform } from './tts/detect'
@@ -448,8 +449,9 @@ async function serveUIFile(pathname: string): Promise<Response | null> {
   return null
 }
 
-export function createServer(): Server {
-  const portal = new Portal(getDb())
+/** `programDeps` permite sustituir el planificador y el adaptador (pruebas de punta a punta sin modelo). */
+export function createServer(options: { programDeps?: Partial<EngineDeps> } = {}): Server {
+  const portal = new Portal(getDb(), undefined, undefined, options.programDeps)
   void portal.supplements.resume().catch(error => log.warn('No se pudieron reanudar complementos', { error: String(error) }))
   return {
     fetch: async (req: Request) => {

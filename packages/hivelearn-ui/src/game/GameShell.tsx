@@ -13,6 +13,18 @@ export function canPlayGame(): boolean {
   } catch { return false }
 }
 
+/** Solo con `localStorage['hivelearn.e2e'] = '1'`: deja a las pruebas de navegador leer el mundo y elegir una celda. */
+function exposeForE2E(scene: HiveWorld, world: () => WorldDescription | null, select: (id: string) => void) {
+  try {
+    if (localStorage.getItem('hivelearn.e2e') !== '1') return
+    ;(window as unknown as { __hive: unknown }).__hive = {
+      cells: () => (world()?.cells ?? []).filter(c => c.real).map(c => ({ id: c.id, kind: c.kind, level: c.level, visual: c.visual })),
+      select,
+      screenPosition: (id: string) => scene.screenPosition(id),
+    }
+  } catch { /* sin almacenamiento: no hay gancho */ }
+}
+
 const VISUAL_LABEL: Record<string, string> = {
   locked: 'Bloqueada', available: 'Pendiente', tried: 'Para reforzar', mastered: 'Lograda',
   ready: 'Lista para abrir', passed: 'Superada', hold: 'A reforzar', review: 'En revisión del docente',
@@ -52,6 +64,7 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
         fit()
         scene.setWorld(previousWorld.current ?? world)
         scene.start()
+        exposeForE2E(scene, () => previousWorld.current, id => setSelected(id))
       } catch { setFailed(true) }
     }).catch(() => setFailed(true))
     return () => {
@@ -150,7 +163,7 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
       </header>
 
       <div className="game__stage">
-        <canvas ref={canvasRef} className="game__canvas" role="img" aria-label="Mapa de tu programa: islas de celdas hexagonales" />
+        <canvas ref={canvasRef} className="game__canvas" data-testid="game-canvas" data-world-cells={world.cells.filter(c => c.real).length} role="img" aria-label="Mapa de tu programa: islas de celdas hexagonales" />
         <div className="game__tools">
           <button className="btn btn--ghost btn--sm" onClick={() => setOverview(o => !o)} aria-pressed={overview}>{overview ? 'Seguir mi isla' : 'Vista general'}</button>
         </div>

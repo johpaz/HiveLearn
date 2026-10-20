@@ -27,6 +27,7 @@
     "build:cli": "bun run --cwd packages/cli build",
     "start": "bun run --cwd packages/cli src/index.ts start",
     "test": "bun test",
+    "test:e2e": "bun run build:ui && RUN_WEBVIEW_TESTS=1 bun test tests/e2e",
     "typecheck": "bun run --filter '*' typecheck",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist"
   },

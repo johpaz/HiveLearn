@@ -144,6 +144,17 @@ export class HiveWorld {
     this.renderNow()
   }
 
+  /** Posición en pantalla (píxeles CSS del lienzo) de la parte superior de una celda; null si no existe o no se ve. */
+  screenPosition(cellId: string): { x: number; y: number } | null {
+    const a = this.cells.find(c => c.cell.id === cellId)
+    if (!a) return null
+    this.camera.updateMatrixWorld()
+    const p = new Vector3(a.cell.x, a.h, a.cell.z).project(this.camera)
+    if (p.z > 1 || Math.abs(p.x) > 1 || Math.abs(p.y) > 1) return null
+    const rect = this.canvas.getBoundingClientRect()
+    return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height }
+  }
+
   setOverview(on: boolean): void { this.overview = on; this.renderNow() }
 
   /** Reacción a una respuesta: destello de color y, si acertó, lluvia de miel. */
@@ -325,6 +336,8 @@ export class HiveWorld {
 
   private pickAt(): string | null {
     if (this.cells.length === 0) return null
+    // InstancedMesh.raycast descarta todo si su esfera de contorno quedó vacía (se calculó antes de colocar las celdas).
+    this.mesh.computeBoundingSphere()
     this.raycaster.setFromCamera(this.pointer, this.camera)
     const hit = this.raycaster.intersectObject(this.mesh)[0]
     if (!hit || hit.instanceId === undefined) return null

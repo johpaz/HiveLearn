@@ -50,6 +50,15 @@ Base temporal, clave leída del llavero del proyecto (no impresa), `HIVELEARN_AG
 - La política por defecto (`allowRemoteProviders: false`) bloquea Gemini en una institución instalada: hay que habilitarla en Configuración → Política y respaldo.
 - Catálogo de modelos de Gemini sincronizado en la base real: ~45 modelos actuales, con `gemini-3.8-flash`.
 
+## E2E de navegador con el juego (2026-10-20)
+`bun run test:e2e` (compila la UI y corre `tests/e2e` con `RUN_WEBVIEW_TESTS=1`). Gateway real con base temporal, planificador y adaptador simulados (`tests/e2e/fakes.ts`, sin modelo ni red) y Chromium dirigido por `Bun.WebView` (WebGL por swiftshader; `CHROME_PATH` o el Chromium de Playwright en `~/.cache/ms-playwright`). 7 escenarios en verde, con capturas en `artifacts/webview/e2e-*.png`:
+- **A** vista clásica completa; **B** juego de 3 niveles hasta «Programa terminado» (nota 100, pendiente de validación); **C** fallo del nivel 1 → refuerzo (plan de 4 niveles) → fin; **D** clic real (`Bun.WebView.click`) sobre el lienzo WebGL abre la celda correcta; **E** el docente valida desde la UI, cola vacía y bitácora `intent → … → validation`; **F** 401/403/409 y móvil 390x844 sin desborde; **G** sin WebGL cae a la vista clásica y «Cerrar sesión» libera al alumno.
+- `tests/e2e/program-api.test.ts` repite A–C y la validación contra el portal sin navegador y corre siempre en `bun test`.
+- **Bug encontrado por el E2E y corregido:** la esfera de contorno del `InstancedMesh` quedaba vacía, así que el raycast nunca devolvía celdas y no se podía elegir una celda con un clic en el 3D (solo con los chips).
+- **Hallazgos sin corregir (UX):** en el juego, el aviso «¡Nivel superado!» lo pisa «Tu programa se adaptó…»; y tras un refuerzo el aviso dice «nuevo nivel "Evaluación final"» en vez de nombrar el refuerzo (`diffWorlds` compara por índice).
+- El portal limita login/activación a 15 por minuto y por IP (en loopback todo sale por 127.0.0.1): el arnés evita logins por API innecesarios y espera si recibe 429.
+- `tests/webview.test.ts` (anterior) usa selectores de una UI previa (`[name=username]`, «Activar mi cuenta»): no se ejecutó ni se tocó.
+
 ## Prueba en vivo reproducible (`scripts/live-check.ts`)
 Contra un gateway en marcha y con sus proveedores configurados, sin que las claves pasen por el script (solo la API del portal):
 
