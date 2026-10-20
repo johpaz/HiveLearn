@@ -280,4 +280,26 @@ suite('E2E navegador: programa por niveles y juego', () => {
     await b.click('🔊 Silenciar')
     expect(JSON.parse(await b.eval<string>(`localStorage.getItem('hivelearn.audio')`)).muted).toBe(true)
   }, 120000)
+
+  test('I · joystick táctil: arrastrar la palanca mueve al dron y soltarla lo detiene', async () => {
+    await enter('palanca', 'game', true)
+    await b.eval(`localStorage.setItem('hivelearn.joystick', '1')`)
+    await createProgram()
+    await b.waitFor(`window.__hive && document.querySelector('[data-testid="joystick"]') !== null`, 'Palanca visible')
+    const where = () => b.eval<{ x: number; z: number }>(`window.__hive.dronePosition()`)
+    const fire = (type: string, dx: number, dy: number) => b.eval(`(() => { const el = document.querySelector('[data-testid="joystick"]'); const r = el.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2; el.dispatchEvent(new PointerEvent('${type}', { pointerId: 7, clientX: cx + ${dx}, clientY: cy + ${dy}, bubbles: true })); return true })()`)
+    let best = 0
+    for (const [dx, dy] of [[48, 0], [0, 48], [-48, 0], [0, -48]]) {
+      const from = await where()
+      await fire('pointerdown', dx!, dy!); await Bun.sleep(450); await fire('pointerup', 0, 0)
+      await Bun.sleep(300)
+      const to = await where()
+      best = Math.max(best, Math.hypot(to.x - from.x, to.z - from.z))
+    }
+    expect(best).toBeGreaterThan(0.4)
+    const rest = await where()
+    await Bun.sleep(400)
+    const later = await where()
+    expect(Math.hypot(later.x - rest.x, later.z - rest.z)).toBeLessThan(0.05)
+  }, 120000)
 })

@@ -312,3 +312,7 @@ textarea:focus-visible { border-color: var(--honey); outline-offset: 0; }
 .game__help { font-size: 0.85rem; margin: 0.5rem 0; }
 .game__help kbd { display: inline-block; min-width: 1.4em; padding: 0 0.35em; border: 1px solid var(--line, rgba(255, 255, 255, 0.25)); border-bottom-width: 2px; border-radius: 4px; font: inherit; font-size: 0.8em; text-align: center; }
 .game__canvas:focus-visible { outline: 2px solid var(--honey, #ffc933); outline-offset: 2px; }
+
+/* Palanca virtual (táctil) */
+.joystick { position: absolute; left: 0.9rem; bottom: 0.9rem; width: 112px; height: 112px; border-radius: 50%; border: 1px solid var(--line, rgba(255,255,255,.25)); background: rgba(10, 16, 28, 0.55); touch-action: none; display: grid; place-items: center; backdrop-filter: blur(4px); }
+.joystick__knob { width: 46px; height: 46px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #7dffd8, #22d3ee); box-shadow: 0 0 14px rgba(34, 211, 238, 0.7); }

@@ -6,6 +6,7 @@ import { buildWorld, diffWorlds, honeyOf, type WorldCell, type WorldDescription 
 import type { HiveWorld } from './HiveWorld'
 import { QUALITY_KEY, initialTier } from './quality'
 import { GameAudio } from './audio'
+import { joystickAxis } from './controller'
 import { speak, speechSupported, stopSpeaking } from './speech'
 
 /** ¿Este navegador puede dibujar el juego? (WebGL2 disponible y sin pedir movimiento reducido no es requisito: se adapta). */
@@ -52,6 +53,9 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
   const [muted, setMuted] = useState(audio.muted)
   const [announce, setAnnounce] = useState('')
   const [lowered, setLowered] = useState<string | null>(null)
+  const showJoystick = useMemo(() => {
+    try { return localStorage.getItem('hivelearn.joystick') === '1' || (window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) } catch { return false }
+  }, [])
 
   const world = useMemo(() => buildWorld(program), [program])
   const level = program.levels[program.currentLevel]
@@ -196,6 +200,7 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
       <div className="game__stage">
         <canvas ref={canvasRef} className="game__canvas" data-testid="game-canvas" data-world-cells={world.cells.filter(c => c.real).length} tabIndex={0}
           aria-label="Mapa de tu programa: estación con islas de celdas hexagonales y un dron que puedes mover" aria-describedby="game-help" />
+        {showJoystick && <Joystick onAxis={axis => worldRef.current?.setAxis(axis)} />}
         <div className="game__tools">
           <button className="btn btn--ghost btn--sm" onClick={() => setOverview(o => !o)} aria-pressed={overview}>{overview ? 'Seguir mi isla' : 'Vista general'}</button>
           <button className="btn btn--ghost btn--sm" aria-pressed={!muted} onClick={() => { const next = !muted; audio.setMuted(next); setMuted(next); if (!next) audio.sfx('select') }}>
@@ -252,6 +257,30 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
         <button className="btn btn--ghost" disabled={busy} onClick={() => void closeProgram()}>Cerrar sesión</button>
       </div>
     </section>
+  )
+}
+
+/** Palanca virtual para pantallas táctiles: arrastra el pulgar y el dron avanza hacia allá. */
+function Joystick({ onAxis }: { onAxis: (axis: { x: number; z: number }) => void }) {
+  const [knob, setKnob] = useState({ x: 0, y: 0 })
+  const origin = useRef<{ x: number; y: number } | null>(null)
+  const RADIUS = 48
+  const move = (event: React.PointerEvent) => {
+    if (!origin.current) return
+    let dx = event.clientX - origin.current.x
+    let dy = event.clientY - origin.current.y
+    const length = Math.hypot(dx, dy)
+    if (length > RADIUS) { dx = (dx / length) * RADIUS; dy = (dy / length) * RADIUS }
+    setKnob({ x: dx, y: dy })
+    onAxis(joystickAxis(dx, dy, RADIUS))
+  }
+  const release = () => { origin.current = null; setKnob({ x: 0, y: 0 }); onAxis({ x: 0, z: 0 }) }
+  return (
+    <div className="joystick" data-testid="joystick" role="group" aria-label="Palanca para mover el dron"
+      onPointerDown={e => { try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* puntero sintético */ } const r = e.currentTarget.getBoundingClientRect(); origin.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; move(e) }}
+      onPointerMove={move} onPointerUp={release} onPointerCancel={release}>
+      <div className="joystick__knob" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
+    </div>
   )
 }
 

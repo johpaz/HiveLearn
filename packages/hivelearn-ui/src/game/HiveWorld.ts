@@ -103,6 +103,7 @@ export class HiveWorld {
   private heading = 0
   private route: Vec2[] = []
   private readonly keys = new Set<string>()
+  private axis: Vec2 = { x: 0, z: 0 }
   private groundY = 0.5
   private activeIsland = -1
 
@@ -170,6 +171,9 @@ export class HiveWorld {
     canvas.addEventListener('keyup', this.handleKeyUp)
     canvas.addEventListener('blur', this.handleBlur)
   }
+
+  /** Joystick virtual (táctil): eje -1..1 que se suma al teclado. */
+  setAxis(axis: Vec2): void { this.axis = axis }
 
   setPickHandler(handler: (cellId: string | null) => void): void { this.handlers.pick = handler }
   setHandlers(handlers: WorldHandlers): void { this.handlers = { ...this.handlers, ...handlers } }
@@ -315,7 +319,8 @@ export class HiveWorld {
   private step(dt: number): void {
     const world = this.world
     // ── dron ──────────────────────────────────────────────────────────────────────────────
-    let input = keysToInput(this.keys)
+    const pressed = keysToInput(this.keys)
+    let input = { x: Math.max(-1, Math.min(1, pressed.x + this.axis.x)), z: Math.max(-1, Math.min(1, pressed.z + this.axis.z)) }
     if (input.x !== 0 || input.z !== 0) this.route = []
     let walkable = this.walkable
     let speed = 5.4

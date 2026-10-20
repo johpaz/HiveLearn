@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { buildWorld } from './layout'
-import { buildWalkable, focusCell, isWalkable, islandAt, keysToInput, routeToCell, stepMover, type Mover } from './controller'
+import { buildWalkable, focusCell, isWalkable, islandAt, joystickAxis, keysToInput, routeToCell, stepMover, type Mover } from './controller'
 import type { ProgramState } from '../types'
 
 const node = (id: string) => ({ id, title: `Nodo ${id}`, objective: 'o', evidence: 'e', question: { prompt: 'p', options: ['a', 'b'] } })
@@ -116,5 +116,19 @@ describe('keysToInput', () => {
     expect(keysToInput(new Set(['w']))).toEqual({ x: 0, z: -1 })
     expect(keysToInput(new Set(['ArrowDown', 'ArrowRight']))).toEqual({ x: 1, z: 1 })
     expect(keysToInput(new Set(['a', 'd']))).toEqual({ x: 0, z: 0 })
+  })
+})
+
+describe('joystickAxis', () => {
+  test('zona muerta, tope en el radio y dirección conservada', () => {
+    expect(joystickAxis(0, 0)).toEqual({ x: 0, z: 0 })
+    expect(joystickAxis(3, 2)).toEqual({ x: 0, z: 0 })
+    const full = joystickAxis(200, 0)
+    expect(full.x).toBeCloseTo(1, 5)
+    expect(full.z).toBeCloseTo(0, 5)
+    const diagonal = joystickAxis(-30, 30)
+    expect(diagonal.x).toBeLessThan(0)
+    expect(diagonal.z).toBeGreaterThan(0)
+    expect(Math.hypot(diagonal.x, diagonal.z)).toBeLessThanOrEqual(1)
   })
 })

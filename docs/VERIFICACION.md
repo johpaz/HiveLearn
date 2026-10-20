@@ -61,10 +61,10 @@ Base temporal, clave leída del llavero del proyecto (no impresa), `HIVELEARN_AG
 
 ## Juego 3D «Estación Colmena» (2026-10-20)
 Mundo de ciencia ficción con Three r186 (WebGPU/WebGL2, TSL, bloom), dron-abeja controlable (WASD/flechas, `E`/Enter/Espacio, `[` `]`, clic o toque), cámara de seguimiento con cinemática al cambiar de nivel, audio procedural (silenciado por defecto), narración con `speechSynthesis` y modelos de Blender (ver `docs/INVESTIGACION-JUEGO-3D.md`).
-- `bun run typecheck` y `bun test`: 427 en verde, 10 omitidas (E2E de navegador). `bun run test:e2e`: 12 en verde (8 de navegador, escenarios A–H, y 4 de API).
+- `bun run typecheck` y `bun test`: 427 en verde, 10 omitidas (E2E de navegador). `bun run test:e2e`: 13 en verde (9 de navegador, escenarios A–I, y 4 de API). I = joystick táctil (palanca virtual en pantallas táctiles o con `localStorage['hivelearn.joystick']='1'`).
 - Pruebas nuevas puras: `controller.test.ts` (baldosas caminables, puentes cerrados como barrera, foco, rutas), `quality.test.ts`, `audio.test.ts` (silenciado sin contexto, preferencias, `pickVoice`). El E2E H mueve el dron con teclado, cambia de celda con `]`, abre con `E` y comprueba el sonido y su preferencia.
 - El E2E fuerza calidad baja (`localStorage['hivelearn.quality']='low'`): bajo swiftshader no hay WebGPU y el bloom sería lento.
-- **No verificado:** rendimiento y aspecto en WebGPU real o en GPUs de gama baja y móviles; calidad media y alta (bloom, sombras) se probaron solo bajo swiftshader con el backend WebGL2: arrancan sin errores y el bloom se ve, pero no hay medición de fps ni prueba con WebGPU real; control táctil por arrastre (hoy: toque en el suelo mueve el dron); narración y sonido solo con pruebas de lógica, sin escucharlos.
+- **No verificado:** rendimiento y aspecto en WebGPU real o en GPUs de gama baja y móviles; calidad media y alta (bloom, sombras) se probaron solo bajo swiftshader con el backend WebGL2: arrancan sin errores y el bloom se ve, pero no hay medición de fps ni prueba con WebGPU real; el joystick táctil se probó con eventos de puntero sintéticos (escenario I), no con un dedo real; narración y sonido solo con pruebas de lógica, sin escucharlos.
 
 ## Prueba en vivo reproducible (`scripts/live-check.ts`)
 Contra un gateway en marcha y con sus proveedores configurados, sin que las claves pasen por el script (solo la API del portal):

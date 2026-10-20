@@ -125,3 +125,13 @@ export function keysToInput(keys: ReadonlySet<string>): Vec2 {
     z: (has('s', 'S', 'ArrowDown') ? 1 : 0) - (has('w', 'W', 'ArrowUp') ? 1 : 0),
   }
 }
+
+/** Eje del joystick virtual: desplazamiento del pulgar (px) con zona muerta y tope en el radio. */
+export function joystickAxis(dx: number, dy: number, radius = 48, dead = 0.18): Vec2 {
+  const length = Math.hypot(dx, dy)
+  if (length === 0) return { x: 0, z: 0 }
+  const magnitude = Math.min(1, length / radius)
+  if (magnitude < dead) return { x: 0, z: 0 }
+  const scaled = (magnitude - dead) / (1 - dead)
+  return { x: (dx / length) * scaled, z: (dy / length) * scaled }
+}
