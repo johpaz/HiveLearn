@@ -4,6 +4,9 @@ import { Notice } from '../components/ui'
 import type { NodeMaterialView, ProgramState } from '../types'
 import { buildWorld, diffWorlds, honeyOf, type WorldCell, type WorldDescription } from './layout'
 import type { HiveWorld } from './HiveWorld'
+import { QUALITY_KEY, initialTier } from './quality'
+import { GameAudio } from './audio'
+import { speak, speechSupported, stopSpeaking } from './speech'
 
 /** ¿Este navegador puede dibujar el juego? (WebGL2 disponible y sin pedir movimiento reducido no es requisito: se adapta). */
 export function canPlayGame(): boolean {
@@ -21,6 +24,10 @@ function exposeForE2E(scene: HiveWorld, world: () => WorldDescription | null, se
       cells: () => (world()?.cells ?? []).filter(c => c.real).map(c => ({ id: c.id, kind: c.kind, level: c.level, visual: c.visual })),
       select,
       screenPosition: (id: string) => scene.screenPosition(id),
+      dronePosition: () => scene.dronePosition(),
+      focused: () => scene.focusedCell(),
+      backend: scene.backend,
+      tier: () => scene.tier,
     }
   } catch { /* sin almacenamiento: no hay gancho */ }
 }
@@ -34,11 +41,17 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const worldRef = useRef<HiveWorld | null>(null)
   const previousWorld = useRef<WorldDescription | null>(null)
+  /** Resultado del checkpoint a la espera de que el mundo se actualice: se une al aviso de adaptación en vez de perderse. */
+  const checkpointNote = useRef<{ kind: 'success' | 'info'; text: string } | null>(null)
   const [failed, setFailed] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [overview, setOverview] = useState(false)
   const [message, setMessage] = useState<{ kind: 'error' | 'success' | 'info'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const audio = useMemo(() => new GameAudio(), [])
+  const [muted, setMuted] = useState(audio.muted)
+  const [announce, setAnnounce] = useState('')
+  const [lowered, setLowered] = useState<string | null>(null)
 
   const world = useMemo(() => buildWorld(program), [program])
   const level = program.levels[program.currentLevel]
@@ -51,27 +64,36 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
     if (!canvas) return
     let cancelled = false
     let observer: ResizeObserver | null = null
-    import('./HiveWorld').then(({ HiveWorld }) => {
-      if (cancelled) return
-      try {
-        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        const scene = new HiveWorld(canvas, { reducedMotion })
-        worldRef.current = scene
-        scene.setPickHandler(id => setSelected(id))
-        const fit = () => scene.resize(canvas.clientWidth, canvas.clientHeight)
-        observer = new ResizeObserver(fit)
-        observer.observe(canvas)
-        fit()
-        scene.setWorld(previousWorld.current ?? world)
-        scene.start()
-        exposeForE2E(scene, () => previousWorld.current, id => setSelected(id))
-      } catch { setFailed(true) }
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const tier = initialTier({ stored: (() => { try { return localStorage.getItem(QUALITY_KEY) } catch { return null } })(), coarsePointer: window.matchMedia('(pointer: coarse)').matches, cores: navigator.hardwareConcurrency ?? 4 })
+    import('./HiveWorld').then(({ HiveWorld }) => HiveWorld.create(canvas, { reducedMotion, tier })).then(scene => {
+      if (cancelled) { scene.dispose(); return }
+      worldRef.current = scene
+      scene.setHandlers({
+        pick: id => { setSelected(id); if (id) audio.sfx('select') },
+        focus: id => {
+          const cell = id ? previousWorld.current?.cells.find(c => c.id === id) : null
+          setAnnounce(cell ? `Celda ${cell.kind === 'gate' ? 'compuerta' : cell.title}: ${VISUAL_LABEL[cell.visual]}. Pulsa E para abrirla.` : '')
+          if (cell) audio.sfx('focus')
+        },
+        thrust: speed => audio.setThrust(speed),
+        quality: tier => setLowered(tier),
+      })
+      const fit = () => scene.resize(canvas.clientWidth, canvas.clientHeight)
+      observer = new ResizeObserver(fit)
+      observer.observe(canvas)
+      fit()
+      scene.setWorld(previousWorld.current ?? world)
+      scene.start()
+      exposeForE2E(scene, () => previousWorld.current, id => setSelected(id))
     }).catch(() => setFailed(true))
     return () => {
       cancelled = true
       observer?.disconnect()
       worldRef.current?.dispose()
       worldRef.current = null
+      audio.dispose()
+      stopSpeaking()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -81,12 +103,16 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
     const diff = diffWorlds(previousWorld.current, world)
     previousWorld.current = world
     worldRef.current?.setWorld(world)
+    const note = checkpointNote.current
+    checkpointNote.current = null
+    let adapted: string | null = null
     if (diff.newLevels.length > 0) {
       const added = world.islands.filter(i => diff.newLevels.includes(i.index))
-      setMessage({ kind: 'info', text: `Tu programa se adaptó: ${added.map(i => (i.kind === 'reinforcement' ? `nuevo refuerzo "${i.title}"` : `nuevo nivel "${i.title}"`)).join(', ')}.` })
+      adapted = `Tu programa se adaptó: ${added.map(i => (i.kind === 'reinforcement' ? `nuevo refuerzo "${i.title}"` : `nuevo nivel "${i.title}"`)).join(', ')}.`
     } else if (diff.added.length > 0) {
-      setMessage({ kind: 'info', text: `Tu programa se adaptó: ${diff.added.length === 1 ? 'se añadió una celda nueva' : `se añadieron ${diff.added.length} celdas nuevas`}.` })
+      adapted = `Tu programa se adaptó: ${diff.added.length === 1 ? 'se añadió una celda nueva' : `se añadieron ${diff.added.length} celdas nuevas`}.`
     }
+    if (note || adapted) setMessage({ kind: note?.kind ?? 'info', text: [note?.text, adapted].filter(Boolean).join(' ') })
   }, [world])
 
   useEffect(() => { worldRef.current?.select(selected) }, [selected])
@@ -106,7 +132,7 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
     try { await task() } catch (e) { setMessage({ kind: 'error', text: e instanceof Error ? e.message : 'No se pudo completar la operación' }) } finally { setBusy(false) }
   }, [])
 
-  const react = useCallback((id: string, kind: 'ok' | 'bad') => worldRef.current?.react(id, kind), [])
+  const react = useCallback((id: string, kind: 'ok' | 'bad') => { audio.sfx(kind); worldRef.current?.react(id, kind) }, [audio])
 
   if (failed) return <Notice kind="info">No se pudo iniciar el modo juego en este navegador. Usa la vista clásica.</Notice>
 
@@ -117,14 +143,19 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
   const openGate = () => run(async () => {
     const result = await api.checkpointProgram(program.id)
     react(`gate:${program.currentLevel}`, result.decision === 'hold' ? 'bad' : 'ok')
-    onChange(result.program)
-    setSelected(null)
-    setMessage({
-      kind: result.decision === 'hold' ? 'info' : 'success',
+    audio.sfx(result.decision === 'hold' ? 'gate' : 'level')
+    const note = {
+      kind: result.decision === 'hold' ? 'info' as const : 'success' as const,
       text: result.decision === 'hold' ? `Vamos a reforzar antes de seguir. ${result.reason}`
         : result.decision === 'teacher_review' ? `Pasas al siguiente nivel; tu docente revisará este avance. ${result.reason}`
         : `¡Nivel superado! ${result.reason}`,
-    })
+    }
+    // El mundo nuevo llega con onChange; su efecto une este aviso con el de adaptación. Se deja también visible por si
+    // el plan no cambió y ese efecto no tiene nada que añadir.
+    checkpointNote.current = note
+    setSelected(null)
+    setMessage(note)
+    onChange(result.program)
   })
 
   const prepare = () => run(async () => { onChange(await api.prepareLevel(program.id)) })
@@ -163,11 +194,21 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
       </header>
 
       <div className="game__stage">
-        <canvas ref={canvasRef} className="game__canvas" data-testid="game-canvas" data-world-cells={world.cells.filter(c => c.real).length} role="img" aria-label="Mapa de tu programa: islas de celdas hexagonales" />
+        <canvas ref={canvasRef} className="game__canvas" data-testid="game-canvas" data-world-cells={world.cells.filter(c => c.real).length} tabIndex={0}
+          aria-label="Mapa de tu programa: estación con islas de celdas hexagonales y un dron que puedes mover" aria-describedby="game-help" />
         <div className="game__tools">
           <button className="btn btn--ghost btn--sm" onClick={() => setOverview(o => !o)} aria-pressed={overview}>{overview ? 'Seguir mi isla' : 'Vista general'}</button>
+          <button className="btn btn--ghost btn--sm" aria-pressed={!muted} onClick={() => { const next = !muted; audio.setMuted(next); setMuted(next); if (!next) audio.sfx('select') }}>
+            {muted ? '🔇 Activar sonido' : '🔊 Silenciar'}
+          </button>
         </div>
       </div>
+
+      <p id="game-help" className="muted game__help">
+        Haz clic en el mapa y mueve el dron con <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> o las flechas. <kbd>E</kbd>, Enter o Espacio abren la celda enfocada; <kbd>[</kbd> y <kbd>]</kbd> cambian de celda; Esc cierra. Los botones de abajo hacen lo mismo.
+      </p>
+      <p className="sr-only" role="status" aria-live="polite">{announce}</p>
+      {lowered && <Notice kind="info">Para que vaya fluido se bajó la calidad gráfica ({lowered === 'low' ? 'baja' : 'media'}).</Notice>}
 
       {message && <Notice kind={message.kind}>{message.text}</Notice>}
 
@@ -226,7 +267,9 @@ function CellPanel({ programId, cell, program, disabled, onAnswered }: {
   const [result, setResult] = useState<{ correct: boolean; hint: string | null } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [speaking, setSpeaking] = useState(false)
 
+  useEffect(() => () => stopSpeaking(), [])
   useEffect(() => {
     let alive = true
     api.programMaterial(programId, cell.id).then(m => { if (alive) setMaterial(m) }).catch(() => { /* se usa lo que ya hay */ })
@@ -260,6 +303,11 @@ function CellPanel({ programId, cell, program, disabled, onAnswered }: {
         </span>
       </header>
       <p className="node__explain">{material?.explanation ?? 'Preparando la explicación…'}</p>
+      {speechSupported() && material && (
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => { if (speaking) { stopSpeaking(); setSpeaking(false) } else setSpeaking(speak(`${material.explanation ?? ''} ${node.question.prompt}`, () => setSpeaking(false))) }}>
+          {speaking ? '⏹ Detener' : '🔊 Escuchar'}
+        </button>
+      )}
 
       <fieldset className="node__question" disabled={busy || disabled || mastered}>
         <legend>{node.question.prompt}</legend>

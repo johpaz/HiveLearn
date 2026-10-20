@@ -22,6 +22,12 @@ const MIME: Record<string, string> = {
   ".txt": "text/plain",
   ".webp": "image/webp",
   ".gif": "image/gif",
+  ".glb": "model/gltf-binary",
+  ".gltf": "model/gltf+json",
+  ".wasm": "application/wasm",
+  ".ogg": "audio/ogg",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
 };
 
 function walk(dir: string, base = dir): Array<{ sub: string; full: string }> {

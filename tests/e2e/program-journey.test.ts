@@ -113,9 +113,9 @@ suite('E2E navegador: programa por niveles y juego', () => {
     expect(await stats()).toMatch(/3\/3 logradas/)
     expect(await stats()).toMatch(/[1-9]\d*\s*miel/)
     await openGate()
-    // El aviso del checkpoint lo puede pisar el de «Tu programa se adaptó»; lo estable es el estado del mundo.
+    // El aviso del checkpoint y el de adaptación se muestran juntos.
     await b.waitFor(`/Nivel 2\\/3/.test(document.querySelector('ul[aria-label="Tu avance"]')?.innerText ?? '')`, 'Pasó al nivel 2')
-    await b.waitFor(`document.querySelector('.notice')?.innerText.match(/Nivel superado|adaptó/)`, 'Aviso tras abrir la compuerta')
+    await b.waitFor(`/¡Nivel superado!.*Tu programa se adaptó: se añadieron 3 celdas nuevas/s.test(document.querySelector('.notice')?.innerText ?? '')`, 'Aviso de nivel superado y adaptación')
     expect(await stats()).toMatch(/Nivel 2\/3/)
     expect(await stats()).toMatch(/0\/3 logradas/)
     await b.screenshot('game-level-2-open')
@@ -138,6 +138,7 @@ suite('E2E navegador: programa por niveles y juego', () => {
     await playGameLevel(WRONG)
     await openGate()
     await b.waitFor(`/Nivel 2\\/4/.test(document.querySelector('ul[aria-label="Tu avance"]')?.innerText ?? '')`, 'El plan creció a 4 niveles')
+    await b.waitFor(`/Vamos a reforzar.*nuevo refuerzo "Refuerzo"/s.test(document.querySelector('.notice')?.innerText ?? '') && !document.querySelector('.notice').innerText.includes('Evaluación final')`, 'Aviso de refuerzo que nombra al refuerzo')
     await b.waitFor(`[...document.querySelectorAll('nav[aria-label^="Celdas del nivel"] .cell-chip')].some(c => c.innerText.includes('Repaso de la consulta'))`, 'Celdas del refuerzo')
     expect(Number(await b.eval(`document.querySelector('[data-testid="game-canvas"]').dataset.worldCells`))).toBeGreaterThan(cellsAtStart)
     await b.screenshot('game-reinforcement')
@@ -237,5 +238,46 @@ suite('E2E navegador: programa por niveles y juego', () => {
     await intentFormVisible()
     const active = await stack.call('/programs/active', { cookie: student.cookie })
     expect(active.data.program).toBeNull()
+  }, 120000)
+
+  test('H · teclado y sonido: el dron se mueve, [ ] cambia de celda, E abre y el sonido se activa y se recuerda', async () => {
+    await enter('teclado', 'game', true)
+    await createProgram()
+    await b.waitFor(`window.__hive && window.__hive.cells().length >= 3 && window.__hive.focused() !== null`, 'Dron enfocando la primera celda')
+    await b.eval(`document.querySelector('[data-testid="game-canvas"]').focus()`)
+    const where = () => b.eval<{ x: number; z: number }>(`window.__hive.dronePosition()`)
+    const key = (type: 'keydown' | 'keyup', k: string) => b.eval(`document.querySelector('[data-testid="game-canvas"]').dispatchEvent(new KeyboardEvent('${type}', { key: '${k}', bubbles: true, cancelable: true }))`)
+
+    // Mantener una tecla mueve al dron: alguna de las cuatro direcciones tiene baldosa y debe desplazarlo.
+    let best = 0
+    for (const k of ['d', 's', 'a', 'w']) {
+      const from = await where()
+      await key('keydown', k); await Bun.sleep(450); await key('keyup', k)
+      await Bun.sleep(250)
+      const to = await where()
+      best = Math.max(best, Math.hypot(to.x - from.x, to.z - from.z))
+    }
+    expect(best).toBeGreaterThan(0.4)
+    await b.screenshot('game-keyboard-moved')
+
+    // ] lleva al dron a otra celda y E la abre.
+    const before = await b.eval<string>(`window.__hive.focused()`)
+    await b.view.press(']')
+    await b.waitFor(`window.__hive.focused() !== ${JSON.stringify(before)} && window.__hive.focused() !== null`, 'Foco en otra celda')
+    const focused = await b.eval<string>(`window.__hive.focused()`)
+    await b.view.press('e')
+    const opened = (await chips()).find(c => c.pressed)
+    expect(opened).toBeDefined()
+    await b.waitFor(`document.querySelector('nav[aria-label^="Celdas del nivel"] .cell-chip[aria-pressed="true"]') !== null`, 'Celda abierta')
+    expect(focused).not.toBe(before)
+    expect(await b.eval(`document.querySelector('[role="status"][aria-live="polite"].sr-only')?.textContent.length > 0`)).toBe(true)
+
+    // Sonido: empieza silenciado; al activarlo se guarda la preferencia.
+    expect(await b.text()).toContain('Activar sonido')
+    await b.click('🔇 Activar sonido')
+    await b.waitForText('Silenciar')
+    expect(JSON.parse(await b.eval<string>(`localStorage.getItem('hivelearn.audio')`)).muted).toBe(false)
+    await b.click('🔊 Silenciar')
+    expect(JSON.parse(await b.eval<string>(`localStorage.getItem('hivelearn.audio')`)).muted).toBe(true)
   }, 120000)
 })

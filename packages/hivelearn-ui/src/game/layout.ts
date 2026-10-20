@@ -181,7 +181,7 @@ export interface WorldDiff {
   /** Celdas que cambiaron de estado visual. */
   changed: string[]
   removed: string[]
-  /** Niveles que no existían antes. */
+  /** Niveles que no existían antes (índices en el mundo nuevo; se emparejan por tipo y título). */
   newLevels: number[]
 }
 
@@ -197,8 +197,18 @@ export function diffWorlds(previous: WorldDescription | null, next: WorldDescrip
     if (!old) { if (cell.real) added.push(id) } else if (old.visual !== cell.visual) changed.push(id)
   }
   for (const [id, cell] of before) if (!after.has(id) && cell.real) removed.push(id)
-  const known = new Set(previous.islands.map(i => i.index))
-  return { added, changed, removed, newLevels: next.islands.map(i => i.index).filter(i => !known.has(i)) }
+  // Un nivel insertado desplaza a los siguientes: se identifican por tipo y título (no por índice) para que lo nuevo
+  // sea el refuerzo y no el último nivel. Los repetidos se emparejan de uno en uno.
+  const known = new Map<string, number>()
+  const signature = (i: WorldIsland) => `${i.kind}\u0000${i.title}`
+  for (const island of previous.islands) known.set(signature(island), (known.get(signature(island)) ?? 0) + 1)
+  const newLevels: number[] = []
+  for (const island of next.islands) {
+    const left = known.get(signature(island)) ?? 0
+    if (left > 0) known.set(signature(island), left - 1)
+    else newLevels.push(island.index)
+  }
+  return { added, changed, removed, newLevels }
 }
 
 /** Puntos para la miel (solo visual): el servidor sigue siendo quien acredita. */

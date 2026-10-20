@@ -100,9 +100,15 @@ describe('diffWorlds', () => {
       ],
     }))
     const diff = diffWorlds(before, after)
-    expect(diff.newLevels).toEqual([3])
+    // El refuerzo se inserta en el índice 1 y empuja a «Más» y «Final»: lo nuevo es el refuerzo, no el último nivel.
+    expect(diff.newLevels).toEqual([1])
     expect(diff.added).toContain('d')
     expect(diff.changed).toContain('a')
+    const twice = buildWorld(program({ levels: [
+      ...after.islands.map((i, n) => ({ index: n, kind: i.kind, title: i.title, goal: 'g', status: 'outline' as const, plannedNodes: 2, nodes: [] })),
+      { index: 4, kind: 'reinforcement', title: 'Refuerzo', goal: 'g', status: 'outline', plannedNodes: 2, nodes: [] },
+    ] }))
+    expect(diffWorlds(after, twice).newLevels).toEqual([4]) // un segundo refuerzo con el mismo título también cuenta
     expect(diffWorlds(null, after)).toEqual({ added: [], changed: [], removed: [], newLevels: [] })
   })
 })

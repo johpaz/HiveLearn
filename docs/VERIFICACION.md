@@ -55,9 +55,16 @@ Base temporal, clave leída del llavero del proyecto (no impresa), `HIVELEARN_AG
 - **A** vista clásica completa; **B** juego de 3 niveles hasta «Programa terminado» (nota 100, pendiente de validación); **C** fallo del nivel 1 → refuerzo (plan de 4 niveles) → fin; **D** clic real (`Bun.WebView.click`) sobre el lienzo WebGL abre la celda correcta; **E** el docente valida desde la UI, cola vacía y bitácora `intent → … → validation`; **F** 401/403/409 y móvil 390x844 sin desborde; **G** sin WebGL cae a la vista clásica y «Cerrar sesión» libera al alumno.
 - `tests/e2e/program-api.test.ts` repite A–C y la validación contra el portal sin navegador y corre siempre en `bun test`.
 - **Bug encontrado por el E2E y corregido:** la esfera de contorno del `InstancedMesh` quedaba vacía, así que el raycast nunca devolvía celdas y no se podía elegir una celda con un clic en el 3D (solo con los chips).
-- **Hallazgos sin corregir (UX):** en el juego, el aviso «¡Nivel superado!» lo pisa «Tu programa se adaptó…»; y tras un refuerzo el aviso dice «nuevo nivel "Evaluación final"» en vez de nombrar el refuerzo (`diffWorlds` compara por índice).
+- **Avisos del juego, corregidos:** «¡Nivel superado!» / «Vamos a reforzar…» ya no los pisa «Tu programa se adaptó…» (se muestran juntos), y `diffWorlds` empareja los niveles por tipo y título (no por índice), así que tras un fallo el aviso nombra el refuerzo y no la evaluación final. El E2E (B y C) lo comprueba.
 - El portal limita login/activación a 15 por minuto y por IP (en loopback todo sale por 127.0.0.1): el arnés evita logins por API innecesarios y espera si recibe 429.
-- `tests/webview.test.ts` (anterior) usa selectores de una UI previa (`[name=username]`, «Activar mi cuenta»): no se ejecutó ni se tocó.
+- Se retiró `tests/webview.test.ts`: sus 5 pruebas fallaban contra la UI actual (selectores de una versión previa: `[name=username]`, «Activar mi cuenta», recorrido guiado A2UI). Los flujos de admin, docente e importación Excel que cubría quedan sin prueba de navegador; el portal los cubre con `portal.test.ts`.
+
+## Juego 3D «Estación Colmena» (2026-10-20)
+Mundo de ciencia ficción con Three r186 (WebGPU/WebGL2, TSL, bloom), dron-abeja controlable (WASD/flechas, `E`/Enter/Espacio, `[` `]`, clic o toque), cámara de seguimiento con cinemática al cambiar de nivel, audio procedural (silenciado por defecto), narración con `speechSynthesis` y modelos de Blender (ver `docs/INVESTIGACION-JUEGO-3D.md`).
+- `bun run typecheck` y `bun test`: 427 en verde, 10 omitidas (E2E de navegador). `bun run test:e2e`: 12 en verde (8 de navegador, escenarios A–H, y 4 de API).
+- Pruebas nuevas puras: `controller.test.ts` (baldosas caminables, puentes cerrados como barrera, foco, rutas), `quality.test.ts`, `audio.test.ts` (silenciado sin contexto, preferencias, `pickVoice`). El E2E H mueve el dron con teclado, cambia de celda con `]`, abre con `E` y comprueba el sonido y su preferencia.
+- El E2E fuerza calidad baja (`localStorage['hivelearn.quality']='low'`): bajo swiftshader no hay WebGPU y el bloom sería lento.
+- **No verificado:** rendimiento y aspecto en WebGPU real o en GPUs de gama baja y móviles; calidad media y alta (bloom, sombras) se probaron solo bajo swiftshader con el backend WebGL2: arrancan sin errores y el bloom se ve, pero no hay medición de fps ni prueba con WebGPU real; control táctil por arrastre (hoy: toque en el suelo mueve el dron); narración y sonido solo con pruebas de lógica, sin escucharlos.
 
 ## Prueba en vivo reproducible (`scripts/live-check.ts`)
 Contra un gateway en marcha y con sus proveedores configurados, sin que las claves pasen por el script (solo la API del portal):

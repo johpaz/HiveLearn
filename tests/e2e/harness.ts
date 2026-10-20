@@ -136,7 +136,7 @@ export class Browser {
   async fresh(options: { mode?: 'game' | 'classic'; e2eHook?: boolean } = {}) {
     await this.goto()
     await this.eval(`fetch('/api/portal/logout', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(() => true)`)
-    await this.eval(`(() => { localStorage.clear(); ${options.mode ? `localStorage.setItem('hivelearn.programMode', '${options.mode}');` : ''} ${options.e2eHook ? `localStorage.setItem('hivelearn.e2e', '1');` : ''} return true })()`)
+    await this.eval(`(() => { localStorage.clear(); localStorage.setItem('hivelearn.quality', 'low'); ${options.mode ? `localStorage.setItem('hivelearn.programMode', '${options.mode}');` : ''} ${options.e2eHook ? `localStorage.setItem('hivelearn.e2e', '1');` : ''} return true })()`)
     await this.goto() // recarga completa: el SPA arranca sin sesión
     await this.eval(`(location.hash = '#/acceso', true)`)
     await this.waitFor(`document.body.innerText.includes('Ingresar')`, 'Pantalla de acceso')
