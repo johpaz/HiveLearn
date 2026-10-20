@@ -4,13 +4,15 @@ import { HexLogo, Notice, Spinner } from '../components/ui'
 import { mergeProviders, type ProviderRow } from '../settings-logic'
 import type { Account, InstitutionSettings } from '../types'
 import { UsersTab } from './UsersTab'
+import { ProgramTab } from './ProgramTab'
+import { ReviewsTab } from './ReviewsTab'
 import { AgentsPanel } from './settings/AgentsPanel'
 import { PolicyPanel } from './settings/PolicyPanel'
 import { ProvidersPanel } from './settings/ProvidersPanel'
 
 const ROLE_LABEL = { admin: 'Administrador', teacher: 'Docente', student: 'Alumno' } as const
 
-export function Console({ account, tab, onLogout }: { account: Account; tab: 'home' | 'users' | 'settings'; onLogout: () => void }) {
+export function Console({ account, tab, onLogout }: { account: Account; tab: 'home' | 'program' | 'reviews' | 'users' | 'settings'; onLogout: () => void }) {
   const isAdmin = account.role === 'admin'
   const isStaff = account.role !== 'student'
   return (
@@ -19,6 +21,8 @@ export function Console({ account, tab, onLogout }: { account: Account; tab: 'ho
         <a className="brand" href="#/" aria-label="HiveLearn, portada"><HexLogo /> <span>HiveLearn</span></a>
         <nav className="tabs" aria-label="Secciones">
           <a href="#/panel/inicio" className={`tab ${tab === 'home' ? 'tab--active' : ''}`} aria-current={tab === 'home' ? 'page' : undefined}>Inicio</a>
+          {!isStaff && <a href="#/panel/programa" className={`tab ${tab === 'program' ? 'tab--active' : ''}`} aria-current={tab === 'program' ? 'page' : undefined}>Mi programa</a>}
+          {isStaff && <a href="#/panel/validaciones" className={`tab ${tab === 'reviews' ? 'tab--active' : ''}`} aria-current={tab === 'reviews' ? 'page' : undefined}>Validaciones</a>}
           {isStaff && <a href="#/panel/usuarios" className={`tab ${tab === 'users' ? 'tab--active' : ''}`} aria-current={tab === 'users' ? 'page' : undefined}>Usuarios</a>}
           {isAdmin && <a href="#/panel/configuracion" className={`tab ${tab === 'settings' ? 'tab--active' : ''}`} aria-current={tab === 'settings' ? 'page' : undefined}>Configuración</a>}
         </nav>
@@ -28,7 +32,11 @@ export function Console({ account, tab, onLogout }: { account: Account; tab: 'ho
         </div>
       </header>
       <main className="console__main">
-        {tab === 'settings' && isAdmin ? <SettingsTab /> : tab === 'users' && isStaff ? <UsersTab account={account} /> : <Home account={account} />}
+        {tab === 'settings' && isAdmin ? <SettingsTab />
+          : tab === 'users' && isStaff ? <UsersTab account={account} />
+          : tab === 'reviews' && isStaff ? <ReviewsTab />
+          : tab === 'program' && !isStaff ? <ProgramTab />
+          : <Home account={account} />}
       </main>
     </div>
   )
@@ -57,8 +65,8 @@ function Home({ account }: { account: Account }) {
       {account.role === 'admin'
         ? <Notice kind="info">Crea docentes y alumnos en <a href="#/panel/usuarios">Usuarios</a>; configura proveedores, claves y modelos en <a href="#/panel/configuracion">Configuración</a>.</Notice>
         : account.role === 'teacher'
-          ? <Notice kind="info">Crea y gestiona a tus alumnos en <a href="#/panel/usuarios">Usuarios</a>.</Notice>
-          : <Notice kind="info">Tu espacio de aprendizaje está en preparación en esta interfaz. Por ahora puedes seguir usando el portal de tu institución.</Notice>}
+          ? <Notice kind="info">Crea y gestiona a tus alumnos en <a href="#/panel/usuarios">Usuarios</a> y valida sus programas en <a href="#/panel/validaciones">Validaciones</a>.</Notice>
+          : <Notice kind="info">Empieza en <a href="#/panel/programa">Mi programa</a>: cuéntanos qué quieres aprender hoy y armamos un programa para ti.</Notice>}
     </section>
   )
 }
@@ -97,7 +105,7 @@ function SettingsTab() {
       <div role="tabpanel">
         {section === 'apis' && <ProvidersPanel rows={data.rows} onChanged={load} />}
         {section === 'agents' && <AgentsPanel rows={data.rows} />}
-        {section === 'policy' && <PolicyPanel key={JSON.stringify(data.settings)} initial={data.settings} rows={data.rows} onSaved={load} />}
+        {section === 'policy' && <PolicyPanel initial={data.settings} rows={data.rows} onSaved={load} />}
       </div>
     </div>
   )

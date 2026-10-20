@@ -57,6 +57,7 @@ export async function researchTopic(db: HiveDB, input: ResearchInput, deps: Rese
     systemPrompt: '',
     tools: createResearchTools(session, deps),
     threadId: `research-${crypto.randomUUID()}`,
+    maxTokens: 8192,
     runContext: input.runContext,
     maxIterations: 14,
   }).catch(error => {

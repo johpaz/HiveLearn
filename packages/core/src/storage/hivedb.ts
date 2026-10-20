@@ -135,7 +135,17 @@ export async function initializeDatabase(): Promise<HiveDB> {
     })
   }
 
-  db = await HiveDB.open(path)
+  // Búsqueda semántica local (multilingual-e5-small, ~470 MB la primera vez). Opt-in: sin ella la búsqueda es
+  // BM25 sobre texto, que ya cubre guías, programas y materiales. Si el embedder no está disponible se abre en modo texto.
+  if (process.env.HIVELEARN_EMBEDDER === 'local') {
+    try {
+      db = await HiveDB.open(path, { embedder: 'local' })
+      logger.info('Embedder local activo: la búsqueda combina texto y significado', { source: 'hivelearn-db' })
+    } catch (error) {
+      logger.warn(`Embedder local no disponible (${(error as Error).message}); búsqueda solo por texto`, { source: 'hivelearn-db' })
+    }
+  }
+  if (!db) db = await HiveDB.open(path)
 
   logger.info(`Database initialized at ${path}`, { source: 'hivelearn-db' })
   return db

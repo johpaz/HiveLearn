@@ -14,19 +14,30 @@ process.env.NODE_ENV = 'development'
 
 const log = logger.child('dev')
 
-async function dev() {
-  log.info('🐝 Starting HiveLearn development mode...')
-  log.info('📡 Starting server on port 8787...')
-  log.info('🎨 Starting UI on port 5173 (HMR enabled) - will use 5174 if busy...')
+// `bun run dev -- --sdk` (o `bun run dev:sdk`) arranca con el motor de agentes de @johpaz/hive-sdk.
+if (process.argv.includes('--sdk')) process.env.HIVELEARN_AGENT_ENGINE = 'sdk'
 
-  // Start both processes in parallel
-  const server = $`NODE_ENV=development bun run --cwd packages/core dev`
+async function dev() {
+  log.info(`🐝 Starting HiveLearn development mode... (motor de agentes: ${process.env.HIVELEARN_AGENT_ENGINE === 'sdk' ? 'sdk' : 'legacy'})`)
+  log.info('📡 Starting server on port 8787...')
+  log.info('🎨 UI con HMR en :5173 y compilada (dist) para el gateway en :8787')
+
   // La UI es un paquete aparte: si no está en el árbol, solo se levanta el servidor.
   const hasUi = existsSync(path.join(import.meta.dir, '..', 'packages', 'hivelearn-ui', 'package.json'))
   if (!hasUi) log.info('Sin paquete hivelearn-ui: solo se inicia el servidor')
-  const ui = hasUi ? $`bun run --cwd packages/hivelearn-ui dev` : Promise.resolve()
 
-  await Promise.all([server, ui])
+  // El gateway (:8787) sirve `packages/hivelearn-ui/dist`: se compila ANTES de arrancar para que no abra con una
+  // UI vieja o vacía, y se mantiene al día con `vite build --watch` mientras se desarrolla.
+  if (hasUi) {
+    log.info('🎨 Compilando la UI (dist) para el gateway...')
+    await $`bun run --cwd packages/hivelearn-ui build`
+  }
+
+  const server = $`NODE_ENV=development bun run --cwd packages/core dev`
+  const ui = hasUi ? $`bun run --cwd packages/hivelearn-ui dev` : Promise.resolve()
+  const watch = hasUi ? $`bun run --cwd packages/hivelearn-ui build:watch` : Promise.resolve()
+
+  await Promise.all([server, ui, watch])
 }
 
 dev().catch((error) => {

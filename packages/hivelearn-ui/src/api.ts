@@ -1,4 +1,4 @@
-import type { Account, AgentConfig, SyncReport, Invitation, ImportPreview, StudentInput, GatewayProvider, InstallStatus, InstitutionSettings, ModelInfo, PortalProvider, Role } from './types'
+import type { Account, AgentConfig, AgentModelsBody, ProgramState, ProgramIntentInput, NodeMaterialView, ReviewQueueItem, TeacherProgram, TraceEntry, SyncReport, Invitation, ImportPreview, StudentInput, GatewayProvider, InstallStatus, InstitutionSettings, ModelInfo, PortalProvider, Role } from './types'
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) {
@@ -76,9 +76,30 @@ export const api = {
   saveCredential: (providerId: string, apiKey: string) =>
     request<{ hasApiKey: boolean }>(`${portal}/providers/${encodeURIComponent(providerId)}/credential`, { method: 'PUT', body: { apiKey } }),
 
-  modelSyncStatus: () => request<{ running: boolean; report: SyncReport | null }>(`${portal}/models/sync`),
+  modelSyncStatus: () => request<{ running: boolean; everyHours?: number; report: SyncReport | null }>(`${portal}/models/sync`),
   syncModels: (input: { providerId?: string; dryRun?: boolean } = {}) =>
     request<{ running: boolean; report: SyncReport | null }>(`${portal}/models/sync`, { method: 'POST', body: input }),
+
+  // ── Programa formativo personal ──
+  activeProgram: () => request<{ program: ProgramState | null }>(`${portal}/programs/active`).then(r => r.program),
+  openProgram: (intent: ProgramIntentInput) => request<{ program: ProgramState }>(`${portal}/programs`, { method: 'POST', body: intent }).then(r => r.program),
+  programMaterial: (programId: string, nodeId: string) =>
+    request<{ material: NodeMaterialView }>(`${portal}/programs/${encodeURIComponent(programId)}/material/${encodeURIComponent(nodeId)}`).then(r => r.material),
+  answerNode: (programId: string, body: { nodeId: string; choice: number; open?: string }) =>
+    request<{ correct: boolean; mastered: boolean; hint: string | null; program: ProgramState }>(`${portal}/programs/${encodeURIComponent(programId)}/answer`, { method: 'POST', body }),
+  checkpointProgram: (programId: string) =>
+    request<{ decision: 'advance' | 'hold' | 'teacher_review'; reason: string; program: ProgramState }>(`${portal}/programs/${encodeURIComponent(programId)}/checkpoint`, { method: 'POST', body: {} }),
+  prepareLevel: (programId: string) => request<{ program: ProgramState }>(`${portal}/programs/${encodeURIComponent(programId)}/prepare`, { method: 'POST', body: {} }).then(r => r.program),
+  closeProgram: (programId: string) => request<{ program: ProgramState }>(`${portal}/programs/${encodeURIComponent(programId)}/close`, { method: 'POST', body: {} }).then(r => r.program),
+  programAnalytics: (topic?: string) =>
+    request<{ weakNodes: Array<{ title: string; topic: string; students: number; attempts: number; firstTryRate: number; masteryRate: number }> }>(`${portal}/programs/analytics${topic ? `?topic=${encodeURIComponent(topic)}` : ''}`).then(r => r.weakNodes),
+  eraseAccount: (accountId: string, confirm: string) =>
+    request<{ report: { removed: Record<string, number> } }>(`${portal}/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE', body: { confirm } }),
+  reviewQueue: () => request<{ queue: ReviewQueueItem[] }>(`${portal}/programs/review-queue`).then(r => r.queue),
+  teacherProgram: (programId: string) => request<{ program: TeacherProgram }>(`${portal}/programs/${encodeURIComponent(programId)}`).then(r => r.program),
+  programTrace: (programId: string) => request<{ thread: { timeline: TraceEntry[] } }>(`${portal}/programs/${encodeURIComponent(programId)}/trace`).then(r => r.thread.timeline),
+  reviewProgram: (programId: string, body: { decision: 'reaffirm' | 'modify' | 'revoke'; nodeId?: string; correctedScore?: number; note: string }) =>
+    request<{ program: TeacherProgram }>(`${portal}/programs/${encodeURIComponent(programId)}/review`, { method: 'POST', body }),
 
   gatewayProviders: () => request<{ providers: GatewayProvider[] }>('/api/providers').then(r => r.providers),
   setProviderEnabled: (providerId: string, enabled: boolean) =>
@@ -87,6 +108,9 @@ export const api = {
     request<{ models: ModelInfo[] }>(`/api/providers/${encodeURIComponent(providerId)}/details`).then(r => r.models),
 
   agents: () => request<{ agents: AgentConfig[] }>('/api/hivelearn/agents').then(r => r.agents),
+  /** Guarda en bloque (atómico): un modelo para todos los agentes, o varios cambios individuales. */
+  saveAgentModels: (body: AgentModelsBody) =>
+    request<{ updated: string[]; skipped: string[] }>(`${portal}/agents/models`, { method: 'PUT', body }),
   saveAgent: (agent: AgentConfig) =>
     request<{ ok: true }>(`/api/hivelearn/agents/${encodeURIComponent(agent.id)}`, {
       method: 'PUT',

@@ -143,7 +143,7 @@ describe('syncModels', () => {
     await agent('hl-uno', 'openrouter', 'google/gemini-3.6-flash')
     await getDb().collection('hl_portal_settings').put('inst', { providerId: 'openrouter', modelId: 'google/gemini-3.6-flash' })
 
-    const report = await syncModels(getDb(), { fetcher, resolveConfig, ignorePolicy: true, providerId: 'openrouter' })
+    const report = await syncModels(getDb(), { fetcher, resolveConfig, providerId: 'openrouter' })
     const r = report.providers[0]
     expect(r.status).toBe('ok')
     expect(r.migrated).toContain('google/gemini-3.6-flash → openrouter/google/gemini-3.6-flash')
@@ -160,7 +160,7 @@ describe('syncModels', () => {
   test('un modelo directo y el mismo vía OpenRouter conviven con ids distintos', async () => {
     await provider('gemini', '')
     await provider('openrouter', 'https://openrouter.ai/api/v1')
-    await syncModels(getDb(), { fetcher, resolveConfig, ignorePolicy: true })
+    await syncModels(getDb(), { fetcher, resolveConfig })
     const ids = (await getDb().collection('models').scan()).map(e => e.id).sort()
     expect(ids).toContain('gemini-3.8-flash')
     expect(ids).toContain('openrouter/google/gemini-3.6-flash')
@@ -170,18 +170,27 @@ describe('syncModels', () => {
   test('simulación no escribe; error de un proveedor no afecta a los demás', async () => {
     await provider('gemini', '')
     await provider('openai', 'https://api.openai.com/v1') // 500 con el fetcher de prueba
-    const report = await syncModels(getDb(), { fetcher, resolveConfig: async id => ({ apiKey: 'k', baseUrl: id === 'gemini' ? undefined : 'https://api.openai.com/v1' }), ignorePolicy: true, dryRun: true })
+    const report = await syncModels(getDb(), { fetcher, resolveConfig: async id => ({ apiKey: 'k', baseUrl: id === 'gemini' ? undefined : 'https://api.openai.com/v1' }), dryRun: true })
     expect(report.providers.find(p => p.providerId === 'gemini')?.added).toEqual(['gemini-3.8-flash'])
     expect(report.providers.find(p => p.providerId === 'openai')?.status).toBe('error')
     expect(await getDb().collection('models').count()).toBe(0)
     expect(await lastSyncReport(getDb())).toBeNull()
   })
 
-  test('con la política en "sin proveedores remotos" solo se consultan los locales', async () => {
+  test('sin que nadie lo pida: la corrida automática no depende de la política ni de un usuario', async () => {
     await getDb().collection('hl_installation').put('main', { institutionId: 'inst', name: 'Colegio' })
     await getDb().collection('hl_portal_settings').put('inst', { allowRemoteProviders: false, allowRemoteForMinors: false })
     await provider('openrouter', 'https://openrouter.ai/api/v1')
     const report = await syncModels(getDb(), { fetcher, resolveConfig })
+    expect(report.providers[0].status).toBe('ok')
+    expect(report.providers[0].added.length).toBeGreaterThan(0)
+  })
+
+  test('con respectPolicy y "sin proveedores remotos" solo se consultan los locales', async () => {
+    await getDb().collection('hl_installation').put('main', { institutionId: 'inst', name: 'Colegio' })
+    await getDb().collection('hl_portal_settings').put('inst', { allowRemoteProviders: false, allowRemoteForMinors: false })
+    await provider('openrouter', 'https://openrouter.ai/api/v1')
+    const report = await syncModels(getDb(), { fetcher, resolveConfig, respectPolicy: true })
     expect(report.providers[0]).toMatchObject({ status: 'skipped', reason: expect.stringContaining('política') })
   })
 
@@ -190,5 +199,21 @@ describe('syncModels', () => {
     await model('groq/compound', { provider_id: 'groq' })
     expect(await migrateResellerIds(getDb())).toEqual([{ from: 'groq/compound', to: 'groq/groq/compound' }])
     expect(await migrateResellerIds(getDb())).toEqual([])
+  })
+})
+
+describe('scheduler', () => {
+  test('arranca solo, corre sin intervención y reintenta si un proveedor falla', async () => {
+    const { startModelSyncScheduler, stopModelSyncScheduler } = await import('./scheduler')
+    const db = getDb()
+    for (const name of ['models', 'providers', 'hl_model_sync_runs']) for (const e of await db.collection(name).scan()) await db.collection(name).delete(e.id)
+    await db.collection('providers').put('ollama', { name: 'Ollama', base_url: 'http://127.0.0.1:1', category: 'llm', enabled: 1, active: 1 })
+    expect(startModelSyncScheduler(db, { hours: 24, firstDelayMs: 5, retryMs: 20 })).toBe(true)
+    expect(startModelSyncScheduler(db, { hours: 24 })).toBe(false) // idempotente
+    // ollama no responde: 1ª corrida + reintentos (hasta 3), sin que nadie haga nada
+    for (let i = 0; i < 100 && (await db.collection('hl_model_sync_runs').count()) < 3; i++) await Bun.sleep(30)
+    stopModelSyncScheduler()
+    expect(await db.collection('hl_model_sync_runs').count()).toBeGreaterThanOrEqual(3)
+    expect(startModelSyncScheduler(db, { hours: 0 })).toBe(false)
   })
 })

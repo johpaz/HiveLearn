@@ -23,6 +23,8 @@ export interface ProviderRow {
   local: boolean
   enabled: boolean
   modelCount: number
+  /** `llm`, `tts`… (los de voz no sirven para agentes de texto). */
+  category: string
 }
 
 /** Une la vista del portal (clave guardada) con la del gateway (activo, modelos). */
@@ -39,13 +41,14 @@ export function mergeProviders(portal: PortalProvider[], gateway: GatewayProvide
       local: g?.isLocal ?? isLocalBaseUrl(baseUrl, p.id),
       enabled: Boolean(g?.enabled),
       modelCount: g?.modelCount ?? 0,
+      category: g?.category ?? 'llm',
     }
   }).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name))
 }
 
 /** Proveedores utilizables para elegir modelo: activos y (si no son locales) con clave. */
-export function usableProviders(rows: ProviderRow[]): ProviderRow[] {
-  return rows.filter(row => row.enabled && (row.local || row.hasApiKey))
+export function usableProviders(rows: ProviderRow[], options: { voice?: boolean } = {}): ProviderRow[] {
+  return rows.filter(row => row.enabled && (row.local || row.hasApiKey) && (options.voice ? true : row.category !== 'tts'))
 }
 
 /** Modelos a mostrar: los activos primero; el valor actual siempre está presente aunque ya no figure. */

@@ -65,6 +65,8 @@ export async function generateCurriculum(db: HiveDB, input: GenerateCurriculumIn
     systemPrompt: '',
     tools: [definirCurriculoTool],
     threadId: `curriculum-${crypto.randomUUID()}`,
+    // Un currículo completo (nodos, banco de preguntas) más el razonamiento del modelo no cabe en 2048.
+    maxTokens: 8192,
     runContext: input.runContext,
   })
 

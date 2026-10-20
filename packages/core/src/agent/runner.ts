@@ -21,6 +21,12 @@ import { fallbackFor, isAvailabilityError, isModelDown, markModelDown } from './
 
 const log = logger.child('hl-runner')
 
+/** Tope de tokens de salida histórico de todos los agentes. */
+const DEFAULT_MAX_TOKENS = (() => {
+  const raw = Number(process.env.HIVELEARN_MAX_OUTPUT_TOKENS)
+  return Number.isInteger(raw) && raw >= 512 ? raw : 2048
+})()
+
 /** Tope de iteraciones que el loop propio aplicaba a todos los agentes. */
 const LEGACY_MAX_ITERATIONS = 6
 
@@ -34,6 +40,11 @@ export async function runHiveLearnAgent(opts: {
   runContext: RunContext
   /** Sustituye el tope de iteraciones (el predeterminado es 6, como el loop propio histórico). */
   maxIterations?: number
+  /**
+   * Tope de tokens de salida (2048 por defecto). Con modelos que razonan (Gemini 3.x, Qwen), el razonamiento consume
+   * este mismo presupuesto: un entregable largo (currículo, plan) necesita más o el modelo termina sin tool call.
+   */
+  maxTokens?: number
   /** Razonamiento del modelo en esta corrida (decidido por el oráculo por especialista). */
   thinking?: boolean
   /** Aborta la corrida (tiempo agotado del trabajo o ronda cancelada). */
@@ -119,7 +130,7 @@ async function runWithModel(
         numGpu: providerConfig.numGpu,
         // El loop propio ignoraba `max_iterations` y usaba siempre 6; se conserva ese mínimo.
         maxIterations: opts.maxIterations ?? Math.max(agent.max_iterations ?? 0, LEGACY_MAX_ITERATIONS),
-        maxTokens: 2048,
+        maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
         runContext: opts.runContext,
         thinking: opts.thinking,
         signal: opts.signal,
@@ -136,7 +147,7 @@ async function runWithModel(
     taskDescription: opts.taskDescription,
     tools: opts.tools,
     providerConfig,
-    maxTokens: 2048,
+    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     temperature: 0.3,
     maxIterations: opts.maxIterations,
     thinking: opts.thinking,

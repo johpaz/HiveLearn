@@ -60,7 +60,14 @@ export function listTarget(providerId: string, baseUrl: string | undefined, apiK
 
 async function getJson(url: string, headers: Record<string, string>, fetcher: typeof fetch): Promise<unknown> {
   const response = await fetcher(url, { headers: { Accept: 'application/json', ...headers }, signal: AbortSignal.timeout(TIMEOUT_MS) })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  if (!response.ok) {
+    // El cuerpo del error suele decir el motivo real ("API key not valid"); no incluye la clave.
+    const detail = await response.text().then(text => {
+      try { return String((JSON.parse(text) as { error?: { message?: string } | string }).error && ((JSON.parse(text) as { error: { message?: string } | string }).error as { message?: string }).message || (JSON.parse(text) as { error: string }).error) } catch { return text }
+    }).catch(() => '')
+    const clean = detail.replace(/\s+/g, ' ').trim().slice(0, 160)
+    throw new Error(`HTTP ${response.status}${clean ? `: ${clean}` : ''}`)
+  }
   const length = Number(response.headers.get('content-length') ?? 0)
   if (length > MAX_BYTES) throw new Error('respuesta demasiado grande')
   const text = await response.text()
@@ -114,8 +121,13 @@ export async function fetchRemoteModels(target: ListTarget, fetcher: typeof fetc
       return dedupe(((json as AnthropicList).data ?? []).filter(m => m.id).map(m => ({
         wireId: m.id!, name: m.display_name ?? m.id!, modelType: 'llm' as const, capabilities: ['chat', 'vision', 'function_calling', 'streaming'],
       })))
-    case 'gemini':
-      return dedupe(((json as GeminiList).models ?? []).flatMap(m => {
+    case 'gemini': {
+      const pages: GeminiList[] = [json as GeminiList]
+      for (let page = 0; page < 5 && pages[pages.length - 1].nextPageToken; page++) {
+        const next = await getJson(`${target.url}&pageToken=${encodeURIComponent(pages[pages.length - 1].nextPageToken!)}`, target.headers, fetcher)
+        pages.push(next as GeminiList)
+      }
+      return dedupe(pages.flatMap(p => p.models ?? []).flatMap(m => {
         const wireId = m.name?.replace(/^models\//, '')
         const methods = m.supportedGenerationMethods ?? []
         if (!wireId || !methods.includes('generateContent')) return []
@@ -123,6 +135,7 @@ export async function fetchRemoteModels(target: ListTarget, fetcher: typeof fetc
         if (!type) return []
         return [{ wireId, name: m.displayName ?? wireId, modelType: type, contextWindow: m.inputTokenLimit, capabilities: type === 'llm' ? ['chat', 'vision', 'function_calling', 'streaming'] : undefined }]
       }))
+    }
     case 'ollama':
       return dedupe(((json as OllamaList).models ?? []).flatMap(m => {
         const wireId = m.name ?? m.model

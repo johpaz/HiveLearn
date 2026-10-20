@@ -18,6 +18,12 @@ import { journeySurface } from './journey-a2ui'
 import { parseStudents, studentTemplate, XLSX_MIME } from './spreadsheet'
 import { readSettings, saveSettings, setCredential, settingsView } from './settings'
 import { Supplements, runSupplementWorker, type SupplementExecutor } from './supplements'
+import { applyAgentModels } from './agents-config'
+import { eraseAccount, ErasureError } from './erasure'
+import { ProgramEngine, ProgramRuleError, type EngineDeps } from './program/engine'
+import { ProgramActiveError, ProgramNotFoundError } from './program/program-store'
+import { ProgramReviews, ReviewError } from './program/review'
+import { studentProgram, teacherProgram } from './program/views'
 import { CurriculumJobs, runCurriculumGeneration, type CurriculumGenerator } from './curriculum-jobs'
 import { normalizeLogo } from './branding'
 import { logger } from '../utils/logger'
@@ -46,15 +52,25 @@ export class Portal {
   readonly learning: Learning
   readonly supplements: Supplements
   readonly curriculumJobs: CurriculumJobs
+  readonly programs: ProgramEngine
+  readonly programReviews: ProgramReviews
   readonly journey: GuidedJourney
   readonly progress: CurriculumProgressStore
   readonly curriculumJourney: CurriculumJourney
   private attempts = new Map<string, { count: number; until: number }>()
-  constructor(readonly db: HiveDB, supplementExecutor: SupplementExecutor = runSupplementWorker, curriculumGenerator: CurriculumGenerator = runCurriculumGeneration) {
+  constructor(readonly db: HiveDB, supplementExecutor: SupplementExecutor = runSupplementWorker, curriculumGenerator: CurriculumGenerator = runCurriculumGeneration, programDeps?: Partial<EngineDeps>) {
     this.accounts = new Accounts(db)
     this.learning = new Learning(db)
     this.supplements = new Supplements(db, supplementExecutor)
     this.curriculumJobs = new CurriculumJobs(db, curriculumGenerator)
+    this.programs = new ProgramEngine(db, {
+      // Los agentes se cargan al primer uso: un portal sin programas no importa el motor de agentes.
+      planner: programDeps?.planner ?? (async input => (await import('../agent/program-architect')).generateProgramPlan(input)),
+      adapter: programDeps?.adapter ?? (async input => (await import('../agent/program-architect')).proposeAdaptation(input)),
+      kev: programDeps?.kev ?? (async ctx => (await import('../agent/kev/client')).kevForRun(ctx)),
+      guide: programDeps?.guide,
+    })
+    this.programReviews = new ProgramReviews(db, this.programs.store, this.programs.audit, id => this.accounts.get(id))
     this.journey = new GuidedJourney(db, this.learning)
     this.progress = new CurriculumProgressStore(db)
     this.curriculumJourney = new CurriculumJourney(db)
@@ -184,7 +200,7 @@ export class Portal {
       if (path === '/status' && method === 'GET') {
         const entry = await this.db.collection<{ institutionId: string; name: string }>('hl_installation').get('main')
         const selfRegistration = entry ? !!(await readSettings(this.db, entry.doc.institutionId)).allowSelfRegistration : false
-        return json({ configured: await this.accounts.initialized(), institution: entry?.doc.name ?? 'HiveLearn', hasLogo: !!(await this.db.collection('hl_branding').get('main')), selfRegistration })
+        return json({ configured: await this.accounts.initialized(), institution: entry?.doc.name ?? 'HiveLearn', hasLogo: !!(await this.db.collection('hl_branding').get('main')), selfRegistration, engine: (await import('../agent/sdk/bootstrap')).getAgentEngine() })
       }
       if (path === '/logo' && method === 'GET') {
         const logo = await this.db.collection<{ png: string }>('hl_branding').get('main')
@@ -261,10 +277,121 @@ export class Portal {
         if (method === 'GET') return json(await settingsView(this.db, actor.institutionId))
         if (method === 'PUT') return json({ settings: await saveSettings(this.db, actor.institutionId, await body(req)) })
       }
+      // ── Programa formativo personal (sesión activa única, plan por niveles que los agentes adaptan) ──
+      const programPath = path.match(/^\/programs\/([^/]+)(?:\/(answer|checkpoint|prepare|close|trace|review|plan|material\/([^/]+)))?$/)
+      if (path === '/programs/active' && method === 'GET') {
+        this.allow(actor, ['student'])
+        const view = await this.programs.active(actor)
+        return json({ program: view ? studentProgram(view) : null })
+      }
+      if (path === '/programs' && method === 'POST') {
+        this.allow(actor, ['student'])
+        this.throttle(`${peer}:program:${actor.id}`)
+        try { return json({ program: studentProgram(await this.programs.open(actor, await body(req))) }, 201) }
+        catch (error) {
+          if (error instanceof ProgramActiveError) return json({ error: error.message, code: 'active_program_exists', programId: error.programId }, 409)
+          throw error
+        }
+      }
+      if (path === '/programs/analytics' && method === 'GET') {
+        this.allow(actor, ['teacher', 'admin'])
+        const { weakNodes } = await import('./program/projections')
+        const mine = actor.role === 'admin' ? undefined : new Set((await this.accounts.list(actor)).filter(a => a.role === 'student').map(a => a.id))
+        const topic = url.searchParams.get('topic') ?? undefined
+        return json({ weakNodes: await weakNodes(this.db, actor.institutionId, { topic, accountIds: mine, limit: 10 }) })
+      }
+      if (path === '/programs/review-queue' && method === 'GET') {
+        this.allow(actor, ['teacher', 'admin'])
+        const queue = await this.programReviews.queue(actor)
+        const names = new Map((await this.accounts.list(actor)).map(a => [a.id, a.name]))
+        return json({ queue: queue.map(p => ({ id: p.id, student: names.get(p.accountId) ?? 'Alumno', topic: p.intent.topic, objective: p.objective, finalScore: p.finalScore ?? null, levels: p.levels.length, closedAt: p.closedAt ?? null })) })
+      }
+      if (programPath) {
+        const [, programId, action, nodeId] = programPath
+        try {
+          if (!action && method === 'GET') {
+            const program = await this.programs.store.get(programId)
+            if (!program) throw new ProgramNotFoundError()
+            if (program.accountId === actor.id) return json({ program: studentProgram(this.programs.view(program)) })
+            this.allow(actor, ['teacher', 'admin'])
+            await this.programReviews.history(actor, programId) // comprueba acceso
+            return json({ program: teacherProgram(program), reviews: await this.programReviews.history(actor, programId) })
+          }
+          if (action?.startsWith('material') && method === 'GET') {
+            this.allow(actor, ['student'])
+            const program = await this.programs.store.get(programId)
+            if (!program || program.accountId !== actor.id) throw new ProgramNotFoundError()
+            const node = program.levels.flatMap(l => l.nodes).find(n => n.id === nodeId)
+            if (!node) throw new HttpError(404, 'Nodo no encontrado')
+            const band = ageBandFor(actor.age)
+            const ref = { id: `program-${program.id}`, hash: node.id }
+            let explanation = await cachedExplanation(this.db, ref, node.id, band)
+            if (!explanation) {
+              try {
+                const { generateNodeExplanation } = await import('../agent/curriculum-tutor')
+                explanation = await generateNodeExplanation({ topic: program.intent.topic, node: { title: node.title, objective: node.objective, evidence: node.evidence }, runContext: { studentId: actor.id, institutionId: actor.institutionId, ageBand: band } })
+                if (explanation) await saveExplanation(this.db, ref, node.id, band, explanation)
+              } catch { /* sin explicación del modelo: se usa la base */ }
+            }
+            return json({ material: { title: node.title, objective: node.objective, evidence: node.evidence, explanation: explanation ?? `${node.objective} Cuando lo logres podrás mostrarlo así: ${node.evidence}`, generated: !!explanation, question: { prompt: node.question.prompt, options: node.question.options } } })
+          }
+          if (action === 'answer' && method === 'POST') {
+            this.allow(actor, ['student'])
+            const data = z.object({ nodeId: z.string().max(48), choice: z.number().int().min(0).max(2), open: z.string().max(600).optional() }).strict().parse(await body(req))
+            const result = await this.programs.answer(actor, programId, { nodeId: data.nodeId!, choice: data.choice!, open: data.open })
+            return json({ correct: result.correct, mastered: result.mastered, hint: result.hint, program: studentProgram(result.view) })
+          }
+          if (action === 'checkpoint' && method === 'POST') {
+            this.allow(actor, ['student'])
+            this.throttle(`${peer}:checkpoint:${actor.id}`)
+            const result = await this.programs.checkpoint(actor, programId)
+            return json({ decision: result.decision, reason: result.reason, adapted: result.adapted, program: studentProgram(result) })
+          }
+          if (action === 'prepare' && method === 'POST') {
+            this.allow(actor, ['student'])
+            return json({ program: studentProgram(await this.programs.ensureLevelContent(actor, programId)) })
+          }
+          if (action === 'close' && method === 'POST') {
+            this.allow(actor, ['student'])
+            const closed = await this.programs.close(actor, programId)
+            return json({ program: studentProgram(this.programs.view(closed)) })
+          }
+          if (action === 'trace' && method === 'GET') {
+            const program = await this.programs.store.get(programId)
+            if (!program) throw new ProgramNotFoundError()
+            if (program.accountId !== actor.id) { this.allow(actor, ['teacher', 'admin']); await this.programReviews.history(actor, programId) }
+            return json({ thread: await this.programs.audit.thread(programId, program.accountId) })
+          }
+          if (action === 'review' && method === 'POST') {
+            this.allow(actor, ['teacher', 'admin'])
+            return json({ program: teacherProgram(await this.programReviews.review(actor, programId, await body(req))) })
+          }
+          if (action === 'plan' && method === 'PUT') {
+            this.allow(actor, ['teacher', 'admin'])
+            const data = z.object({ ops: z.array(z.unknown()).min(1).max(20), reason: z.string().min(5).max(300) }).strict().parse(await body(req))
+            const result = await this.programReviews.adjustPlan(actor, programId, data.ops!, data.reason!)
+            return json({ applied: result.applied, rejected: result.rejected, program: teacherProgram(result.saved) })
+          }
+        } catch (error) {
+          if (error instanceof ProgramNotFoundError) throw new HttpError(404, error.message)
+          if (error instanceof ProgramRuleError) throw new HttpError(error.code === 'not_owner' ? 403 : 409, error.message)
+          if (error instanceof ReviewError) throw new HttpError(error.code === 'forbidden' ? 403 : error.code === 'invalid' ? 422 : 409, error.message)
+          throw error
+        }
+      }
+      if (path === '/agents/models' && method === 'PUT') {
+        this.allow(actor, ['admin'])
+        try { return json(await applyAgentModels(this.db, await body(req))) }
+        catch (error) {
+          if (error instanceof z.ZodError) throw error
+          throw new HttpError(422, error instanceof Error ? error.message : 'No se pudieron guardar los modelos')
+        }
+      }
       if (path === '/models/sync' && method === 'GET') {
         this.allow(actor, ['admin'])
         const { lastSyncReport, isSyncRunning } = await import('../models/sync')
-        return json({ running: isSyncRunning(), report: await lastSyncReport(this.db) })
+        const { modelSyncHours } = await import('../models/scheduler')
+        return json({ running: isSyncRunning(), everyHours: modelSyncHours(), report: await lastSyncReport(this.db) })
       }
       if (path === '/models/sync' && method === 'POST') {
         this.allow(actor, ['admin'])
@@ -272,10 +399,8 @@ export class Portal {
         const data = z.object({ providerId: z.string().max(100).optional(), dryRun: z.boolean().optional() }).strict().parse(await body(req))
         const { syncModels } = await import('../models/sync')
         // Un proveedor: se espera el resultado. Todos: puede tardar minutos, corre aparte y se consulta con GET.
-        // Una petición del administrador es deliberada y solo envía la API key al proveedor (ningún dato de alumnos):
-        // no se frena por la política de proveedores remotos, que sí rige la sincronización automática.
-        if (data.providerId) return json({ running: false, report: await syncModels(this.db, { providerId: data.providerId, dryRun: data.dryRun, ignorePolicy: true }) })
-        void syncModels(this.db, { dryRun: data.dryRun, ignorePolicy: true }).catch(error => log.warn('Sincronización de modelos fallida', { error: (error as Error).message }))
+        if (data.providerId) return json({ running: false, report: await syncModels(this.db, { providerId: data.providerId, dryRun: data.dryRun }) })
+        void syncModels(this.db, { dryRun: data.dryRun }).catch(error => log.warn('Sincronización de modelos fallida', { error: (error as Error).message }))
         return json({ running: true, report: null }, 202)
       }
       if (path === '/branding' && method === 'PUT') {
@@ -291,7 +416,28 @@ export class Portal {
         return json({ ok: true })
       }
       const credential = path.match(/^\/providers\/([^/]+)\/credential$/)
-      if (credential && method === 'PUT') { this.allow(actor, ['admin']); return json(await setCredential(this.db, actor.institutionId, credential[1], await body(req))) }
+      if (credential && method === 'PUT') {
+        this.allow(actor, ['admin'])
+        const saved = await setCredential(this.db, actor.institutionId, credential[1], await body(req))
+        // Con la clave nueva el catálogo de ese proveedor se actualiza solo, sin que nadie lo pida.
+        void import('../models/sync').then(m => m.syncModels(this.db, { providerId: credential[1] })).catch(error => log.warn('Sincronización tras guardar la clave fallida', { error: (error as Error).message }))
+        return json(saved)
+      }
+      const erasure = path.match(/^\/accounts\/([^/]+)$/)
+      if (erasure && method === 'DELETE') {
+        this.allow(actor, ['admin'])
+        this.throttle(`${peer}:erase:${actor.id}`)
+        // Irreversible: el cliente debe repetir el nombre de usuario de la cuenta.
+        const data = z.object({ confirm: z.string().min(1).max(80) }).strict().parse(await body(req))
+        const target = await this.accounts.get(erasure[1])
+        if (!target || target.institutionId !== actor.institutionId) throw new HttpError(404, 'Cuenta no encontrada')
+        if (data.confirm !== target.username) throw new HttpError(422, 'La confirmación no coincide con el nombre de usuario')
+        try { return json({ report: await eraseAccount(this.db, actor, erasure[1]) }) }
+        catch (error) {
+          if (error instanceof ErasureError) throw new HttpError(error.code === 'not_found' ? 404 : error.code === 'forbidden' ? 403 : 409, error.message)
+          throw error
+        }
+      }
       const invitation = path.match(/^\/accounts\/([^/]+)\/invitation$/)
       if (invitation && method === 'POST') { this.allow(actor, ['admin', 'teacher']); return json(await this.accounts.reissue(actor, invitation[1]), 201) }
       if (path === '/teachers' && method === 'POST') {

@@ -20,6 +20,7 @@ import { AUDIO_PROMPT } from './prompts/audio.prompt'
 import { ONBOARDING_PROMPT } from './prompts/onboarding.prompt'
 import { CURRICULUM_ARCHITECT_PROMPT } from './prompts/curriculum-architect.prompt'
 import { RESEARCHER_PROMPT } from './prompts/researcher.prompt'
+import { PROGRAM_ARCHITECT_PROMPT, PROGRAM_ADAPTER_PROMPT } from './prompts/program-architect.prompt'
 
 export const AGENT_IDS = {
   coordinator: 'hl-coordinator-agent',
@@ -36,6 +37,8 @@ export const AGENT_IDS = {
   safety: 'hl-safety-policy-agent',
   curriculumArchitect: 'hl-curriculum-architect-agent',
   researcher: 'hl-researcher-agent',
+  programArchitect: 'hl-program-architect-agent',
+  programAdapter: 'hl-program-adapter-agent',
 } as const
 
 interface AgentDef {
@@ -75,6 +78,8 @@ const HIVELEARN_AGENTS: AgentDef[] = [
   { id: AGENT_IDS.audio, name: 'AudioAgent', description: 'Genera script de narración educativa (Web Speech API)', systemPrompt: AUDIO_PROMPT, maxIterations: 3 },
   { id: AGENT_IDS.diagnostic, name: 'DiagnosticAgent', description: 'Interpreta evidencias de competencias de IA', systemPrompt: 'Clasifica evidencias de IA por competencia y nivel. No inventes resultados; devuelve JSON verificable.', maxIterations: 3 },
   { id: AGENT_IDS.curriculumArchitect, name: 'CurriculumArchitectAgent', description: 'Diseña el currículo de cualquier tema como grafo de competencias validado', systemPrompt: CURRICULUM_ARCHITECT_PROMPT, maxIterations: 6 },
+  { id: AGENT_IDS.programArchitect, name: 'ProgramArchitectAgent', description: 'Diseña el programa formativo personal por niveles a partir de lo que el alumno declara', systemPrompt: PROGRAM_ARCHITECT_PROMPT, maxIterations: 6 },
+  { id: AGENT_IDS.programAdapter, name: 'ProgramAdapterAgent', description: 'Crea y adapta los niveles siguientes según la evidencia del alumno', systemPrompt: PROGRAM_ADAPTER_PROMPT, maxIterations: 6 },
   { id: AGENT_IDS.researcher, name: 'ResearcherAgent', description: 'Investiga un tema en la web y entrega un dossier de afirmaciones con fuentes', systemPrompt: RESEARCHER_PROMPT, maxIterations: 14 },
   { id: AGENT_IDS.safety, name: 'SafetyPolicyAgent', description: 'Verifica seguridad, edad, privacidad y consentimiento', systemPrompt: 'Revisa contenido educativo para edad, privacidad, sesgos y consentimiento. Señala bloqueos explícitamente.', maxIterations: 3 },
 ]
@@ -96,6 +101,8 @@ const ACTIVE_AGENT_IDS = new Set<string>([
   AGENT_IDS.safety,
   AGENT_IDS.curriculumArchitect,
   AGENT_IDS.researcher,
+  AGENT_IDS.programArchitect,
+  AGENT_IDS.programAdapter,
 ])
 
 function agentsCollection(): Collection<AgentDoc> {

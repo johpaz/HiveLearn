@@ -10,8 +10,9 @@
  *    entonces se conserva marcado `status: "missing"` y se informa quién lo usa. Nunca se deja a un agente sin modelo.
  *  - Los modelos creados a mano (`source: "manual"`) no se tocan.
  *  - Un listado vacío o que encoge a menos de la mitad no autoriza borrar nada (probable fallo del proveedor).
- *  - La sincronización AUTOMÁTICA respeta la política "sin proveedores remotos" (solo consulta los locales); la que
- *    pide un administrador (`ignorePolicy`) no: solo envía la API key al proveedor, nunca datos de alumnos.
+ *  - Es independiente del usuario: corre sola en segundo plano (ver `scheduler.ts`). Listar modelos solo envía la API
+ *    key al proveedor, nunca datos de alumnos, así que no la frena la política de proveedores remotos (que rige los
+ *    datos). Quien quiera el comportamiento estricto puede pedir `respectPolicy`.
  */
 import type { BatchOp, HiveDB } from '@johpaz/hive-db'
 import { logger } from '../utils/logger'
@@ -69,8 +70,8 @@ export interface SyncOptions {
   fetcher?: typeof fetch
   /** Para pruebas: resuelve clave y URL sin pasar por el llavero. */
   resolveConfig?: (providerId: string) => Promise<{ apiKey?: string; baseUrl?: string }>
-  /** Ignora la política de proveedores remotos: petición explícita del administrador (y pruebas). */
-  ignorePolicy?: boolean
+  /** Con `true`, un proveedor remoto se omite si la institución desactivó los proveedores remotos. */
+  respectPolicy?: boolean
   now?: () => Date
 }
 
@@ -237,7 +238,7 @@ async function runSync(db: HiveDB, options: SyncOptions): Promise<SyncReport> {
   const dryRun = options.dryRun ?? false
 
   const { readInstitutionPolicy, isLocalProvider } = await import('../agent/policy/age-policy')
-  const policy = options.ignorePolicy ? { installed: false } : await readInstitutionPolicy()
+  const policy = options.respectPolicy ? await readInstitutionPolicy() : { installed: false }
   const remoteAllowed = !policy.installed || policy.settings?.allowRemoteProviders === true
 
   const resolveConfig = options.resolveConfig ?? (async (providerId: string) => {

@@ -27,10 +27,38 @@ Identidad y política por edad, migración de ids, memoria, currículos (validac
 - Cancelación real por intento, backoff, corte de ronda con `model_not_mounted` y respaldo de modelo bajo la política por edad: cubiertos con pruebas (`swarm/jobs.test.ts`, `runner.contract.test.ts`).
 - Generación de currículos desde el portal y sesiones sobre un currículo: pruebas con generador simulado. **Sin corrida en vivo** (no había modelo montado ni clave de Gemini).
 
+## Programa personal por niveles — recorrido completo con Gemini 3.8 Flash (2026-10-13)
+Navegador real (Chromium por CDP), gateway con motor SDK y base temporal, alumno y docente creados por la API:
+- Plan de 3 niveles en **22 s** a partir de la intención declarada en la UI.
+- Nivel 1 acertado → adaptador materializa el nivel 2 en 27 s. Nivel 2 fallado a propósito → checkpoint `hold` e **inserta un nivel de refuerzo** en 19 s. Refuerzo superado → materializa la evaluación final en 9 s. Final superado → programa cerrado, `pending_review`, nota 100.
+- El docente reafirma desde la UI; la cola queda vacía, `validation: validated`, 4 revisiones del plan y bitácora ordenada `intent → answer… → checkpoint → adaptation → … → state → validation`.
+- Hallazgos que cambiaron el diseño: el adaptador a veces contestaba texto en vez de llamar la tool (reintento recordando la tool); pedir a la vez "refuerzo + materializar" confundía los índices (ahora una sola operación principal); sin contenido tras una caída del modelo se usa repaso determinista.
+- Pruebas automáticas: dominio (dimensionado, guardas), cerrojo de sesión única (con concurrencia y expiración), motor (avance, refuerzo, rechazo de ajustes sobre lo cursado, fallback, oráculo), validación docente, guía con k-anonimato y rutas del portal (roles, 409, la clave no llega al alumno).
+- **No verificado:** el embedder local (`HIVELEARN_EMBEDDER=local`, ~470 MB); la búsqueda de guías se probó en modo texto.
+
 ## Sincronización de modelos y retiro de LocalLLM (2026-10-13)
 - Pruebas con servidores simulados (`models/sync.test.ts`): alta de modelos inactivos, actualización, retiro, protección de los que usa un agente, listado sospechoso, modelos manuales, política sin remotos, migración de ids de revendedores con re-apuntado de agentes y ajustes (idempotente).
 - **Sin corrida contra las APIs reales** de los proveedores (formato de los listados tomado de su documentación).
 - LocalLLM salió del catálogo: adaptador, runtime, descargador, rutas `/api/llm/*` y `/ws/llm`, proveedor y modelo sembrados. En una base existente, el seed elimina el proveedor y sus modelos si nada los usa; si algún agente o ajuste los usa, avisa y lo elimina cuando se cambie.
+
+## En vivo con Gemini 3.8 Flash y el motor SDK 0.7.3 (2026-10-13)
+Base temporal, clave leída del llavero del proyecto (no impresa), `HIVELEARN_AGENT_ENGINE=sdk`:
+- Arquitecto (sin investigador): **32 s**, currículo de 8 nodos y 8 preguntas, estado `generated`.
+- Arquitecto + investigador web: **68 s**, 6 nodos, dossier de 2 fuentes y 7 afirmaciones.
+- Sesión completa (coordinador → especialistas → ronda final): **127 s**, 10 nodos con contenido, visuales y evaluación.
+- **Hallazgo:** con `maxTokens: 2048` Gemini 3.x devolvía respuesta vacía (el razonamiento —800 a 1 900 tokens— consume el mismo presupuesto que la salida) y la generación fallaba con `missing_tool_call`. Ahora `runHiveLearnAgent` acepta `maxTokens` (arquitecto e investigador 8192, planificación 6144; `HIVELEARN_MAX_OUTPUT_TOKENS` cambia el valor por defecto).
+- La política por defecto (`allowRemoteProviders: false`) bloquea Gemini en una institución instalada: hay que habilitarla en Configuración → Política y respaldo.
+- Catálogo de modelos de Gemini sincronizado en la base real: ~45 modelos actuales, con `gemini-3.8-flash`.
+
+## Prueba en vivo reproducible (`scripts/live-check.ts`)
+Contra un gateway en marcha y con sus proveedores configurados, sin que las claves pasen por el script (solo la API del portal):
+
+```bash
+HIVELEARN_ADMIN_USER=<admin> HIVELEARN_ADMIN_PASSWORD='<contraseña>' \
+  bun run scripts/live-check.ts --base http://127.0.0.1:8787 --topic "Introducción a SQL" [--no-research] [--approve]
+```
+
+Comprueba login → configuración vigente → generación (arquitecto y, salvo `--no-research`, investigador) con el estado del trabajo → catálogo → aprobación opcional. Verificado el propio script contra un gateway temporal: login erróneo y fallo de modelo se informan con un mensaje claro y código de salida 1.
 
 ## No verificado
 - Calidad pedagógica del contenido generado (la puerta de seguridad no es un juicio pedagógico).

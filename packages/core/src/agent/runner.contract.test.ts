@@ -27,7 +27,7 @@ import type { RunContext } from './policy/age-policy'
 import { _resetToolBridgeForTests } from './sdk/tools'
 import { _resetFallbackStateForTests, isModelDown, markModelDown } from './fallback'
 
-type ChatRequest = { tools?: Array<{ function: { name: string } }>; messages: Array<{ role: string; content?: unknown }> }
+type ChatRequest = { tools?: Array<{ function: { name: string } }>; messages: Array<{ role: string; content?: unknown }>; max_tokens?: number; max_completion_tokens?: number }
 type Reply = { content?: string | null; tool?: { name: string; args: object } }
 
 let server: ReturnType<typeof Bun.serve>
@@ -187,6 +187,16 @@ for (const engine of ['legacy', 'sdk'] as const) {
         expect(system).not.toContain('Trata al alumno como adulto')
       }
     })
+
+    test('maxTokens: el tope de salida pedido llega al modelo (el razonamiento consume el mismo presupuesto)', async () => {
+      script = [{ tool: { name: 'generar_ficha', args: { titulo: 'x' } } }]
+      await runHiveLearnAgent({ agentId: AGENT, taskDescription: 't', systemPrompt: 'p', tools: [structuredNoExec], threadId: `thread-${crypto.randomUUID()}`, runContext: ADULT, maxTokens: 7000 })
+      const sent = requests.at(-1)!
+      expect(sent.max_tokens ?? sent.max_completion_tokens).toBe(7000)
+      script = [{ tool: { name: 'generar_ficha', args: { titulo: 'x' } } }]
+      await run([structuredNoExec])
+      expect(requests.at(-1)!.max_tokens ?? requests.at(-1)!.max_completion_tokens).toBe(2048)
+    }, 60_000)
 
     test('sin tools devuelve el texto', async () => {
       script = [{ content: 'respuesta libre' }]

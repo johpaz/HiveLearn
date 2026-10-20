@@ -3,18 +3,19 @@ import { api } from '../api'
 import { modelOptions } from '../settings-logic'
 import type { ModelInfo } from '../types'
 
-const cache = new Map<string, Promise<ModelInfo[]>>()
+// La sincronización corre en segundo plano: las listas guardadas caducan para no mostrar un catálogo viejo.
+const CACHE_TTL_MS = 15_000
+const cache = new Map<string, { at: number; models: Promise<ModelInfo[]> }>()
 
 /** Tras sincronizar, las listas guardadas ya no valen. */
 export function clearModelCache() { cache.clear() }
 
 function loadModels(providerId: string): Promise<ModelInfo[]> {
-  let pending = cache.get(providerId)
-  if (!pending) {
-    pending = api.providerModels(providerId).catch(error => { cache.delete(providerId); throw error })
-    cache.set(providerId, pending)
-  }
-  return pending
+  const hit = cache.get(providerId)
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.models
+  const models = api.providerModels(providerId).catch(error => { cache.delete(providerId); throw error })
+  cache.set(providerId, { at: Date.now(), models })
+  return models
 }
 
 /** Selector de modelo de un proveedor; carga la lista bajo demanda y la reutiliza. */

@@ -305,6 +305,7 @@ export class HiveLearnSwarm {
           tools: [planificarProgramaTool],
           threadId: sessionId,
           runContext: this.runContext,
+          maxTokens: 6144,
         })
 
         const blueprint = parseAgentOutput<{ tema?: string; topic_slug?: string | null; curriculumVersion?: string; nodos?: unknown[] }>(planningRaw, {})

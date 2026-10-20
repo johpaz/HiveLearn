@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "dev": "bun run scripts/dev.ts",
+    "dev:sdk": "HIVELEARN_AGENT_ENGINE=sdk bun run scripts/dev.ts",
     "dev:ui": "bun run --cwd packages/hivelearn-ui dev",
     "dev:server": "NODE_ENV=development bun run --cwd packages/core dev",
     "dev:cli": "bun run --cwd packages/cli dev",

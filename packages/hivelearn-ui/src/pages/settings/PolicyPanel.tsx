@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import { ModelSelect } from '../../components/ModelSelect'
 import { Notice } from '../../components/ui'
@@ -7,18 +7,29 @@ import type { InstitutionSettings } from '../../types'
 
 export function PolicyPanel({ initial, rows, onSaved }: { initial: InstitutionSettings; rows: ProviderRow[]; onSaved: () => Promise<void> }) {
   const [draft, setDraft] = useState(initial)
+  // La configuración puede recargarse en segundo plano: solo se reemplaza el borrador si el usuario no lo tocó.
+  const baseline = useRef(JSON.stringify(initial))
+  useEffect(() => {
+    const incoming = JSON.stringify(initial)
+    if (incoming === baseline.current) return
+    setDraft(current => (JSON.stringify(current) === baseline.current ? initial : current))
+    baseline.current = incoming
+  }, [initial])
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
   const usable = usableProviders(rows)
   const set = <K extends keyof InstitutionSettings>(key: K, value: InstitutionSettings[K]) => setDraft(current => ({ ...current, [key]: value }))
 
-  const providerSelect = (value: string, onChange: (id: string) => void, label: string, optional = false) => (
+  const providerSelect = (value: string, onChange: (id: string) => void, label: string, optional = false, voice = false) => {
+    const list = voice ? usableProviders(rows, { voice: true }) : usable
+    return (
     <select aria-label={label} value={value} onChange={event => onChange(event.target.value)}>
       {optional && <option value="">Sin respaldo</option>}
-      {!optional && !usable.some(p => p.id === value) && <option value={value}>{value} (no disponible)</option>}
-      {usable.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+      {!optional && !list.some(p => p.id === value) && <option value={value}>{value} (no disponible)</option>}
+      {list.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
     </select>
-  )
+    )
+  }
 
   async function save() {
     setBusy(true)
@@ -45,7 +56,7 @@ export function PolicyPanel({ initial, rows, onSaved }: { initial: InstitutionSe
           model={<ModelSelect label="Modelo de texto" providerId={draft.providerId} value={draft.modelId} onChange={v => set('modelId', v)} />} />
         <ModelRow label="Imágenes" provider={providerSelect(draft.imageProviderId, id => setDraft(d => ({ ...d, imageProviderId: id, imageModelId: '' })), 'Proveedor de imágenes')}
           model={<ModelSelect label="Modelo de imágenes" providerId={draft.imageProviderId} value={draft.imageModelId} onChange={v => set('imageModelId', v)} />} />
-        <ModelRow label="Audio" provider={providerSelect(draft.audioProviderId, id => setDraft(d => ({ ...d, audioProviderId: id, audioModelId: '' })), 'Proveedor de audio')}
+        <ModelRow label="Audio" provider={providerSelect(draft.audioProviderId, id => setDraft(d => ({ ...d, audioProviderId: id, audioModelId: '' })), 'Proveedor de audio', false, true)}
           model={<ModelSelect label="Modelo de audio" providerId={draft.audioProviderId} value={draft.audioModelId} onChange={v => set('audioModelId', v)} />} />
         <ModelRow label="Respaldo" provider={providerSelect(draft.fallbackProviderId ?? '', id => setDraft(d => ({ ...d, fallbackProviderId: id || undefined, fallbackModelId: undefined })), 'Proveedor de respaldo', true)}
           model={<ModelSelect label="Modelo de respaldo" providerId={draft.fallbackProviderId ?? null} value={draft.fallbackModelId ?? null} onChange={v => set('fallbackModelId', v)} />} />

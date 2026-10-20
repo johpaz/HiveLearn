@@ -22,6 +22,9 @@ describe('settings-logic', () => {
       [{ id: 'gemini', enabled: 1 }, { id: 'openai', enabled: 1 }, { id: 'ollama', enabled: 1 }, { id: 'groq', enabled: 0 }],
     )
     expect(usableProviders(rows).map(r => r.id).sort()).toEqual(['gemini', 'ollama'])
+    const withVoice = mergeProviders([{ id: 'piper', name: 'Piper', hasApiKey: false, baseUrl: 'http://localhost:5500' }], [{ id: 'piper', enabled: 1, category: 'tts' }])
+    expect(usableProviders(withVoice)).toEqual([])
+    expect(usableProviders(withVoice, { voice: true }).map(r => r.id)).toEqual(['piper'])
   })
 
   test('modelOptions mantiene el valor actual y pone los activos primero', () => {

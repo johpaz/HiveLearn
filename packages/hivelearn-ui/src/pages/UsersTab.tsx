@@ -37,7 +37,7 @@ export function UsersTab({ account }: { account: Account }) {
       </div>
 
       <h2 className="panel__title">Cuentas</h2>
-      <AccountList accounts={accounts} self={account}
+      <AccountList accounts={accounts} self={account} onErased={() => void load()}
         onActivation={(a, code) => show('Nuevo código de activación', [{ username: a.username, name: a.name, code }], '7 días')}
         onReset={(a, code) => show('Código para restablecer la contraseña', [{ username: a.username, name: a.name, code }], '24 horas')} />
     </div>
@@ -168,9 +168,10 @@ function ImportForm({ onCreated }: { onCreated: (list: Invitation[]) => void }) 
   )
 }
 
-function AccountList({ accounts, self, onActivation, onReset }: {
+function AccountList({ accounts, self, onActivation, onReset, onErased }: {
   accounts: Account[]
   self: Account
+  onErased: () => void
   onActivation: (account: Account, code: string) => void
   onReset: (account: Account, code: string) => void
 }) {
@@ -201,6 +202,15 @@ function AccountList({ accounts, self, onActivation, onReset }: {
                   <span className={`chip ${active ? 'chip--ok' : 'chip--warn'}`}>{active ? 'Activa' : 'Pendiente de activación'}</span>
                 </div>
               </div>
+              {self.role === 'admin' && a.role !== 'admin' && (
+                <button className="btn btn--danger" disabled={busyId === a.id}
+                  onClick={() => void act(a, async () => {
+                    const typed = window.prompt(`Esto elimina para siempre la cuenta de ${a.name} y todo su avance. Escribe su usuario (${a.username}) para confirmar:`)
+                    if (typed === null) return
+                    await api.eraseAccount(a.id, typed.trim())
+                    onErased()
+                  })}>Eliminar</button>
+              )}
               {a.role !== 'admin' && (
                 <button className="btn btn--ghost" disabled={busyId === a.id}
                   onClick={() => void act(a, async () => active ? onReset(a, (await api.issuePasswordReset(a.id)).resetCode) : onActivation(a, (await api.reissueInvitation(a.id)).activationCode))}>

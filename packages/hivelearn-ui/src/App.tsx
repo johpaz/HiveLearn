@@ -47,7 +47,7 @@ export function App() {
 
   const authenticated = useCallback((next: Account) => {
     setAccount(next)
-    navigate({ name: 'console', tab: next.role === 'admin' ? 'settings' : 'home' })
+    navigate({ name: 'console', tab: next.role === 'admin' ? 'settings' : next.role === 'student' ? 'program' : 'home' })
   }, [])
 
   if (booting) return <div className="boot"><Spinner label="Iniciando HiveLearn…" /></div>

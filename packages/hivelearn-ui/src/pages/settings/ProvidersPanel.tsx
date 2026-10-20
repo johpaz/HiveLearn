@@ -40,10 +40,11 @@ function SyncAll({ rows, onChanged }: { rows: ProviderRow[]; onChanged: () => Pr
   const [report, setReport] = useState<SyncReport | null>(null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [everyHours, setEveryHours] = useState<number | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    api.modelSyncStatus().then(s => { setReport(s.report); if (s.running) { setRunning(true); poll() } }).catch(() => undefined)
+    api.modelSyncStatus().then(s => { setReport(s.report); setEveryHours(s.everyHours ?? null); if (s.running) { setRunning(true); poll() } }).catch(() => undefined)
     return () => { if (timer.current) clearTimeout(timer.current) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -83,11 +84,11 @@ function SyncAll({ rows, onChanged }: { rows: ProviderRow[]; onChanged: () => Pr
         <div>
           <h3>Catálogo de modelos</h3>
           <p className="muted">
-            Se actualiza solo cada 24 h: agrega los modelos nuevos (inactivos), actualiza contexto y capacidades, y retira los que el
-            proveedor ya no sirve, salvo que un agente los use. Los de OpenRouter llevan el prefijo <code>openrouter/</code>. La corrida automática respeta la política de proveedores remotos; “Actualizar ahora” no.
+            {everyHours === null ? 'Se actualiza sola' : everyHours > 0 ? `Se actualiza sola cada ${everyHours} h` : 'La actualización automática está desactivada'}: agrega los modelos nuevos (inactivos), actualiza contexto y capacidades, y retira los que el
+            proveedor ya no sirve, salvo que un agente los use. Los de OpenRouter llevan el prefijo <code>openrouter/</code>.  No necesitas hacer nada: corre en segundo plano y también al guardar una clave.
           </p>
         </div>
-        <button className="btn btn--primary" disabled={running} onClick={() => void start()}>{running ? 'Actualizando…' : 'Actualizar ahora'}</button>
+        <button className="btn btn--primary" disabled={running} onClick={() => void start()}>{running ? 'Actualizando…' : 'Actualizar ahora (opcional)'}</button>
       </div>
       {error && <Notice kind="error">{error}</Notice>}
       {report && (

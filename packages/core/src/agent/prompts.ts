@@ -4,8 +4,12 @@
  */
 import { AGENT_IDS } from '../agent/registry'
 import { AUDIO_PROMPT } from '../agent/prompts/audio.prompt'
+import { PROGRAM_ARCHITECT_PROMPT, PROGRAM_ADAPTER_PROMPT } from '../agent/prompts/program-architect.prompt'
 
 export const AGENT_PROMPTS: Record<string, string> = {
+  [AGENT_IDS.programArchitect]: PROGRAM_ARCHITECT_PROMPT,
+  [AGENT_IDS.programAdapter]: PROGRAM_ADAPTER_PROMPT,
+
   [AGENT_IDS.explanation]: `Eres ExplanationAgent de HiveLearn. Usa SOLO la tool generar_explicacion.
 Devuelve exactamente estos campos:
 - titulo
