@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { QualityGovernor, TIERS, initialTier, lowerTier, parseTier } from './quality'
+import { QualityGovernor, TIERS, describeStats, initialTier, lowerTier, parseTier } from './quality'
 
 describe('initialTier', () => {
   test('una preferencia guardada manda', () => {
@@ -62,5 +62,12 @@ describe('QualityGovernor', () => {
     const g = new QualityGovernor('low')
     g.set('high')
     expect(g.tier).toBe('high')
+  })
+})
+
+describe('describeStats', () => {
+  test('nombra backend, calidad y fps; un fps no finito no rompe el texto', () => {
+    expect(describeStats({ backend: 'webgl2', tier: 'low', fps: 58.4, frameMs: 17.24 })).toBe('Diagnóstico: WebGL2 · calidad baja · 58 fps (17.2 ms por cuadro)')
+    expect(describeStats({ backend: 'webgpu', tier: 'high', fps: Infinity, frameMs: 0 })).toContain('WebGPU · calidad alta · 0 fps')
   })
 })

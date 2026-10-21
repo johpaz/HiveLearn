@@ -11,7 +11,7 @@ import {
   Mesh, Object3D, PerspectiveCamera, PlaneGeometry, Plane, Raycaster, Scene, SphereGeometry, Vector2, Vector3,
 } from 'three/webgpu'
 import type { WorldCell, WorldDescription } from './layout'
-import { TIERS, QualityGovernor, type QualityTier } from './quality'
+import { TIERS, QualityGovernor, type QualityTier, type RenderStats } from './quality'
 import { createGameRenderer, type GameRenderer } from './renderer'
 import { LOOK, bridgeMaterial, padMaterial, platformMaterial, skyMaterial } from './materials'
 import { createProceduralDrone, type DroneRig } from './drone'
@@ -36,6 +36,8 @@ export interface WorldHandlers {
   thrust?: (speed: number) => void
   /** La calidad bajó sola porque el equipo iba lento. */
   quality?: (tier: QualityTier) => void
+  /** El jugador pidió el panel de diagnóstico (F3). */
+  debug?: () => void
 }
 
 interface Animated {
@@ -122,6 +124,10 @@ export class HiveWorld {
   private frame = 0
   private last = 0
   private time = 0
+  private frameEma = 16.7
+
+  /** Medición para el panel de diagnóstico: promedio móvil del tiempo por cuadro. */
+  stats(): RenderStats { return { backend: this.gr.backend, tier: this.governor.tier, fps: 1000 / this.frameEma, frameMs: this.frameEma } }
 
   get backend(): 'webgpu' | 'webgl2' { return this.gr.backend }
   get tier(): QualityTier { return this.governor.tier }
@@ -286,6 +292,7 @@ export class HiveWorld {
       const frameMs = now - this.last
       this.last = now
       this.time += dt
+      if (frameMs > 0 && frameMs < 250) this.frameEma += (frameMs - this.frameEma) * 0.05
       this.step(dt)
       this.gr.render()
       const lowered = this.governor.sample(frameMs)
@@ -522,6 +529,9 @@ export class HiveWorld {
     } else if (event.key === '[' || event.key === ']') {
       event.preventDefault()
       this.cycle(event.key === ']' ? 1 : -1)
+    } else if (event.key === 'F3') {
+      event.preventDefault()
+      this.handlers.debug?.()
     } else if (event.key === 'Escape') {
       this.handlers.pick?.(null)
     }

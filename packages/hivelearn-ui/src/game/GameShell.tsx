@@ -4,7 +4,7 @@ import { Notice } from '../components/ui'
 import type { NodeMaterialView, ProgramState } from '../types'
 import { buildWorld, diffWorlds, honeyOf, type WorldCell, type WorldDescription } from './layout'
 import type { HiveWorld } from './HiveWorld'
-import { QUALITY_KEY, initialTier } from './quality'
+import { QUALITY_KEY, describeStats, initialTier } from './quality'
 import { GameAudio } from './audio'
 import { joystickAxis } from './controller'
 import { speak, speechSupported, stopSpeaking } from './speech'
@@ -53,6 +53,8 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
   const [muted, setMuted] = useState(audio.muted)
   const [announce, setAnnounce] = useState('')
   const [lowered, setLowered] = useState<string | null>(null)
+  const [debug, setDebug] = useState(() => { try { return localStorage.getItem('hivelearn.debug') === '1' } catch { return false } })
+  const [stats, setStats] = useState('')
   const showJoystick = useMemo(() => {
     try { return localStorage.getItem('hivelearn.joystick') === '1' || (window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) } catch { return false }
   }, [])
@@ -82,6 +84,7 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
         },
         thrust: speed => audio.setThrust(speed),
         quality: tier => setLowered(tier),
+        debug: () => setDebug(d => !d),
       })
       const fit = () => scene.resize(canvas.clientWidth, canvas.clientHeight)
       observer = new ResizeObserver(fit)
@@ -116,8 +119,19 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
     } else if (diff.added.length > 0) {
       adapted = `Tu programa se adaptó: ${diff.added.length === 1 ? 'se añadió una celda nueva' : `se añadieron ${diff.added.length} celdas nuevas`}.`
     }
-    if (note || adapted) setMessage({ kind: note?.kind ?? 'info', text: [note?.text, adapted].filter(Boolean).join(' ') })
+    // El motivo del checkpoint viene del servidor y puede no terminar en punto: se cierra antes de unir los avisos.
+    const sentence = (text: string) => (/[.!?…]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`)
+    if (note || adapted) setMessage({ kind: note?.kind ?? 'info', text: [note && sentence(note.text), adapted].filter(Boolean).join(' ') })
   }, [world])
+
+  // Panel de diagnóstico (F3): se refresca una vez por segundo mientras está visible.
+  useEffect(() => {
+    if (!debug) return
+    const tick = () => { const w = worldRef.current; if (w) setStats(describeStats(w.stats())) }
+    tick()
+    const id = window.setInterval(tick, 1000)
+    return () => window.clearInterval(id)
+  }, [debug])
 
   useEffect(() => { worldRef.current?.select(selected) }, [selected])
   useEffect(() => { worldRef.current?.setOverview(overview) }, [overview])
@@ -210,9 +224,10 @@ export function GameShell({ program, onChange, onClosed }: { program: ProgramSta
       </div>
 
       <p id="game-help" className="muted game__help">
-        Haz clic en el mapa y mueve el dron con <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> o las flechas. <kbd>E</kbd>, Enter o Espacio abren la celda enfocada; <kbd>[</kbd> y <kbd>]</kbd> cambian de celda; Esc cierra. Los botones de abajo hacen lo mismo.
+        Haz clic en el mapa y mueve el dron con <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> o las flechas. <kbd>E</kbd>, Enter o Espacio abren la celda enfocada; <kbd>[</kbd> y <kbd>]</kbd> cambian de celda; Esc cierra; F3 muestra el diagnóstico. Los botones de abajo hacen lo mismo.
       </p>
       <p className="sr-only" role="status" aria-live="polite">{announce}</p>
+      {debug && <p className="muted game__debug" data-testid="game-debug">{stats || 'Diagnóstico: midiendo…'} · F3 lo oculta</p>}
       {lowered && <Notice kind="info">Para que vaya fluido se bajó la calidad gráfica ({lowered === 'low' ? 'baja' : 'media'}).</Notice>}
 
       {message && <Notice kind={message.kind}>{message.text}</Notice>}

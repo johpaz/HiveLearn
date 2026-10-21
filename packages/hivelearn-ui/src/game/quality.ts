@@ -85,3 +85,14 @@ export class QualityGovernor {
     this.seen = 0
   }
 }
+
+export interface RenderStats { backend: 'webgpu' | 'webgl2'; tier: QualityTier; fps: number; frameMs: number }
+
+const TIER_LABEL: Record<QualityTier, string> = { high: 'alta', medium: 'media', low: 'baja' }
+
+/** Texto del panel de diagnóstico (tecla F3): lo que hace falta para comparar equipos. */
+export function describeStats(stats: RenderStats): string {
+  const backend = stats.backend === 'webgpu' ? 'WebGPU' : 'WebGL2'
+  const fps = Number.isFinite(stats.fps) ? Math.round(stats.fps) : 0
+  return `Diagnóstico: ${backend} · calidad ${TIER_LABEL[stats.tier]} · ${fps} fps (${stats.frameMs.toFixed(1)} ms por cuadro)`
+}

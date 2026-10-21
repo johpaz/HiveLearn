@@ -302,4 +302,70 @@ suite('E2E navegador: programa por niveles y juego', () => {
     const later = await where()
     expect(Math.hypot(later.x - rest.x, later.z - rest.z)).toBeLessThan(0.05)
   }, 120000)
+
+  test('J · movimiento reducido: el dron aparece en la celda al instante y el teclado avanza por pasos', async () => {
+    await enter('reducida', 'game', true)
+    const emulate = (value: 'reduce' | 'no-preference') => b.view.cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value }] })
+    await emulate('reduce')
+    try {
+      await createProgram()
+      await b.waitFor(`window.__hive && window.__hive.cells().length >= 3`, 'Juego listo con movimiento reducido')
+      await b.eval(`document.querySelector('[data-testid="game-canvas"]').focus()`)
+      const where = () => b.eval<{ x: number; z: number }>(`window.__hive.dronePosition()`)
+      const dist = (a: { x: number; z: number }, c: { x: number; z: number }) => Math.hypot(a.x - c.x, a.z - c.z)
+
+      // Elegir otra celda: sin animación el dron ya está allí unos milisegundos después (animado tardaría más de un segundo).
+      const start = await where()
+      await b.eval(`document.querySelectorAll('nav[aria-label^="Celdas del nivel"] .cell-chip')[2].click()`)
+      await Bun.sleep(150)
+      const arrived = await where()
+      expect(dist(arrived, start)).toBeGreaterThan(1.5)
+      await Bun.sleep(300)
+      expect(dist(await where(), arrived)).toBeLessThan(0.05)
+
+      // Una pulsación = un paso; no hay inercia ni bucle que siga moviéndolo.
+      let best = 0
+      for (const k of ['d', 's', 'a', 'w']) {
+        const from = await where()
+        await b.eval(`document.querySelector('[data-testid="game-canvas"]').dispatchEvent(new KeyboardEvent('keydown', { key: '${k}', bubbles: true, cancelable: true }))`)
+        await Bun.sleep(100)
+        const to = await where()
+        best = Math.max(best, dist(to, from))
+        await Bun.sleep(250)
+        expect(dist(await where(), to)).toBeLessThan(0.05)
+      }
+      expect(best).toBeGreaterThan(0.3)
+      await b.screenshot('game-reduced-motion')
+    } finally {
+      await emulate('no-preference')
+    }
+  }, 120000)
+
+  test('K · F3 muestra el diagnóstico (backend, calidad y fps) y lo oculta al repetir', async () => {
+    await enter('diagnostico', 'game', true)
+    await createProgram()
+    await b.waitFor(`window.__hive && window.__hive.cells().length >= 3`, 'Juego listo')
+    await b.eval(`document.querySelector('[data-testid="game-canvas"]').focus()`)
+    const f3 = () => b.eval(`document.querySelector('[data-testid="game-canvas"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true, cancelable: true }))`)
+    expect(await b.eval(`document.querySelector('[data-testid="game-debug"]') === null`)).toBe(true)
+    await f3()
+    await b.waitFor(`/Diagnóstico: (WebGPU|WebGL2) · calidad baja · \\d+ fps/.test(document.querySelector('[data-testid="game-debug"]')?.textContent ?? '')`, 'Panel de diagnóstico')
+    await b.screenshot('game-debug-panel')
+    await f3()
+    await b.waitFor(`document.querySelector('[data-testid="game-debug"]') === null`, 'Panel oculto')
+  }, 120000)
+
+  test('L · calidad adaptativa: en un equipo lento (swiftshader) la calidad alta baja sola y se avisa', async () => {
+    await enter('lento', 'game', true)
+    await b.eval(`localStorage.setItem('hivelearn.quality', 'high')`)
+    await createProgram()
+    await b.waitFor(`window.__hive && window.__hive.tier() === 'high'`, 'Arranca en calidad alta')
+    await b.waitFor(`window.__hive.tier() !== 'high' && document.body.innerText.includes('se bajó la calidad gráfica')`, 'El juego baja la calidad por sí solo', 90000)
+    const tier = await b.eval<string>(`window.__hive.tier()`)
+    expect(['medium', 'low']).toContain(tier)
+    // Sigue jugable tras bajar de nivel: el lienzo responde a un clic en una celda.
+    await b.eval(`document.querySelectorAll('nav[aria-label^="Celdas del nivel"] .cell-chip')[1].click()`)
+    await b.waitFor(`document.querySelector('article.node h3')?.textContent.trim() === 'La consulta SELECT'`, 'Sigue respondiendo')
+    await b.screenshot('game-quality-lowered')
+  }, 150000)
 })
