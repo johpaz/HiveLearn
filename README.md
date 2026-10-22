@@ -4,7 +4,7 @@ Plataforma institucional de formación en inteligencia artificial. La interfaz e
 
 ## Requisitos y arranque
 
-- Bun **1.4.2**; HiveDB **0.7.0** y `@johpaz/hive-sdk` **0.7.3** instalados por el workspace (el SDK ya no incluye DAG ni enjambre por roles; HiveLearn tampoco usa ninguno).
+- Bun **1.4.4**; HiveDB **0.7.0** y `@johpaz/hive-sdk` **0.7.3** instalados por el workspace (el SDK ya no incluye DAG ni enjambre por roles; HiveLearn tampoco usa ninguno).
 - Este repositorio contiene el núcleo (`packages/core`), el CLI (`packages/cli`) y la UI web (`packages/hivelearn-ui`: React 19, Vite 8 y Three.js). El escritorio vive fuera del workspace y consume el gateway por HTTP/WebSocket.
 
 ```bash
